@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@theme {
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Montserrat', sans-serif;
+  
+  --color-primary: #6c0042;
+  --color-primary-container: #8b1e5a;
+  --color-primary-fixed: #ffd8e6;
+  --color-primary-fixed-dim: #ffb0d0;
+  --color-on-primary-fixed: #3d0023;
+  --color-on-primary-fixed-variant: #841855;
+  
+  --color-secondary: #735b24;
+  --color-secondary-container: #fedb98;
+  --color-on-secondary-container: #785f28;
+  --color-secondary-fixed: #ffdf9f;
+  --color-secondary-fixed-dim: #e3c281;
+  --color-on-secondary-fixed: #261a00;
+  --color-on-secondary-fixed-variant: #5a430e;
+  
+  --color-outline-variant: #dac0c8;
+  --color-on-surface-variant: #554249;
+  --color-background: #f9f9f9;
+  --color-surface: #f9f9f9;
+  --color-surface-dim: #dadada;
+  --color-surface-bright: #f9f9f9;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f3f3f3;
+  --color-surface-container: #eeeeee;
+  --color-surface-container-high: #e8e8e8;
+  --color-surface-container-highest: #e2e2e2;
+  --color-on-surface: #1a1c1c;
+  --color-on-background: #1a1c1c;
+  
+  --animate-fade-in: fade-in 0.5s ease-out;
+  --animate-slide-up: slide-up 0.5s ease-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Custom styles like glassmorphism and bordeaux gradient overlay */
+.glass-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(200, 169, 106, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(108, 0, 66, 0.05);
+}
+
+.text-gradient-gold {
+  background: linear-gradient(135deg, #C8A96A 0%, #735B24 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.bg-burgundy-overlay {
+  background: linear-gradient(to right, rgba(61, 0, 35, 0.92) 0%, rgba(108, 0, 66, 0.55) 100%);
+}
+
+.timeline-line::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 100%;
+  background: #dac0c8;
+  z-index: 0;
+}
+
+/* Base custom resets */
+html {
+  scroll-behavior: smooth;
+}
+body {
+  font-family: var(--font-sans);
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+}
+

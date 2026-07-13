@@ -1,0 +1,6 @@
+{
+  "name": "RM Consulting Portal",
+  "description": "Portail d'administration et de gestion pour RM Consulting - Expertise & Audit.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
