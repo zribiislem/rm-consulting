@@ -8,6 +8,8 @@ export interface IMessage extends Document {
   time: string;
   content: string;
   isUnread: boolean;
+  parentId?: string;
+  email?: string;
 }
 
 const MessageSchema = new Schema<IMessage>({
@@ -17,7 +19,9 @@ const MessageSchema = new Schema<IMessage>({
   initials: { type: String },
   time: { type: String, required: true },
   content: { type: String, required: true },
-  isUnread: { type: Boolean, required: true, default: true }
+  isUnread: { type: Boolean, required: true, default: true },
+  parentId: { type: String, default: null },
+  email: { type: String, default: null }
 }, { timestamps: true });
 
 export default mongoose.model<IMessage>('Message', MessageSchema);

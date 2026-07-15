@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Menu, X, ArrowRight, Building, HelpCircle, Phone, FileText, Users, Calendar } from 'lucide-react';
 
 interface NavbarProps {
-  onOpenPortal: () => void;
   onBookConsultation: () => void;
 }
 
-export default function Navbar({ onOpenPortal, onBookConsultation }: NavbarProps) {
+export default function Navbar({ onBookConsultation }: NavbarProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -91,16 +90,18 @@ export default function Navbar({ onOpenPortal, onBookConsultation }: NavbarProps
 
           {/* Action Buttons */}
           <div className="hidden lg:flex items-center gap-4">
-            <button
-              onClick={onOpenPortal}
+            <a
+              href="http://localhost:5000"
+              target="_blank"
+              rel="noopener noreferrer"
               className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors ${
                 isScrolled
                   ? 'border-primary/20 text-primary hover:bg-primary/5'
                   : 'border-white/30 text-white hover:bg-white/10'
               }`}
             >
-              Espace Interne
-            </button>
+              Se connecter
+            </a>
             <button
               onClick={onBookConsultation}
               className="bg-secondary text-white px-5 py-2.5 rounded-lg font-sans font-semibold text-sm hover:bg-secondary/90 shadow-md active:scale-95 transition-all flex items-center gap-1.5"
@@ -112,16 +113,18 @@ export default function Navbar({ onOpenPortal, onBookConsultation }: NavbarProps
 
           {/* Mobile Menu Button */}
           <div className="flex items-center gap-3 md:hidden">
-            <button
-              onClick={onOpenPortal}
+            <a
+              href="http://localhost:5000"
+              target="_blank"
+              rel="noopener noreferrer"
               className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded border ${
                 isScrolled
                   ? 'border-primary/20 text-primary'
                   : 'border-white/30 text-white'
               }`}
             >
-              Portail
-            </button>
+              Se connecter
+            </a>
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className={`p-2 rounded-lg transition-colors ${
@@ -181,15 +184,15 @@ export default function Navbar({ onOpenPortal, onBookConsultation }: NavbarProps
         </div>
 
         <div className="flex flex-col gap-3 pt-6 border-t border-gray-100">
-          <button
-            onClick={() => {
-              setIsMobileMenuOpen(false);
-              onOpenPortal();
-            }}
+          <a
+            href="http://localhost:5000"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setIsMobileMenuOpen(false)}
             className="w-full text-center border border-gray-200 text-gray-700 py-3 rounded-xl font-medium hover:bg-gray-50 transition-colors"
           >
-            Espace Interne Collaborateur
-          </button>
+            Se connecter
+          </a>
           <button
             onClick={() => {
               setIsMobileMenuOpen(false);

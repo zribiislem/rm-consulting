@@ -7,11 +7,13 @@ const connectDB = async (): Promise<void> => {
       throw new Error('MONGO_URI is not defined in environment variables');
     }
 
-    const conn = await mongoose.connect(uri);
+    const conn = await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 10000,
+    });
     console.log(`MongoDB connected: ${conn.connection.host}`);
   } catch (error) {
     console.error(`MongoDB connection error: ${error}`);
-    process.exit(1);
+    console.error('Server will start without database. Retry connection later.');
   }
 };
 
