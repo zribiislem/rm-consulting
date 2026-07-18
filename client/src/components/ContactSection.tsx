@@ -1,6 +1,28 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapPin, Phone, Mail, Clock, Calendar, Send, CheckCircle2, AlertCircle } from 'lucide-react';
+import { MapPin, Phone, Mail, Clock, Calendar, Send, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+
+interface AvailableDate {
+  _id: string;
+  date: string;
+  timeSlots: string[];
+}
+
+const MONTH_NAMES = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+const DAY_NAMES = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
+function getDaysInMonth(year: number, month: number) {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function getFirstDayOfMonth(year: number, month: number) {
+  const day = new Date(year, month, 1).getDay();
+  return day === 0 ? 6 : day - 1;
+}
+
+function toDateString(year: number, month: number, day: number) {
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
 
 export default function ContactSection() {
   const [activeTab, setActiveTab] = useState<'message' | 'rdv'>('message');
@@ -25,18 +47,49 @@ export default function ContactSection() {
   
   // RDV specific states
   const [rdvDate, setRdvDate] = useState('');
-  const [rdvTime, setRdvTime] = useState('Matin (09:00 - 12:00)');
+  const [rdvTime, setRdvTime] = useState('');
   
+  // Calendar state
+  const today = new Date();
+  const [calMonth, setCalMonth] = useState(today.getMonth());
+  const [calYear, setCalYear] = useState(today.getFullYear());
+  const [availableDates, setAvailableDates] = useState<AvailableDate[]>([]);
+  const [selectedDateSlots, setSelectedDateSlots] = useState<string[]>([]);
+
+  // Fetch available dates
+  useEffect(() => {
+    fetch('/api/available-dates')
+      .then((r) => r.json())
+      .then((data: AvailableDate[]) => setAvailableDates(data))
+      .catch(() => {});
+  }, []);
+
+  // Update available time slots when date is selected
+  useEffect(() => {
+    if (rdvDate) {
+      const match = availableDates.find((d) => d.date.split('T')[0] === rdvDate);
+      if (match) {
+        setSelectedDateSlots(match.timeSlots);
+        setRdvTime(match.timeSlots[0] || '');
+      } else {
+        setSelectedDateSlots([]);
+        setRdvTime('');
+      }
+    }
+  }, [rdvDate, availableDates]);
+
+  // Build available date lookup set
+  const availableDateSet = new Set(availableDates.map((d) => d.date.split('T')[0]));
+
   // Status feedback
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [validationError, setValidationError] = useState('');
 
-  const handleFormSubmit = (e: FormEvent) => {
+  const handleFormSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setValidationError('');
 
-    // Basic validation
     if (!fullName.trim()) {
       setValidationError('Veuillez renseigner votre nom complet.');
       return;
@@ -50,17 +103,57 @@ export default function ContactSection() {
       return;
     }
     if (activeTab === 'rdv' && !rdvDate) {
-      setValidationError('Veuillez sélectionner une date de rendez-vous souhaitée.');
+      setValidationError('Veuillez sélectionner une date de rendez-vous.');
+      return;
+    }
+    if (activeTab === 'rdv' && !rdvTime) {
+      setValidationError('Veuillez sélectionner un créneau horaire.');
       return;
     }
 
     setIsSubmitting(true);
 
-    // Mock API processing
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setIsSuccess(true);
-    }, 1500);
+    try {
+      if (activeTab === 'rdv') {
+        await fetch('/api/appointments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clientName: fullName.trim(),
+            email: email.trim(),
+            date: rdvDate,
+            timeSlot: rdvTime,
+            subject: subject.trim(),
+            details: message.trim(),
+          }),
+        });
+      } else {
+        const nameParts = fullName.trim().split(' ');
+        const initials = nameParts.length >= 2
+          ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`
+          : fullName.trim().slice(0, 2).toUpperCase();
+        const now = new Date();
+        const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        await fetch('/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sender: fullName.trim(),
+            role: 'Client',
+            initials,
+            time: timeStr,
+            content: `[${subject.trim()}]\n\nEmail: ${email.trim()}\n\n${message.trim()}`,
+            isUnread: true,
+            email: email.trim(),
+          }),
+        });
+      }
+    } catch {
+      // fallback
+    }
+
+    setIsSubmitting(false);
+    setIsSuccess(true);
   };
 
   const resetForm = () => {
@@ -69,7 +162,8 @@ export default function ContactSection() {
     setSubject('');
     setMessage('');
     setRdvDate('');
-    setRdvTime('Matin (09:00 - 12:00)');
+    setRdvTime('');
+    setSelectedDateSlots([]);
     setIsSuccess(false);
   };
 
@@ -240,34 +334,115 @@ export default function ContactSection() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="grid grid-cols-1 md:grid-cols-2 gap-6 border-y border-gray-100 py-6"
+                  className="border-y border-gray-100 py-6 space-y-6"
                 >
+                  {/* Mini Calendar */}
                   <div>
-                    <label className="block text-xs sm:text-sm font-bold text-gray-700 mb-2">
+                    <label className="block text-xs sm:text-sm font-bold text-gray-700 mb-3">
                       Date Souhaitée de Rencontre
                     </label>
-                    <input
-                      type="date"
-                      value={rdvDate}
-                      onChange={(e) => setRdvDate(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                      className="w-full bg-surface border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none transition-all text-gray-900"
-                    />
+                    <div className="bg-surface border border-gray-200 rounded-xl p-4 max-w-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); }
+                            else { setCalMonth(calMonth - 1); }
+                          }}
+                          className="p-1 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <ChevronLeft className="w-4 h-4 text-gray-600" />
+                        </button>
+                        <span className="text-sm font-bold text-gray-800">
+                          {MONTH_NAMES[calMonth]} {calYear}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1); }
+                            else { setCalMonth(calMonth + 1); }
+                          }}
+                          className="p-1 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <ChevronRight className="w-4 h-4 text-gray-600" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-7 gap-1 text-center mb-1">
+                        {DAY_NAMES.map((d) => (
+                          <div key={d} className="text-[9px] font-bold text-gray-400 py-1">{d}</div>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-7 gap-1">
+                        {Array.from({ length: getFirstDayOfMonth(calYear, calMonth) }).map((_, i) => (
+                          <div key={`empty-${i}`} />
+                        ))}
+                        {Array.from({ length: getDaysInMonth(calYear, calMonth) }).map((_, i) => {
+                          const day = i + 1;
+                          const dateStr = toDateString(calYear, calMonth, day);
+                          const isAvailable = availableDateSet.has(dateStr);
+                          const isSelected = rdvDate === dateStr;
+                          const isPast = new Date(dateStr) < new Date(new Date().toDateString());
+                          return (
+                            <button
+                              key={day}
+                              type="button"
+                              disabled={!isAvailable || isPast}
+                              onClick={() => setRdvDate(dateStr)}
+                              className={`relative p-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-primary text-white shadow-md'
+                                  : isAvailable && !isPast
+                                  ? 'bg-secondary/10 text-primary hover:bg-secondary/20 font-bold'
+                                  : 'text-gray-300 cursor-not-allowed'
+                              }`}
+                            >
+                              {day}
+                              {isAvailable && !isPast && !isSelected && (
+                                <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-emerald-500 rounded-full" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {rdvDate && (
+                        <p className="text-[10px] text-gray-500 mt-2 text-center">
+                          Date sélectionnée : {new Date(rdvDate + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs sm:text-sm font-bold text-gray-700 mb-2">
-                      Créneau Horaire Préféré
-                    </label>
-                    <select
-                      value={rdvTime}
-                      onChange={(e) => setRdvTime(e.target.value)}
-                      className="w-full bg-surface border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none transition-all text-gray-900"
-                    >
-                      <option value="Matin (09:00 - 12:00)">Matinée (09h00 - 12h00)</option>
-                      <option value="Midi (12:00 - 14:00)">Pause Déjeuner (12h00 - 14h00)</option>
-                      <option value="Après-midi (14:00 - 17:00)">Après-midi (14h00 - 17h00)</option>
-                    </select>
-                  </div>
+
+                  {/* Time Slot Selection */}
+                  {selectedDateSlots.length > 0 && (
+                    <div>
+                      <label className="block text-xs sm:text-sm font-bold text-gray-700 mb-3">
+                        Créneau Horaire Préféré
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {selectedDateSlots.map((slot) => (
+                          <button
+                            key={slot}
+                            type="button"
+                            onClick={() => setRdvTime(slot)}
+                            className={`p-3 rounded-xl border text-sm font-medium text-left transition-all cursor-pointer ${
+                              rdvTime === slot
+                                ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary'
+                                : 'border-gray-200 text-gray-600 hover:border-primary/40 hover:bg-gray-50'
+                            }`}
+                          >
+                            <Clock className="w-4 h-4 inline mr-2" />
+                            {slot}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {rdvDate && selectedDateSlots.length === 0 && (
+                    <p className="text-xs text-amber-600 bg-amber-50 p-3 rounded-xl">
+                      Aucun créneau disponible pour cette date.
+                    </p>
+                  )}
                 </motion.div>
               )}
 

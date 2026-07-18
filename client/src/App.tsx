@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import Stats from './components/Stats';
@@ -13,11 +12,9 @@ import WhyChooseUs from './components/WhyChooseUs';
 import Team from './components/Team';
 import References from './components/References';
 import ContactSection from './components/ContactSection';
-import PortalModal from './components/PortalModal';
 import Footer from './components/Footer';
 
 export default function App() {
-  const [isPortalOpen, setIsPortalOpen] = useState(false);
 
   const handleBookConsultation = () => {
     const contactSection = document.getElementById('contact');
@@ -38,7 +35,6 @@ export default function App() {
     <div className="bg-background text-on-background min-h-screen relative flex flex-col justify-between overflow-x-hidden">
       {/* Navigation bar */}
       <Navbar
-        onOpenPortal={() => setIsPortalOpen(true)}
         onBookConsultation={handleBookConsultation}
       />
 
@@ -74,12 +70,6 @@ export default function App() {
 
       {/* Corporate footer */}
       <Footer />
-
-      {/* Collaborative interior staff/client portal modal */}
-      <PortalModal
-        isOpen={isPortalOpen}
-        onClose={() => setIsPortalOpen(false)}
-      />
     </div>
   );
 }

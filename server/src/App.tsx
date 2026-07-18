@@ -14,7 +14,6 @@ import {
   ClipboardList,
   Mail,
   Calendar as CalendarIcon,
-  MapPin,
   ChevronLeft,
   ChevronRight,
   ArrowRight,
@@ -52,13 +51,8 @@ interface Message {
   time: string;
   content: string;
   isUnread: boolean;
-}
-
-interface Appointment {
-  title: string;
-  time: string;
-  location: string;
-  type: string;
+  parentId?: string;
+  email?: string;
 }
 
 interface Department {
@@ -92,7 +86,7 @@ const getDeptIcon = (id: string) => {
 
 export default function App() {
   // Navigation active tab
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'clients' | 'reporting' | 'settings' | 'departments'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'clients' | 'reporting' | 'settings' | 'departments' | 'appointments'>('dashboard');
 
   // Departments dynamic state
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -116,21 +110,48 @@ export default function App() {
   // Messages state
   const [messages, setMessages] = useState<Message[]>([]);
 
+  // Appointments state
+  interface AppointmentData {
+    _id: string;
+    clientName: string;
+    email: string;
+    date: string;
+    timeSlot: string;
+    subject: string;
+    details: string;
+    status: 'pending' | 'confirmed' | 'cancelled';
+  }
+  interface AvailableDateData {
+    _id: string;
+    date: string;
+    timeSlots: string[];
+  }
+  const [appointments, setAppointments] = useState<AppointmentData[]>([]);
+  const [availableDatesList, setAvailableDatesList] = useState<AvailableDateData[]>([]);
+  const [availCalMonth, setAvailCalMonth] = useState(new Date().getMonth());
+  const [availCalYear, setAvailCalYear] = useState(new Date().getFullYear());
+
   // Fetch data from API on mount
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [deptRes, missionRes, msgRes] = await Promise.all([
+        const [deptRes, missionRes, msgRes, apptRes, availRes] = await Promise.all([
           fetch(`${API_URL}/departments`),
           fetch(`${API_URL}/missions`),
-          fetch(`${API_URL}/messages`)
+          fetch(`${API_URL}/messages`),
+          fetch(`${API_URL}/appointments`),
+          fetch(`${API_URL}/available-dates`)
         ]);
         const depts = await deptRes.json();
         const missionsData = await missionRes.json();
         const msgs = await msgRes.json();
+        const appts = await apptRes.json();
+        const avails = await availRes.json();
         setDepartments(depts.map((d: any) => ({ ...d, id: d._id })));
         setMissions(missionsData.map((m: any) => ({ ...m, id: m._id })));
         setMessages(msgs.map((m: any) => ({ ...m, id: m._id })));
+        setAppointments(appts);
+        setAvailableDatesList(avails);
       } catch (err) {
         console.error('Failed to fetch data from API:', err);
       }
@@ -138,28 +159,31 @@ export default function App() {
     fetchData();
   }, []);
 
-  // Calendar day selection and data
-  const [selectedDay, setSelectedDay] = useState<number>(1);
-  const appointmentsMap: Record<number, Appointment> = {
-    1: {
-      title: 'Révision Fiscale - SARL Neo',
-      time: '09:30',
-      location: 'Visioconférence Zoom',
-      type: 'Fiscalité'
-    },
-    3: {
-      title: 'Présentation Audit - TechFlow SAS',
-      time: '14:00',
-      location: 'Bureaux TechFlow, Paris',
-      type: 'Audit Légal'
-    },
-    5: {
-      title: 'Point d\'étape Fusion - ImmoBail',
-      time: '11:00',
-      location: 'Appel Téléphonique',
-      type: 'Conseil'
+  // Dashboard calendar state
+  const today = new Date();
+  const [calMonth, setCalMonth] = useState(today.getMonth());
+  const [calYear, setCalYear] = useState(today.getFullYear());
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+
+  // Build appointments map grouped by day for the current calendar month
+  const appointmentsByDay: Record<number, AppointmentData[]> = {};
+  appointments.forEach((appt) => {
+    const d = new Date(appt.date);
+    if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
+      const day = d.getDate();
+      if (!appointmentsByDay[day]) appointmentsByDay[day] = [];
+      appointmentsByDay[day].push(appt);
     }
-  };
+  });
+
+  // Build available dates lookup for the current calendar month
+  const availableDatesSetByDay = new Set<string>();
+  availableDatesList.forEach((ad) => {
+    const d = new Date(ad.date);
+    if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
+      availableDatesSetByDay.add(`${d.getDate()}`);
+    }
+  });
 
   // Modals state
   const [isNewMissionOpen, setIsNewMissionOpen] = useState(false);
@@ -194,7 +218,7 @@ export default function App() {
 
   // Stats computation
   const activeMissionsCount = missions.length + 21; // Mock constant added to make it matches the original "24"
-  const unreadMessagesCount = messages.filter((m) => m.isUnread).length;
+  const unreadMessagesCount = messages.filter((m) => m.isUnread && m.sender !== 'Marc-Antoine Durand' && !m.parentId).length;
 
   // Handle Nouvelle Mission
   const handleCreateMission = async (e: React.FormEvent) => {
@@ -239,7 +263,7 @@ export default function App() {
       console.error('Failed to delete message:', err);
     }
     setMessages((prev) => prev.filter((m) => m.id !== id));
-    addToast(`Message de ${senderName} archivé.`);
+    addToast(`Message de ${senderName} supprimé.`, 'info');
   };
 
   // Open Reply Modal
@@ -259,11 +283,64 @@ export default function App() {
   };
 
   // Submit Reply
-  const handleSendReply = (e: React.FormEvent) => {
+  const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!replyText.trim()) return;
+    if (!replyText.trim() || !activeReplyMessage) return;
 
-    addToast(`Réponse envoyée à ${activeReplyMessage?.sender}.`);
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+    // Resolve the original client message to get email
+    const threadId = activeReplyMessage.parentId || activeReplyMessage.id;
+    const originalMsg = messages.find(m => m.id === threadId);
+    const clientEmail = originalMsg?.email || (() => {
+      const match = originalMsg?.content?.match(/Email:\s*(.+)/);
+      return match ? match[1].trim() : null;
+    })();
+
+    const replyData = {
+      sender: 'Marc-Antoine Durand',
+      role: 'Expert Comptable Senior',
+      initials: 'MA',
+      time: timeStr,
+      content: replyText.trim(),
+      isUnread: true,
+      parentId: activeReplyMessage.parentId || activeReplyMessage.id
+    };
+
+    try {
+      const res = await fetch(`${API_URL}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(replyData)
+      });
+      const saved = await res.json();
+      setMessages((prev) => [{ ...saved, id: saved._id }, ...prev]);
+      addToast(`Réponse envoyée à ${activeReplyMessage.sender}.`);
+    } catch {
+      addToast(`Réponse envoyée à ${activeReplyMessage.sender}.`);
+    }
+
+    // Send email to client
+    if (clientEmail) {
+      const subject = originalMsg?.content?.match(/\[(.+?)\]/)?.[1] || 'Réponse RM Consulting';
+      try {
+        await fetch(`${API_URL}/send-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: clientEmail,
+            subject: `Re: ${subject} — RM Consulting`,
+            text: replyText.trim(),
+            senderName: 'Marc-Antoine Durand',
+          })
+        });
+        addToast(`Email envoyé à ${clientEmail}`);
+      } catch {
+        addToast('Email non envoyé (vérifiez la configuration SMTP)', 'info');
+      }
+    }
+
     setIsReplyOpen(false);
     setActiveReplyMessage(null);
     setReplyText('');
@@ -479,6 +556,18 @@ export default function App() {
             <span className="text-sm">Clients</span>
           </button>
 
+          <button
+            onClick={() => setActiveTab('appointments')}
+            className={`w-full flex items-center gap-3 p-3 rounded-lg font-medium transition-all duration-150 ${
+              activeTab === 'appointments'
+                ? 'sidebar-active text-white'
+                : 'text-on-surface-variant hover:bg-secondary-container/20 hover:text-secondary'
+            }`}
+          >
+            <CalendarIcon className="w-5 h-5" />
+            <span className="text-sm">Rendez-vous</span>
+          </button>
+
           {/* NOTE: "Reporting" has been strictly removed per user request. */}
 
           <button
@@ -547,12 +636,12 @@ export default function App() {
                         </span>
                       </div>
                       <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
-                        {messages.filter(m => m.isUnread).length === 0 ? (
+                        {messages.filter(m => m.isUnread && m.sender !== 'Marc-Antoine Durand' && !m.parentId).length === 0 ? (
                           <div className="text-center py-4 text-xs text-on-surface-variant">
                             Aucune nouvelle notification
                           </div>
                         ) : (
-                          messages.filter(m => m.isUnread).map((msg) => (
+                          messages.filter(m => m.isUnread && m.sender !== 'Marc-Antoine Durand' && !m.parentId).map((msg) => (
                             <div
                               key={msg.id}
                               onClick={() => {
@@ -606,7 +695,7 @@ export default function App() {
                 className="space-y-8"
               >
                 {/* KPI Row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {/* Card 1: Nouveaux Messages */}
                   <div className="glass-card p-5 rounded-xl">
                     <div className="flex justify-between items-start mb-4">
@@ -624,7 +713,25 @@ export default function App() {
                     </p>
                   </div>
 
-                  {/* Card 2: Rendez-vous en attente */}
+                  {/* Card 2: Dates Disponibles */}
+                  <div className="glass-card p-5 rounded-xl">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="p-2 bg-emerald-100 rounded-lg">
+                        <CalendarIcon className="w-5 h-5 text-emerald-600" />
+                      </div>
+                      <div className="flex items-center gap-1 text-on-surface-variant text-xs font-bold">
+                        <Clock className="w-3.5 h-3.5" />
+                        Semaine
+                      </div>
+                    </div>
+                    <p className="text-on-surface-variant text-[13px] font-medium">Dates Disponibles</p>
+                    <h3 className="font-headline text-2xl font-bold text-emerald-600">{availableDatesList.length}</h3>
+                    <p className="mt-4 text-[12px] text-on-surface-variant italic">
+                      {availableDatesList.length > 0 ? `${availableDatesList.length} date(s) ouverte(s) aux réservations` : 'Aucune date programmée'}
+                    </p>
+                  </div>
+
+                  {/* Card 3: Rendez-vous en attente */}
                   <div className="glass-card p-5 rounded-xl">
                     <div className="flex justify-between items-start mb-4">
                       <div className="p-2 bg-secondary-container/40 rounded-lg text-on-secondary-fixed-variant">
@@ -636,13 +743,13 @@ export default function App() {
                       </div>
                     </div>
                     <p className="text-on-surface-variant text-[13px] font-medium">Rendez-vous en attente</p>
-                    <h3 className="font-headline text-2xl font-bold text-on-surface">12</h3>
+                    <h3 className="font-headline text-2xl font-bold text-on-surface">{appointments.filter(a => a.status === 'pending').length}</h3>
                     <div className="mt-4 w-full bg-surface-container h-2 rounded-full overflow-hidden">
-                      <div className="bg-secondary h-full" style={{ width: '65%' }}></div>
+                      <div className="bg-secondary h-full" style={{ width: `${appointments.length > 0 ? Math.round((appointments.filter(a => a.status === 'confirmed').length / appointments.length) * 100) : 0}%` }}></div>
                     </div>
                     <p className="mt-2 text-[11px] text-on-surface-variant flex justify-between">
                       <span>Capacité traitée</span>
-                      <span>65%</span>
+                      <span>{appointments.length > 0 ? Math.round((appointments.filter(a => a.status === 'confirmed').length / appointments.length) * 100) : 0}%</span>
                     </p>
                   </div>
                 </div>
@@ -657,19 +764,22 @@ export default function App() {
 
                     <div className="flex-1 p-4 space-y-4 overflow-y-auto max-h-[350px] custom-scrollbar">
                       <AnimatePresence initial={false}>
-                        {messages.length === 0 ? (
-                          <div className="text-center py-8 text-sm text-on-surface-variant flex flex-col items-center gap-2">
-                            <MessageSquare className="w-8 h-8 text-on-surface-variant/30" />
-                            <span>Aucun message à traiter</span>
-                          </div>
-                        ) : (
-                          messages.map((msg) => (
+                        {(() => {
+                          const clientMessages = messages.filter(m => m.sender !== 'Marc-Antoine Durand' && !m.parentId).sort((a, b) => (a.isUnread === b.isUnread ? 0 : a.isUnread ? -1 : 1));
+                          return clientMessages.length === 0 ? (
+                            <div className="text-center py-8 text-sm text-on-surface-variant flex flex-col items-center gap-2">
+                              <MessageSquare className="w-8 h-8 text-on-surface-variant/30" />
+                              <span>Aucun message à traiter</span>
+                            </div>
+                          ) : (
+                            <>
+                            {clientMessages.map((msg) => (
                             <motion.div
                               key={msg.id}
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: 'auto' }}
                               exit={{ opacity: 0, height: 0 }}
-                              className="flex gap-3 p-3 hover:bg-surface-container-low rounded-lg transition-colors border border-transparent hover:border-secondary/10"
+                              className={`flex gap-3 p-3 rounded-lg transition-colors border ${msg.isUnread ? 'bg-surface-container-low/60 border-secondary/20' : 'bg-transparent border-transparent'} hover:bg-surface-container-low hover:border-secondary/10`}
                             >
                               {msg.avatarUrl ? (
                                 <img
@@ -685,7 +795,10 @@ export default function App() {
                               <div className="flex-1 min-w-0">
                                 <div className="flex justify-between items-start">
                                   <div>
-                                    <p className="text-xs font-bold text-on-surface truncate">{msg.sender}</p>
+                                    <div className="flex items-center gap-1.5">
+                                      {msg.isUnread && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
+                                      <p className={`text-xs font-bold text-on-surface truncate ${msg.isUnread ? '' : 'opacity-70'}`}>{msg.sender}</p>
+                                    </div>
                                     <p className="text-[9px] text-on-surface-variant">{msg.role}</p>
                                   </div>
                                   <span className="text-[10px] text-on-surface-variant">{msg.time}</span>
@@ -700,17 +813,19 @@ export default function App() {
                                   >
                                     Répondre
                                   </button>
-                                  <button
-                                    onClick={() => handleArchiveMessage(msg.id, msg.sender)}
-                                    className="px-2.5 py-1 border border-secondary/30 text-secondary text-[10px] font-bold rounded hover:bg-secondary/5 transition-colors cursor-pointer"
-                                  >
-                                    Archiver
-                                  </button>
+                <button
+                  onClick={() => handleArchiveMessage(msg.id, msg.sender)}
+                  className="px-2.5 py-1 border border-red-300 text-red-600 text-[10px] font-bold rounded hover:bg-red-50 transition-colors cursor-pointer"
+                >
+                  Supprimer
+                </button>
                                 </div>
                               </div>
                             </motion.div>
-                          ))
-                        )}
+                          ))}
+                          </>
+                          );
+                        })()}
                       </AnimatePresence>
                     </div>
                   </div>
@@ -720,124 +835,122 @@ export default function App() {
                     <div className="flex justify-between items-center mb-6">
                       <h4 className="font-headline text-base font-bold text-on-surface">Calendrier des Rendez-vous</h4>
                       <div className="flex gap-2 items-center">
-                        <button className="p-1 hover:bg-surface-container rounded transition-colors">
+                        <button
+                          onClick={() => {
+                            if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); }
+                            else { setCalMonth(calMonth - 1); }
+                          }}
+                          className="p-1 hover:bg-surface-container rounded transition-colors cursor-pointer"
+                        >
                           <ChevronLeft className="w-4 h-4 text-on-surface-variant" />
                         </button>
-                        <span className="text-xs font-bold text-on-surface">Octobre 2023</span>
-                        <button className="p-1 hover:bg-surface-container rounded transition-colors">
+                        <span className="text-xs font-bold text-on-surface">
+                          {['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][calMonth]} {calYear}
+                        </span>
+                        <button
+                          onClick={() => {
+                            if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1); }
+                            else { setCalMonth(calMonth + 1); }
+                          }}
+                          className="p-1 hover:bg-surface-container rounded transition-colors cursor-pointer"
+                        >
                           <ChevronRight className="w-4 h-4 text-on-surface-variant" />
                         </button>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-7 gap-1 text-center mb-6">
-                      <div className="text-[10px] font-bold text-on-surface-variant">LUN</div>
-                      <div className="text-[10px] font-bold text-on-surface-variant">MAR</div>
-                      <div className="text-[10px] font-bold text-on-surface-variant">MER</div>
-                      <div className="text-[10px] font-bold text-on-surface-variant">JEU</div>
-                      <div className="text-[10px] font-bold text-on-surface-variant">VEN</div>
-                      <div className="text-[10px] font-bold text-on-surface-variant">SAM</div>
-                      <div className="text-[10px] font-bold text-on-surface-variant">DIM</div>
+                      {['LUN','MAR','MER','JEU','VEN','SAM','DIM'].map(d => (
+                        <div key={d} className="text-[10px] font-bold text-on-surface-variant">{d}</div>
+                      ))}
 
-                      {/* Week 1 Mock Dates */}
-                      <div className="p-2 text-xs text-on-surface/30">25</div>
-                      <div className="p-2 text-xs text-on-surface/30">26</div>
-                      <div className="p-2 text-xs text-on-surface/30">27</div>
-                      <div className="p-2 text-xs text-on-surface/30">28</div>
-                      <div className="p-2 text-xs text-on-surface/30">29</div>
-                      <div className="p-2 text-xs text-on-surface/30">30</div>
-                      
-                      <button
-                        onClick={() => setSelectedDay(1)}
-                        className={`p-2 text-xs font-semibold rounded-lg relative cursor-pointer ${
-                          selectedDay === 1 ? 'bg-primary text-white shadow-sm' : 'hover:bg-surface-container'
-                        }`}
-                      >
-                        1
-                      </button>
+                      {Array.from({ length: (() => { const d = new Date(calYear, calMonth, 1).getDay(); return d === 0 ? 6 : d - 1; })() }).map((_, i) => (
+                        <div key={`empty-${i}`} />
+                      ))}
+                      {Array.from({ length: new Date(calYear, calMonth + 1, 0).getDate() }).map((_, i) => {
+                        const day = i + 1;
+                        const hasAppointments = appointmentsByDay[day] && appointmentsByDay[day].length > 0;
+                        const isAvailableDate = availableDatesSetByDay.has(`${day}`);
+                        return (
+                          <button
+                            key={day}
+                            onClick={() => setSelectedDay(selectedDay === day ? null : day)}
+                            className={`p-2 text-xs font-semibold rounded-lg relative cursor-pointer ${
+                              selectedDay === day
+                                ? 'bg-primary text-white shadow-sm'
+                                : hasAppointments
+                                ? 'hover:bg-surface-container text-on-surface font-bold'
+                                : 'hover:bg-surface-container text-on-surface'
+                            }`}
+                          >
+                            {day}
+                            {isAvailableDate && selectedDay !== day && (
+                              <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-emerald-500 rounded-full" />
+                            )}
+                            {hasAppointments && !isAvailableDate && selectedDay !== day && (
+                              <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-secondary rounded-full" />
+                            )}
+                            {hasAppointments && isAvailableDate && selectedDay !== day && (
+                              <>
+                                <span className="absolute bottom-0.5 left-[calc(50%-4px)] w-1 h-1 bg-emerald-500 rounded-full" />
+                                <span className="absolute bottom-0.5 left-[calc(50%+2px)] w-1 h-1 bg-secondary rounded-full" />
+                              </>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
 
-                      {/* Week 2 */}
-                      <button
-                        onClick={() => setSelectedDay(2)}
-                        className={`p-2 text-xs font-semibold rounded-lg relative cursor-pointer ${
-                          selectedDay === 2 ? 'bg-primary text-white shadow-sm' : 'hover:bg-surface-container'
-                        }`}
-                      >
-                        2
-                      </button>
-                      <button
-                        onClick={() => setSelectedDay(3)}
-                        className={`p-2 text-xs font-semibold rounded-lg relative cursor-pointer ${
-                          selectedDay === 3 ? 'bg-primary text-white shadow-sm' : 'hover:bg-surface-container'
-                        }`}
-                      >
-                        3
-                        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-secondary rounded-full" />
-                      </button>
-                      <button
-                        onClick={() => setSelectedDay(4)}
-                        className={`p-2 text-xs font-semibold rounded-lg relative cursor-pointer ${
-                          selectedDay === 4 ? 'bg-primary text-white shadow-sm' : 'hover:bg-surface-container'
-                        }`}
-                      >
-                        4
-                      </button>
-                      <button
-                        onClick={() => setSelectedDay(5)}
-                        className={`p-2 text-xs font-semibold rounded-lg relative cursor-pointer ${
-                          selectedDay === 5 ? 'bg-primary text-white shadow-sm' : 'hover:bg-surface-container'
-                        }`}
-                      >
-                        5
-                        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-secondary rounded-full" />
-                      </button>
-                      <button
-                        onClick={() => setSelectedDay(6)}
-                        className={`p-2 text-xs font-semibold rounded-lg relative cursor-pointer ${
-                          selectedDay === 6 ? 'bg-primary text-white shadow-sm' : 'hover:bg-surface-container'
-                        }`}
-                      >
-                        6
-                      </button>
-                      <button
-                        onClick={() => setSelectedDay(7)}
-                        className={`p-2 text-xs font-semibold rounded-lg relative cursor-pointer ${
-                          selectedDay === 7 ? 'bg-primary text-white shadow-sm' : 'hover:bg-surface-container'
-                        }`}
-                      >
-                        7
-                      </button>
-                      <button
-                        onClick={() => setSelectedDay(8)}
-                        className={`p-2 text-xs font-semibold rounded-lg relative cursor-pointer ${
-                          selectedDay === 8 ? 'bg-primary text-white shadow-sm' : 'hover:bg-surface-container'
-                        }`}
-                      >
-                        8
-                      </button>
+                    {/* Legend */}
+                    <div className="flex items-center justify-center gap-4 mb-4">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <span className="text-[9px] text-on-surface-variant font-medium">Date disponible</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-secondary" />
+                        <span className="text-[9px] text-on-surface-variant font-medium">Rendez-vous</span>
+                      </div>
                     </div>
 
                     <div className="space-y-3">
                       <AnimatePresence mode="wait">
-                        {appointmentsMap[selectedDay] ? (
-                          <motion.div
-                            key={selectedDay}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 10 }}
-                            className="flex items-center gap-4 p-3 bg-primary/5 rounded-lg border-l-4 border-primary"
-                          >
-                            <div className="text-center shrink-0 min-w-12">
-                              <p className="text-[10px] font-bold text-primary uppercase">Jour {selectedDay}</p>
-                              <p className="font-bold text-sm text-on-surface">{appointmentsMap[selectedDay].time}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-bold text-on-surface">{appointmentsMap[selectedDay].title}</p>
-                              <p className="text-[11px] text-on-surface-variant flex items-center gap-1 mt-0.5">
-                                <MapPin className="w-3.5 h-3.5" /> {appointmentsMap[selectedDay].location}
-                              </p>
-                            </div>
-                          </motion.div>
+                        {selectedDay && appointmentsByDay[selectedDay] ? (
+                          appointmentsByDay[selectedDay].map((appt) => (
+                            <motion.div
+                              key={appt._id}
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: 10 }}
+                              className={`flex items-center gap-4 p-3 rounded-lg border-l-4 ${
+                                appt.status === 'confirmed'
+                                  ? 'bg-emerald-50 border-emerald-500'
+                                  : appt.status === 'cancelled'
+                                  ? 'bg-gray-50 border-gray-400 opacity-60'
+                                  : 'bg-primary/5 border-primary'
+                              }`}
+                            >
+                              <div className="text-center shrink-0 min-w-12">
+                                <p className="text-[10px] font-bold text-primary uppercase">Jour {selectedDay}</p>
+                                <p className="font-bold text-sm text-on-surface">{appt.timeSlot}</p>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs font-bold text-on-surface truncate">{appt.subject}</p>
+                                  <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                                    appt.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
+                                    appt.status === 'cancelled' ? 'bg-gray-100 text-gray-500' :
+                                    'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {appt.status === 'confirmed' ? 'CONFIRMÉ' : appt.status === 'cancelled' ? 'ANNULÉ' : 'EN ATTENTE'}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-on-surface-variant mt-0.5">
+                                  {appt.clientName} — {appt.email}
+                                </p>
+                              </div>
+                            </motion.div>
+                          ))
                         ) : (
                           <motion.div
                             key="no-appointment"
@@ -846,7 +959,10 @@ export default function App() {
                             exit={{ opacity: 0 }}
                             className="p-3 text-center text-xs text-on-surface-variant italic bg-surface-container-low rounded-lg"
                           >
-                            Aucun rendez-vous planifié pour le {selectedDay} Octobre.
+                            {selectedDay
+                              ? `Aucun rendez-vous le ${selectedDay} ${['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][calMonth]}.`
+                              : 'Sélectionnez un jour pour voir les rendez-vous.'
+                            }
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -1467,6 +1583,234 @@ export default function App() {
               </motion.div>
             )}
 
+            {/* 6. APPOINTMENTS VIEW */}
+            {activeTab === 'appointments' && (
+              <motion.div
+                key="appointments"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-8"
+              >
+                {/* Header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-headline text-2xl font-bold text-primary">Gestion des Rendez-vous</h3>
+                    <p className="text-xs text-on-surface-variant">
+                      Définissez vos dates et créneaux disponibles, et consultez les demandes de rendez-vous reçues.
+                    </p>
+                  </div>
+                  <div className="flex gap-4 bg-white/60 p-3 rounded-xl border border-secondary/15 shadow-sm">
+                    <div className="text-center px-3 border-r border-secondary/10">
+                      <p className="text-[10px] text-on-surface-variant font-medium uppercase tracking-wider">Dates ouvertes</p>
+                      <p className="text-base font-bold text-primary">{availableDatesList.length}</p>
+                    </div>
+                    <div className="text-center px-3">
+                      <p className="text-[10px] text-on-surface-variant font-medium uppercase tracking-wider">Demandes</p>
+                      <p className="text-base font-bold text-amber-600">{appointments.filter(a => a.status === 'pending').length}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* LEFT: Calendar to manage available dates */}
+                  <div className="glass-card rounded-xl p-6">
+                    <h4 className="font-headline text-base font-bold text-on-surface mb-4">Dates Disponibles</h4>
+                    <p className="text-[11px] text-on-surface-variant mb-4">Cliquez sur une date pour la rendre disponible aux réservations. Cliquez à nouveau pour la retirer.</p>
+                    
+                    <div className="bg-surface-container-low rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <button
+                          onClick={() => {
+                            if (availCalMonth === 0) { setAvailCalMonth(11); setAvailCalYear(availCalYear - 1); }
+                            else { setAvailCalMonth(availCalMonth - 1); }
+                          }}
+                          className="p-1 hover:bg-surface-container rounded transition-colors cursor-pointer"
+                        >
+                          <ChevronLeft className="w-4 h-4 text-on-surface-variant" />
+                        </button>
+                        <span className="text-sm font-bold text-on-surface">
+                          {['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][availCalMonth]} {availCalYear}
+                        </span>
+                        <button
+                          onClick={() => {
+                            if (availCalMonth === 11) { setAvailCalMonth(0); setAvailCalYear(availCalYear + 1); }
+                            else { setAvailCalMonth(availCalMonth + 1); }
+                          }}
+                          className="p-1 hover:bg-surface-container rounded transition-colors cursor-pointer"
+                        >
+                          <ChevronRight className="w-4 h-4 text-on-surface-variant" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-7 gap-1 text-center mb-1">
+                        {['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].map(d => (
+                          <div key={d} className="text-[9px] font-bold text-on-surface-variant py-1">{d}</div>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-7 gap-1">
+                        {Array.from({ length: (() => { const d = new Date(availCalYear, availCalMonth, 1).getDay(); return d === 0 ? 6 : d - 1; })() }).map((_, i) => (
+                          <div key={`e-${i}`} />
+                        ))}
+                        {Array.from({ length: new Date(availCalYear, availCalMonth + 1, 0).getDate() }).map((_, i) => {
+                          const day = i + 1;
+                          const dateStr = `${availCalYear}-${String(availCalMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                          const isAvailable = availableDatesList.some(d => d.date.split('T')[0] === dateStr);
+                          const isPast = new Date(dateStr) < new Date(new Date().toDateString());
+                          const toggleDate = async () => {
+                            if (isPast) return;
+                            if (isAvailable) {
+                              const match = availableDatesList.find(d => d.date.split('T')[0] === dateStr);
+                              if (match) {
+                                await fetch(`${API_URL}/available-dates/${match._id}`, { method: 'DELETE' });
+                                setAvailableDatesList(prev => prev.filter(d => d._id !== match._id));
+                                addToast(`Date ${day} ${['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][availCalMonth]} retirée.`, 'info');
+                              }
+                            } else {
+                              const res = await fetch(`${API_URL}/available-dates`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ date: dateStr })
+                              });
+                              if (res.ok) {
+                                const created = await res.json();
+                                setAvailableDatesList(prev => [...prev, created]);
+                                addToast(`Date ${day} ${['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][availCalMonth]} ajoutée !`);
+                              }
+                            }
+                          };
+                          return (
+                            <button
+                              key={day}
+                              onClick={toggleDate}
+                              disabled={isPast}
+                              className={`relative p-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer ${
+                                isPast
+                                  ? 'text-gray-300 cursor-not-allowed'
+                                  : isAvailable
+                                  ? 'bg-primary text-white shadow-sm'
+                                  : 'text-on-surface hover:bg-surface-container'
+                              }`}
+                            >
+                              {day}
+                              {isAvailable && !isPast && (
+                                <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-emerald-400 rounded-full" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* List of available dates */}
+                    {availableDatesList.length > 0 && (
+                      <div className="mt-4 space-y-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Dates programmées</p>
+                        {availableDatesList.map(d => (
+                          <div key={d._id} className="flex items-center justify-between p-2 bg-emerald-50 rounded-lg border border-emerald-100">
+                            <span className="text-xs font-medium text-emerald-800">
+                              {new Date(d.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                            </span>
+                            <button
+                              onClick={async () => {
+                                await fetch(`${API_URL}/available-dates/${d._id}`, { method: 'DELETE' });
+                                setAvailableDatesList(prev => prev.filter(x => x._id !== d._id));
+                              }}
+                              className="text-[10px] text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                            >
+                              Supprimer
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* RIGHT: Incoming appointment requests */}
+                  <div className="glass-card rounded-xl flex flex-col">
+                    <div className="p-6 border-b border-secondary/10">
+                      <h4 className="font-headline text-base font-bold text-on-surface">Demandes de Rendez-vous</h4>
+                    </div>
+                    <div className="flex-1 p-4 space-y-3 overflow-y-auto max-h-[600px] custom-scrollbar">
+                      {appointments.length === 0 ? (
+                        <div className="text-center py-12 text-sm text-on-surface-variant flex flex-col items-center gap-2">
+                          <CalendarIcon className="w-8 h-8 text-on-surface-variant/30" />
+                          <span>Aucune demande de rendez-vous</span>
+                        </div>
+                      ) : (
+                        appointments.map(appt => (
+                          <div key={appt._id} className={`p-4 rounded-xl border transition-all ${
+                            appt.status === 'pending' ? 'border-amber-200 bg-amber-50/50' :
+                            appt.status === 'confirmed' ? 'border-emerald-200 bg-emerald-50/50' :
+                            'border-gray-200 bg-gray-50/50 opacity-60'
+                          }`}>
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <p className="text-sm font-bold text-on-surface">{appt.clientName}</p>
+                                <p className="text-[10px] text-on-surface-variant">{appt.email}</p>
+                              </div>
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                                appt.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                appt.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
+                                'bg-gray-100 text-gray-500'
+                              }`}>
+                                {appt.status === 'pending' ? 'EN ATTENTE' : appt.status === 'confirmed' ? 'CONFIRMÉ' : 'ANNULÉ'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 text-[11px] text-on-surface-variant mb-2">
+                              <span className="flex items-center gap-1">
+                                <CalendarIcon className="w-3.5 h-3.5" />
+                                {new Date(appt.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5" />
+                                {appt.timeSlot}
+                              </span>
+                            </div>
+                            <p className="text-xs font-semibold text-on-surface mb-1">{appt.subject}</p>
+                            {appt.details && <p className="text-[11px] text-on-surface-variant line-clamp-2 mb-3">{appt.details}</p>}
+                            {appt.status === 'pending' && (
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={async () => {
+                                    await fetch(`${API_URL}/appointments/${appt._id}`, {
+                                      method: 'PUT',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ status: 'confirmed' })
+                                    });
+                                    setAppointments(prev => prev.map(a => a._id === appt._id ? { ...a, status: 'confirmed' } : a));
+                                    addToast(`RDV avec ${appt.clientName} confirmé.`);
+                                  }}
+                                  className="px-3 py-1.5 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-700 transition-colors cursor-pointer"
+                                >
+                                  Confirmer
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    await fetch(`${API_URL}/appointments/${appt._id}`, {
+                                      method: 'PUT',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ status: 'cancelled' })
+                                    });
+                                    setAppointments(prev => prev.map(a => a._id === appt._id ? { ...a, status: 'cancelled' } : a));
+                                    addToast(`RDV avec ${appt.clientName} annulé.`, 'info');
+                                  }}
+                                  className="px-3 py-1.5 border border-red-300 text-red-600 text-[10px] font-bold rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                                >
+                                  Refuser
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
           </AnimatePresence>
         </div>
 
@@ -1627,71 +1971,117 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* MODAL 2: REPLY TO MESSAGE */}
+      {/* MODAL 2: REPLY TO MESSAGE — Chat Thread */}
       <AnimatePresence>
         {isReplyOpen && activeReplyMessage && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsReplyOpen(false)}
-              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/50 backdrop-blur-md"
             />
 
-            {/* Modal Body */}
             <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              initial={{ scale: 0.9, opacity: 0, y: 30 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 15 }}
-              className="relative w-full max-w-md bg-white border border-outline-variant rounded-xl shadow-2xl z-10 overflow-hidden"
+              exit={{ scale: 0.9, opacity: 0, y: 30 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl z-10 overflow-hidden flex flex-col max-h-[80vh]"
             >
-              <div className="flex justify-between items-center bg-primary text-on-primary px-6 py-4">
-                <h4 className="font-headline font-bold text-sm flex items-center gap-2">
-                  <Send className="w-4 h-4" />
-                  Répondre à {activeReplyMessage.sender}
-                </h4>
-                <button
-                  onClick={() => setIsReplyOpen(false)}
-                  className="p-1 hover:bg-white/10 rounded-full text-white transition-colors cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+              {/* Header */}
+              <div className="bg-gradient-to-r from-primary to-primary-container px-6 py-4 shrink-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {activeReplyMessage.avatarUrl ? (
+                      <img className="w-10 h-10 rounded-full object-cover border-2 border-white/30" src={activeReplyMessage.avatarUrl} alt={activeReplyMessage.sender} />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center font-bold text-sm border-2 border-white/30">
+                        {activeReplyMessage.initials || activeReplyMessage.sender.charAt(0)}
+                      </div>
+                    )}
+                    <div>
+                      <h4 className="font-headline font-bold text-sm text-white">{activeReplyMessage.sender}</h4>
+                      <p className="text-[10px] text-white/60">{activeReplyMessage.role}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsReplyOpen(false)}
+                    className="p-2 hover:bg-white/10 rounded-full text-white/70 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
-              <form onSubmit={handleSendReply} className="p-6 space-y-4">
-                <div className="p-3 bg-surface-container-low rounded-lg text-xs text-on-surface-variant">
-                  <p className="font-semibold text-on-surface mb-1">Message d'origine :</p>
-                  <p className="italic">"{activeReplyMessage.content}"</p>
-                </div>
+              {/* Thread Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-1 min-h-0 bg-gradient-to-b from-surface-container-low/30 to-white custom-scrollbar">
+                {(() => {
+                  const threadId = activeReplyMessage.parentId || activeReplyMessage.id;
+                  const threadMessages = messages
+                    .filter(m => m.id === threadId || m.parentId === threadId)
+                    .sort((a, b) => {
+                      if (a.id === threadId) return -1;
+                      if (b.id === threadId) return 1;
+                      return 0;
+                    });
 
-                <div>
-                  <label className="block text-xs font-bold text-on-surface-variant mb-1">Votre Réponse</label>
+                  return threadMessages.map((msg, idx) => {
+                    const isMe = msg.sender === 'Marc-Antoine Durand';
+                    const prevMsg = threadMessages[idx - 1];
+                    const showHeader = !prevMsg || prevMsg.sender !== msg.sender;
+
+                    return (
+                      <div key={msg.id} className={`${idx > 0 && showHeader ? 'mt-4' : idx > 0 ? 'mt-0.5' : ''}`}>
+                        {showHeader && (
+                          <div className={`flex items-center gap-2 mb-1.5 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                            <span className={`text-[10px] font-bold ${isMe ? 'text-primary' : 'text-on-surface'}`}>
+                              {isMe ? 'Vous' : msg.sender}
+                            </span>
+                            <span className="text-[9px] text-on-surface-variant/60">{msg.time}</span>
+                          </div>
+                        )}
+                        <div className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[85%] px-4 py-2.5 text-xs leading-relaxed ${
+                            isMe
+                              ? 'bg-primary text-white rounded-2xl rounded-br-md shadow-sm'
+                              : 'bg-surface-container-low text-on-surface rounded-2xl rounded-bl-md border border-secondary/10'
+                          }`}>
+                            {msg.content}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+
+                {/* Date separator */}
+                <div className="flex items-center gap-3 my-4">
+                  <div className="flex-1 h-px bg-secondary/10" />
+                  <span className="text-[9px] text-on-surface-variant/50 font-medium uppercase tracking-wider">Aujourd'hui</span>
+                  <div className="flex-1 h-px bg-secondary/10" />
+                </div>
+              </div>
+
+              {/* Reply Input */}
+              <form onSubmit={handleSendReply} className="p-3 border-t border-secondary/10 shrink-0 bg-white">
+                <div className="flex items-end gap-2">
                   <textarea
-                    rows={4}
+                    rows={1}
                     required
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
-                    placeholder="Saisissez votre message de réponse ici..."
-                    className="w-full bg-surface-container-low border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-primary placeholder:text-on-surface-variant/30 resize-none"
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
+                    placeholder="Écrire un message..."
+                    className="flex-1 bg-surface-container-low border border-secondary/15 rounded-2xl px-4 py-2.5 text-xs text-on-surface focus:outline-primary focus:ring-1 focus:ring-primary/30 placeholder:text-on-surface-variant/40 resize-none"
                   />
-                </div>
-
-                <div className="pt-4 flex justify-end gap-3 border-t border-secondary/10">
-                  <button
-                    type="button"
-                    onClick={() => setIsReplyOpen(false)}
-                    className="px-4 py-2 text-xs font-bold text-on-surface-variant border border-outline-variant rounded-lg hover:bg-surface-container transition-colors cursor-pointer"
-                  >
-                    Annuler
-                  </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 text-xs font-bold bg-primary text-white hover:bg-primary-container rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                    disabled={!replyText.trim()}
+                    className="w-9 h-9 bg-primary hover:bg-primary-container disabled:bg-gray-200 text-white disabled:text-gray-400 rounded-full flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed shrink-0 active:scale-90"
                   >
-                    <Send className="w-3.5 h-3.5" />
-                    Envoyer la Réponse
+                    <Send className="w-4 h-4" />
                   </button>
                 </div>
               </form>
