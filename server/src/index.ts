@@ -29,6 +29,19 @@ app.use('/api/appointments', appointmentsRouter);
 app.use('/api/available-dates', availableDatesRouter);
 app.use('/api/send-email', sendEmailRouter);
 
+app.get('/api', (_req, res) => {
+  res.json({
+    message: 'RM Consulting API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      departments: '/api/departments',
+      missions: '/api/missions',
+      messages: '/api/messages',
+    }
+  });
+});
+
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
