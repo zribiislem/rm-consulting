@@ -37,7 +37,7 @@ function mapDocToCard(doc: DepartmentDoc, index: number) {
   return {
     title: doc.name,
     description: doc.description,
-    image: doc.imageUrl || FALLBACK_IMAGES[index % FALLBACK_IMAGES.length],
+    image: doc.imageUrl || '',
     icon: getIcon(index),
     tagColor: getTagColor(index),
     bulletIcon: getBulletColor(index),
@@ -133,10 +133,18 @@ export default function Departments() {
             >
               {/* Card Image Header */}
               <div className="h-56 overflow-hidden relative shrink-0">
-                <div
-                  className="w-full h-full bg-cover bg-center group-hover:scale-105 transition-transform duration-700"
-                  style={{ backgroundImage: `url(${dept.image})` }}
-                />
+                {dept.image ? (
+                  <div
+                    className="w-full h-full bg-cover bg-center group-hover:scale-105 transition-transform duration-700"
+                    style={{ backgroundImage: `url(${dept.image})` }}
+                  />
+                ) : (
+                  <div className={`w-full h-full flex items-center justify-center ${index % 2 === 0 ? 'bg-gradient-to-br from-primary/10 to-primary/5' : 'bg-gradient-to-br from-secondary/10 to-secondary/5'}`}>
+                    <div className="opacity-30 scale-150">
+                      {dept.icon}
+                    </div>
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-primary/10 group-hover:bg-primary/5 transition-colors duration-300" />
 
                 {/* Icon Circle */}

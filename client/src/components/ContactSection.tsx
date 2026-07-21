@@ -169,11 +169,6 @@ export default function ContactSection() {
 
   const contactInfo = [
     {
-      title: 'Adresse physique',
-      value: "Avenue de l'Indépendance, Les Berges du Lac 2, Tunis, Tunisie",
-      icon: <MapPin className="w-5 h-5 text-primary" />,
-    },
-    {
       title: 'Téléphone direct',
       value: '+216 71 000 000 / +216 22 000 000',
       icon: <Phone className="w-5 h-5 text-primary" />,
@@ -208,6 +203,38 @@ export default function ContactSection() {
                 Nos bureaux sont situés au cœur du quartier d'affaires des Berges du Lac 2 à Tunis. Venez nous rencontrer pour échanger de vive voix sur vos enjeux de croissance financière.
               </p>
             </div>
+
+            {/* Carte Adresse avec aperçu Google Maps */}
+            <a
+              href="https://maps.app.goo.gl/qGSWiDX5ocAamW4v7"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block bg-white p-5 rounded-2xl shadow-sm border border-secondary/10 hover:shadow-md transition-shadow"
+            >
+              <div className="flex gap-4 mb-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                  <MapPin className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h4 className="font-display font-bold text-primary text-sm mb-0.5">Adresse physique</h4>
+                  <p className="font-sans text-xs sm:text-sm text-on-surface-variant leading-relaxed">
+                    RM Consulting, Lot 17 DDHBC, Lotissement Ennasim, Monplaisir, Tunis, Tunisie
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-xl overflow-hidden border border-gray-100">
+                <iframe
+                  title="Localisation RM Consulting"
+                  src="https://www.google.com/maps?q=Avenue+de+l'Independance,+Les+Berges+du+Lac+2,+Tunis,+Tunisie&output=embed&z=16"
+                  width="100%"
+                  height="120"
+                  style={{ border: 0 }}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  className="pointer-events-none"
+                />
+              </div>
+            </a>
 
             <div className="space-y-4">
               {contactInfo.map((info, idx) => (
