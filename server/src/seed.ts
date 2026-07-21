@@ -5,6 +5,8 @@ import mongoose from 'mongoose';
 import Department from './models/Department.js';
 import Mission from './models/Mission.js';
 import Message from './models/Message.js';
+import AvailableDate from './models/AvailableDate.js';
+import Appointment from './models/Appointment.js';
 
 const seedData = async () => {
   try {
@@ -17,6 +19,8 @@ const seedData = async () => {
     await Department.deleteMany({});
     await Mission.deleteMany({});
     await Message.deleteMany({});
+    await AvailableDate.deleteMany({});
+    await Appointment.deleteMany({});
 
     await Department.insertMany([
       {
@@ -71,21 +75,21 @@ const seedData = async () => {
       {
         title: 'Restructuration Entreprise BTP',
         client: 'Routes Voiries & Ouvrages Hydrauliques',
-        department: 'Consulting',
+        department: 'Conseil',
         status: 'EN COURS',
         progression: 65
       },
       {
         title: 'Programme Création Services',
         client: 'Partenaire Bancaire',
-        department: 'Conseil',
+        department: 'Comptabilité',
         status: 'TERMINÉ',
         progression: 100
       },
       {
         title: 'Certification ISO 9001 & 21001',
         client: 'Établissement Privé Enseignement',
-        department: 'Consulting',
+        department: 'Juridique',
         status: 'EN COURS',
         progression: 45
       }
@@ -117,6 +121,21 @@ const seedData = async () => {
         isUnread: false
       }
     ]);
+
+    const today = new Date();
+    const availDates = [];
+    for (let i = 1; i <= 30; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      if (d.getDay() !== 0 && d.getDay() !== 6) {
+        const dateStr = d.toISOString().split('T')[0];
+        availDates.push({
+          date: dateStr,
+          timeSlots: ['09:00', '10:30', '14:00', '15:30']
+        });
+      }
+    }
+    await AvailableDate.insertMany(availDates);
 
     console.log('Database seeded successfully!');
     process.exit(0);

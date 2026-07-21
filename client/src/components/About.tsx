@@ -42,10 +42,16 @@ export default function About() {
               Une expertise au service de votre <span className="text-gradient-gold">croissance</span>
             </h2>
             <p className="font-sans text-base text-on-surface-variant mb-6 leading-relaxed">
-              RM Consulting est une société d'expertise comptable, d'audit et de conseils en gestion, membre de l'Ordre des Experts Comptables de Tunisie (O.E.C.T), créée le 01/01/2017. La structure permanente, la compétence technique et l'expérience professionnelle du gérant et du personnel permettent d'offrir aux entreprises des services de qualité.
+              RM CONSULTING est une société d'expertise comptable, d'audit et de conseils en gestion, membre de l'Ordre des Experts Comptables de Tunisie (O.E.C.T). La structure permanente, la compétence technique et l'expérience professionnelle du gérant, des partenaires et du personnel d'intervention permettent à notre société d'offrir aux entreprises des services de qualité.
+            </p>
+            <p className="font-sans text-base text-on-surface-variant mb-6 leading-relaxed">
+              RM CONSULTING est dotée des outils de travail les plus appropriés pour assurer un bon déroulement des missions conformément aux normes et réglementations en vigueur (manuel d'audit, matériel et applications informatiques, etc.). La supervision des missions est assurée exclusivement par le gérant. Le personnel technique bénéficie d'actions de formation continue pour améliorer son efficacité.
+            </p>
+            <p className="font-sans text-base text-on-surface-variant mb-6 leading-relaxed">
+              Avant la présentation des rapports de fin de mission, chaque dossier de travail fait l'objet d'un contrôle de qualité exercé par le gérant. RM CONSULTING fait appel à des consultants externes pour la réalisation des travaux spécifiques de conseil, organisation et audit des entreprises (audit de production, mise en place de systèmes de management selon les standards internationaux, conception et mise en place des systèmes informatiques, etc.) qui font partie intégrante de sa mission et nécessitent des compétences techniques particulières.
             </p>
             <p className="font-sans text-base text-on-surface-variant mb-8 leading-relaxed">
-              RM Consulting est dotée des outils de travail les plus appropriés pour assurer un bon déroulement des missions conformément aux normes et réglementations en vigueur. La supervision des missions est assurée exclusivement par le gérant, et chaque dossier fait l'objet d'un contrôle de qualité. Le cabinet est agrée par la Banque Européenne de Restructuration et de Développement.
+              RM CONSULTING est un cabinet agrée par la Banque Européenne de Restructuration et de Développement.
             </p>
 
             <ul className="space-y-4 mb-8">
@@ -53,6 +59,7 @@ export default function About() {
                 'Expertise comptable, audit et conseil en gestion — Membre OECT',
                 'Agrément BERD pour les projets internationaux de soutien aux PME',
                 'Supervision exclusive par le gérant avec contrôle de qualité systématique',
+                'Consultants externes pour des missions spécialisées',
               ].map((point, index) => (
                 <li key={index} className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-secondary shrink-0 mt-0.5" />

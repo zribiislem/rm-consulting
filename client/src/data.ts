@@ -15,8 +15,8 @@ export const CONF_ROOM_IMAGE = 'https://images.unsplash.com/photo-1497366811353-
 export const timelineEvents = [
   {
     year: '2017',
-    title: 'Fondation',
-    description: 'Création de la société RM Consulting par Mihoub Rezgui, expert-comptable inscrit à l\'OECT, avec la vision de proposer un audit, une expertise comptable et un conseil de niveau international aux entreprises tunisiennes.'
+    title: 'Création',
+    description: 'Création de RM CONSULTING le 01/01/2017 par M. Mihoub Rezgui, expert-comptable et associé gérant. Constitution d\'une équipe qualifiée et mise en place des outils de travail conformes aux normes professionnelles.'
   },
   {
     year: '2019',
@@ -25,7 +25,7 @@ export const timelineEvents = [
   },
   {
     year: '2021',
-    title: 'Certification',
+    title: 'Agrément',
     description: 'Obtention de l\'agrément par la Banque Européenne de Restructuration et de Développement (BERD). RM Consulting s\'impose comme un cabinet de référence pour les projets internationaux de soutien aux PME.'
   },
   {
@@ -34,9 +34,14 @@ export const timelineEvents = [
     description: 'Développement des missions d\'audit et de commissariat aux comptes au Niger, en Côte d\'Ivoire et au Cameroun. Premier mandat d\'accompagnement en restructuration pour un groupe de BTP international.'
   },
   {
+    year: '2024',
+    title: 'Qualité',
+    description: 'Mise en place d\'un dispositif d\'assurance qualité conforme aux normes de l\'OECT. Développement d\'un manuel de procédures et de check-lists d\'intervention pour garantir la fiabilité et la rigueur de chaque mission.'
+  },
+  {
     year: '2025',
-    title: 'Innovation',
-    description: 'Intégration de l\'intelligence artificielle et des outils digitaux dans nos processus d\'audit. Le cabinet compte désormais 80 clients et 14 experts spécialisés dans 4 départements d\'expertise.'
+    title: 'Digitalisation',
+    description: 'Transformation numérique complète avec mise en place de l\'outil IRIS pour la gestion intégrée des procédures internes. Déploiement d\'une application web pour le suivi en temps réel de l\'avancement des missions par les clients.'
   }
 ];
 
