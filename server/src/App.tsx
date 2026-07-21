@@ -29,7 +29,10 @@ import {
   BellRing,
   UserCheck,
   Pencil,
-  Trash2
+  Trash2,
+  Image as ImageIcon,
+  Upload,
+  XCircle
 } from 'lucide-react';
 
 // Interfaces
@@ -63,6 +66,7 @@ interface Department {
   staffCount: number;
   activeProjects: number;
   services: string[];
+  imageUrl?: string;
 }
 
 const API_URL = '/api';
@@ -100,6 +104,9 @@ export default function App() {
   const [deptStaffCount, setDeptStaffCount] = useState<number>(5);
   const [deptActiveProjects, setDeptActiveProjects] = useState<number>(3);
   const [deptServicesText, setDeptServicesText] = useState('');
+  const [deptImageFile, setDeptImageFile] = useState<File | null>(null);
+  const [deptImagePreview, setDeptImagePreview] = useState<string | null>(null);
+  const [deptExistingImageUrl, setDeptExistingImageUrl] = useState<string | null>(null);
 
   // Search filter for missions
   const [missionSearch, setMissionSearch] = useState('');
@@ -130,6 +137,24 @@ export default function App() {
   const [availableDatesList, setAvailableDatesList] = useState<AvailableDateData[]>([]);
   const [availCalMonth, setAvailCalMonth] = useState(new Date().getMonth());
   const [availCalYear, setAvailCalYear] = useState(new Date().getFullYear());
+
+  const [timeSlotModalOpen, setTimeSlotModalOpen] = useState(false);
+  const [timeSlotDateStr, setTimeSlotDateStr] = useState('');
+  const [timeSlotDayNum, setTimeSlotDayNum] = useState(0);
+  const [selectedTimeSlots, setSelectedTimeSlots] = useState<string[]>([]);
+  const [editingTimeSlotId, setEditingTimeSlotId] = useState<string | null>(null);
+
+  const PRESET_TIME_SLOTS = [
+    '08:00 - 09:00',
+    '09:00 - 10:00',
+    '10:00 - 11:00',
+    '11:00 - 12:00',
+    '13:00 - 14:00',
+    '14:00 - 15:00',
+    '15:00 - 16:00',
+    '16:00 - 17:00',
+    '17:00 - 18:00',
+  ];
 
   // Fetch data from API on mount
   useEffect(() => {
@@ -398,6 +423,9 @@ export default function App() {
     setDeptStaffCount(5);
     setDeptActiveProjects(3);
     setDeptServicesText('');
+    setDeptImageFile(null);
+    setDeptImagePreview(null);
+    setDeptExistingImageUrl(null);
     setIsDeptModalOpen(true);
   };
 
@@ -409,6 +437,9 @@ export default function App() {
     setDeptStaffCount(dept.staffCount);
     setDeptActiveProjects(dept.activeProjects);
     setDeptServicesText(dept.services.join('\n'));
+    setDeptImageFile(null);
+    setDeptImagePreview(null);
+    setDeptExistingImageUrl(dept.imageUrl || null);
     setIsDeptModalOpen(true);
   };
 
@@ -437,21 +468,25 @@ export default function App() {
       .map(s => s.trim())
       .filter(Boolean);
 
-    const deptData = {
-      name: deptName,
-      description: deptDescription,
-      head: deptHead,
-      staffCount: Number(deptStaffCount),
-      activeProjects: Number(deptActiveProjects),
-      services,
-    };
+    const formData = new FormData();
+    formData.append('name', deptName);
+    formData.append('description', deptDescription);
+    formData.append('head', deptHead);
+    formData.append('staffCount', String(Number(deptStaffCount)));
+    formData.append('activeProjects', String(Number(deptActiveProjects)));
+    formData.append('services', JSON.stringify(services));
+
+    if (deptImageFile) {
+      formData.append('image', deptImageFile);
+    } else if (editingDept && !deptExistingImageUrl) {
+      formData.append('removeImage', 'true');
+    }
 
     try {
       if (editingDept) {
         const res = await fetch(`${API_URL}/departments/${editingDept.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(deptData)
+          body: formData,
         });
         if (!res.ok) {
           const err = await res.json();
@@ -466,8 +501,7 @@ export default function App() {
       } else {
         const res = await fetch(`${API_URL}/departments`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(deptData)
+          body: formData,
         });
         if (!res.ok) {
           const err = await res.json();
@@ -1673,21 +1707,18 @@ export default function App() {
                             if (isAvailable) {
                               const match = availableDatesList.find(d => d.date.split('T')[0] === dateStr);
                               if (match) {
-                                await fetch(`${API_URL}/available-dates/${match._id}`, { method: 'DELETE' });
-                                setAvailableDatesList(prev => prev.filter(d => d._id !== match._id));
-                                addToast(`Date ${day} ${['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][availCalMonth]} retirée.`, 'info');
+                                setTimeSlotDateStr(dateStr);
+                                setTimeSlotDayNum(day);
+                                setSelectedTimeSlots(match.timeSlots);
+                                setEditingTimeSlotId(match._id);
+                                setTimeSlotModalOpen(true);
                               }
                             } else {
-                              const res = await fetch(`${API_URL}/available-dates`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ date: dateStr })
-                              });
-                              if (res.ok) {
-                                const created = await res.json();
-                                setAvailableDatesList(prev => [...prev, created]);
-                                addToast(`Date ${day} ${['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][availCalMonth]} ajoutée !`);
-                              }
+                              setTimeSlotDateStr(dateStr);
+                              setTimeSlotDayNum(day);
+                              setSelectedTimeSlots([]);
+                              setEditingTimeSlotId(null);
+                              setTimeSlotModalOpen(true);
                             }
                           };
                           return (
@@ -1718,19 +1749,42 @@ export default function App() {
                       <div className="mt-4 space-y-2">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Dates programmées</p>
                         {availableDatesList.map(d => (
-                          <div key={d._id} className="flex items-center justify-between p-2 bg-emerald-50 rounded-lg border border-emerald-100">
-                            <span className="text-xs font-medium text-emerald-800">
-                              {new Date(d.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                            </span>
-                            <button
-                              onClick={async () => {
-                                await fetch(`${API_URL}/available-dates/${d._id}`, { method: 'DELETE' });
-                                setAvailableDatesList(prev => prev.filter(x => x._id !== d._id));
-                              }}
-                              className="text-[10px] text-red-500 hover:text-red-700 font-bold cursor-pointer"
-                            >
-                              Supprimer
-                            </button>
+                          <div key={d._id} className="p-2 bg-emerald-50 rounded-lg border border-emerald-100">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-medium text-emerald-800">
+                                {new Date(d.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                              </span>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    setTimeSlotDateStr(d.date.split('T')[0]);
+                                    setTimeSlotDayNum(new Date(d.date).getDate());
+                                    setSelectedTimeSlots(d.timeSlots);
+                                    setEditingTimeSlotId(d._id);
+                                    setTimeSlotModalOpen(true);
+                                  }}
+                                  className="text-[10px] text-primary hover:text-primary/80 font-bold cursor-pointer"
+                                >
+                                  Modifier horaires
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    await fetch(`${API_URL}/available-dates/${d._id}`, { method: 'DELETE' });
+                                    setAvailableDatesList(prev => prev.filter(x => x._id !== d._id));
+                                  }}
+                                  className="text-[10px] text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                                >
+                                  Supprimer
+                                </button>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {d.timeSlots.map((slot, si) => (
+                                <span key={si} className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
+                                  {slot}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -2347,6 +2401,51 @@ export default function App() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-xs font-bold text-on-surface-variant mb-1">
+                    Image du Département <span className="font-normal text-on-surface-variant/60">(optionnel)</span>
+                  </label>
+                  {(deptImagePreview || deptExistingImageUrl) && (
+                    <div className="relative mb-2 inline-block">
+                      <img
+                        src={deptImagePreview || deptExistingImageUrl || ''}
+                        alt="Aperçu"
+                        className="w-full h-32 object-cover rounded-lg border border-outline-variant"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeptImageFile(null);
+                          setDeptImagePreview(null);
+                          setDeptExistingImageUrl(null);
+                        }}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 cursor-pointer hover:bg-red-600"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                  <label className="flex items-center justify-center gap-2 w-full bg-surface-container-low border border-dashed border-outline-variant rounded-lg p-4 text-xs text-on-surface-variant hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
+                    <Upload className="w-4 h-4" />
+                    {deptImageFile ? deptImageFile.name : 'Choisir une image (JPG, PNG, WebP)'}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setDeptImageFile(file);
+                          setDeptExistingImageUrl(null);
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setDeptImagePreview(ev.target?.result as string);
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+
                 <div className="pt-4 flex justify-end gap-3 border-t border-secondary/10">
                   <button
                     type="button"
@@ -2364,6 +2463,132 @@ export default function App() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: TIME SLOT SELECTOR */}
+      <AnimatePresence>
+        {timeSlotModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setTimeSlotModalOpen(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="relative w-full max-w-md bg-white border border-outline-variant rounded-xl shadow-2xl z-10 overflow-hidden"
+            >
+              <div className="flex justify-between items-center bg-primary text-on-primary px-6 py-4">
+                <h4 className="font-headline font-bold text-sm flex items-center gap-2">
+                  <CalendarIcon className="w-4 h-4" />
+                  Horaires - {timeSlotDayNum} {['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][availCalMonth]} {availCalYear}
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setTimeSlotModalOpen(false)}
+                  className="p-1 hover:bg-white/10 rounded-full text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <p className="text-xs text-on-surface-variant">
+                  Sélectionnez les créneaux horaires disponibles pour cette date.
+                </p>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {PRESET_TIME_SLOTS.map(slot => {
+                    const isSelected = selectedTimeSlots.includes(slot);
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        onClick={() => {
+                          setSelectedTimeSlots(prev =>
+                            isSelected ? prev.filter(s => s !== slot) : [...prev, slot]
+                          );
+                        }}
+                        className={`text-xs font-medium p-2.5 rounded-lg border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-primary text-white border-primary shadow-sm'
+                            : 'bg-surface-container-low text-on-surface border-outline-variant hover:border-primary/50'
+                        }`}
+                      >
+                        {slot}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3 border-t border-secondary/10">
+                  {editingTimeSlotId && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await fetch(`${API_URL}/available-dates/${editingTimeSlotId}`, { method: 'DELETE' });
+                        setAvailableDatesList(prev => prev.filter(d => d._id !== editingTimeSlotId));
+                        setTimeSlotModalOpen(false);
+                        addToast(`Date ${timeSlotDayNum} supprimée.`, 'info');
+                      }}
+                      className="px-4 py-2 text-xs font-bold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                    >
+                      Supprimer la date
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setTimeSlotModalOpen(false)}
+                    className="px-4 py-2 text-xs font-bold text-on-surface-variant border border-outline-variant rounded-lg hover:bg-surface-container transition-colors cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    disabled={selectedTimeSlots.length === 0}
+                    onClick={async () => {
+                      if (selectedTimeSlots.length === 0) return;
+                      if (editingTimeSlotId) {
+                        const res = await fetch(`${API_URL}/available-dates/${editingTimeSlotId}`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ timeSlots: selectedTimeSlots })
+                        });
+                        if (res.ok) {
+                          const updated = await res.json();
+                          setAvailableDatesList(prev =>
+                            prev.map(d => d._id === editingTimeSlotId ? updated : d)
+                          );
+                          addToast(`Horaires mis à jour pour le ${timeSlotDayNum}.`);
+                        }
+                      } else {
+                        const res = await fetch(`${API_URL}/available-dates`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ date: timeSlotDateStr, timeSlots: selectedTimeSlots })
+                        });
+                        if (res.ok) {
+                          const created = await res.json();
+                          setAvailableDatesList(prev => [...prev, created]);
+                          addToast(`Date ${timeSlotDayNum} ajoutée avec ${selectedTimeSlots.length} créneau(x).`);
+                        }
+                      }
+                      setTimeSlotModalOpen(false);
+                    }}
+                    className="px-4 py-2 text-xs font-bold bg-primary text-white hover:bg-primary-container rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    {editingTimeSlotId ? 'Enregistrer' : 'Ajouter la date'}
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

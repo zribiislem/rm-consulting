@@ -49,6 +49,9 @@ app.get('/api/health', (_req, res) => {
 const distPath = path.resolve(__dirname, '..', 'dist');
 app.use(express.static(distPath));
 
+const uploadsPath = path.resolve(__dirname, '..', 'uploads');
+app.use('/uploads', express.static(uploadsPath));
+
 app.get('*', (_req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
