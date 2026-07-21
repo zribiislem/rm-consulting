@@ -7,6 +7,7 @@ export interface IDepartment extends Document {
   staffCount: number;
   activeProjects: number;
   services: string[];
+  imageUrl: string;
 }
 
 const DepartmentSchema = new Schema<IDepartment>({
@@ -15,7 +16,8 @@ const DepartmentSchema = new Schema<IDepartment>({
   head: { type: String, required: true },
   staffCount: { type: Number, required: true, default: 0 },
   activeProjects: { type: Number, required: true, default: 0 },
-  services: [{ type: String, required: true }]
+  services: [{ type: String, required: true }],
+  imageUrl: { type: String, default: '' }
 }, { timestamps: true });
 
 export default mongoose.model<IDepartment>('Department', DepartmentSchema);

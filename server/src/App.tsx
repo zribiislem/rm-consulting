@@ -453,6 +453,11 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(deptData)
         });
+        if (!res.ok) {
+          const err = await res.json();
+          addToast(err.message || 'Erreur lors de la modification du département.', 'info');
+          return;
+        }
         const updated = await res.json();
         setDepartments(prev =>
           prev.map(d => d.id === editingDept.id ? { ...updated, id: updated._id } : d)
@@ -464,6 +469,11 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(deptData)
         });
+        if (!res.ok) {
+          const err = await res.json();
+          addToast(err.message || 'Erreur lors de la création du département.', 'info');
+          return;
+        }
         const created = await res.json();
         setDepartments(prev => [...prev, { ...created, id: created._id }]);
         addToast(`Le département "${deptName}" a été créé avec succès.`);

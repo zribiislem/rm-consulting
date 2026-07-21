@@ -14,29 +14,29 @@ export const CONF_ROOM_IMAGE = 'https://images.unsplash.com/photo-1497366811353-
 // --- Timeline ---
 export const timelineEvents = [
   {
-    year: '2010',
+    year: '2017',
     title: 'Fondation',
-    description: 'Création du cabinet RM Consulting par Marc-Antoine Durand et Sophie Martin, avec la vision de proposer un audit et un conseil de niveau international aux entreprises tunisiennes.'
-  },
-  {
-    year: '2013',
-    title: 'Expansion',
-    description: 'Ouverture du département Comptabilité & Expertise. Le cabinet atteint 50 clients actifs et renforce son expertise dans la consolidation de comptes en normes IFRS.'
-  },
-  {
-    year: '2016',
-    title: 'Certification',
-    description: 'Obtention de la certification ISO 9001:2015. RM Consulting s\'impose comme l\'un des rares cabinets tunisiens à garantir un processus qualité certifié internationalement.'
+    description: 'Création de la société RM Consulting par Mihoub Rezgui, expert-comptable inscrit à l\'OECT, avec la vision de proposer un audit, une expertise comptable et un conseil de niveau international aux entreprises tunisiennes.'
   },
   {
     year: '2019',
-    title: 'International',
-    description: 'Lancement du pôle Conseil & Stratégie. Premier mandat d\'accompagnement en fusion-acquisition pour un groupe industriel franco-tunisien, marquant l\'entrée sur la scène internationale.'
+    title: 'Expansion',
+    description: 'Ouverture des départements Conseil & Stratégie et Fiscalité. Le cabinet atteint 40 clients actifs et renforce son expertise en accompagnement à la certification ISO et en restructuration d\'entreprise.'
+  },
+  {
+    year: '2021',
+    title: 'Certification',
+    description: 'Obtention de l\'agrément par la Banque Européenne de Restructuration et de Développement (BERD). RM Consulting s\'impose comme un cabinet de référence pour les projets internationaux de soutien aux PME.'
   },
   {
     year: '2023',
+    title: 'International',
+    description: 'Développement des missions d\'audit et de commissariat aux comptes au Niger, en Côte d\'Ivoire et au Cameroun. Premier mandat d\'accompagnement en restructuration pour un groupe de BTP international.'
+  },
+  {
+    year: '2025',
     title: 'Innovation',
-    description: 'Intégration de l\'intelligence artificielle et des outils digitaux dans nos processus d\'audit. Le cabinet compte désormais 80+ clients et 14 experts spécialisés.'
+    description: 'Intégration de l\'intelligence artificielle et des outils digitaux dans nos processus d\'audit. Le cabinet compte désormais 80 clients et 14 experts spécialisés dans 4 départements d\'expertise.'
   }
 ];
 
@@ -55,7 +55,7 @@ export const faqData = [
   {
     id: 'fq3',
     question: 'Travaillez-vous avec les entreprises internationales ?',
-    answer: 'Absolument. Nous accompagnons des groupes internationaux implantés en Tunisie ainsi que des entreprises tunisiennes avec des filiales à l\'étranger. Notre réseau professionnel nous permet de couvrir les principales places financières mondiales.'
+    answer: 'Absolument. Nous accompagnons des groupes internationaux implantés en Tunisie ainsi que des entreprises tunisiennes avec des filiales à l\'étranger. Notre réseau professionnel nous permet de couvrir les principales places financières mondiales, notamment en Afrique subsaharienne.'
   },
   {
     id: 'fq4',
@@ -65,7 +65,7 @@ export const faqData = [
   {
     id: 'fq5',
     question: 'Quels types d\'entreprises accompagnez-vous ?',
-    answer: 'Nous travaillons avec des PME, des ETI et des grands groupes dans tous les secteurs : industrie, technologie, santé, agroalimentaire, immobilier et services financiers. Notre approche s\'adapte à la taille et aux enjeux spécifiques de chaque structure.'
+    answer: 'Nous travaillons avec des PME, des ETI et des grands groupes dans tous les secteurs : industrie, BTP, hôtellerie, technologie, santé, agroalimentaire, immobilier et services financiers. Notre approche s\'adapte à la taille et aux enjeux spécifiques de chaque structure.'
   },
   {
     id: 'fq6',
@@ -76,18 +76,36 @@ export const faqData = [
 
 // --- Client References ---
 export const clientReferences = [
-  { name: 'BH Bank', category: 'Banque' },
-  { name: 'STB', category: 'Banque' },
-  { name: 'Biat', category: 'Banque' },
-  { name: 'SOTIPAPIER', category: 'Industrie' },
-  { name: 'Groupe CHIRAZ', category: 'Industrie' },
-  { name: 'SIPHAT', category: 'Pharma' },
-  { name: 'Genus Pharma', category: 'Pharma' },
-  { name: 'Vermeg', category: 'Tech' },
-  { name: 'Talan Tunisia', category: 'Tech' },
-  { name: 'Socaf', category: 'Agro' },
-  { name: 'Aridus', category: 'Agro' },
-  { name: 'Top Chef', category: 'Industrie' }
+  { name: 'SOBATRAP', logo: '/logos/sobatrap.png', category: 'BTP' },
+  { name: 'UIB', logo: '/logos/uib.png', category: 'Banque' },
+  { name: 'UPES', logo: '/logos/upes.png', category: 'Éducation' },
+  { name: 'APII', logo: '/logos/apii.png', category: 'Conseil' },
+  { name: 'The Face', logo: '/logos/aweb.png', category: 'Restauration' },
+  { name: 'Aweb', logo: '/logos/aweb.png', category: 'Immobilier' },
+  { name: 'Anglo Tunisian Oil & Gas', logo: '/logos/Anglo Tunisian Oil & Gas.png', category: 'Énergie' },
+  { name: 'Vaga Land', logo: '/logos/vaga land.png', category: 'Loisir' },
+  { name: 'SOBA', logo: '/logos/vaga land.png', category: 'Loisir' },
+  { name: 'SOBMTI', logo: '/logos/SOBMTI.png', category: 'BTP' },
+  { name: 'Sword', logo: '/logos/sword.png', category: 'Sécurité' },
+  { name: 'Groupe Secure', logo: '/logos/groupe secure.png', category: 'Sécurité' },
+  { name: 'GFA Consulting Group', logo: '/logos/gfa.png', category: 'Conseil' },
+  { name: 'Harmonia Pharma', logo: '/logos/harmonia.png', category: 'Pharma' },
+  { name: 'Engineering & Construction Company', logo: '/logos/engineering and construction company.png', category: 'Énergie' },
+  { name: 'Top Oilfield Services', logo: '/logos/Top Oilfield Services.png', category: 'Énergie' },
+  { name: 'KSS', logo: '/logos/kss.png', category: 'Sécurité' },
+  { name: 'Voyagekom', logo: '/logos/voyagekom.png', category: 'Tourisme' },
+  { name: 'Hôtel Méditerranée', logo: '/logos/hôtel méditerranée thalasso golf.png', category: 'Hôtellerie' },
+  { name: 'SUNMED', logo: '/logos/radisson sfax.png', category: 'Hôtellerie' },
+  { name: 'YADIS', logo: '/logos/YADIS.png', category: 'Hôtellerie' },
+  { name: 'Houria Palace', logo: '/logos/houria palace hotel.png', category: 'Hôtellerie' },
+  { name: 'Umm Elgouzlane Travel', logo: '/logos/umm al gouzlan travel.png', category: 'Tourisme' },
+  { name: 'Vacanza', logo: '/logos/vacanza.png', category: 'Tourisme' },
+  { name: 'Tunisie Transformateurs', logo: '/logos/tunisie transformateur.png', category: 'Industrie' },
+  { name: 'ENSIT', logo: '/logos/ensit.png', category: 'Éducation' },
+  { name: 'Hotel Résidence Nour', logo: '/logos/hotel residence nour.png', category: 'Hôtellerie' },
+  { name: 'The Sindbad', logo: '/logos/the sindbad.png', category: 'Hôtellerie' },
+  { name: 'Harmonia Thalasso', logo: '/logos/harmonia.png', category: 'Santé' },
+  { name: 'Gîte du Pêcheur', logo: '/logos/cite de pecheur.png', category: 'Hôtellerie' },
 ];
 
 // --- Services ---
@@ -129,7 +147,7 @@ export const servicesData: Service[] = [
     category: 'Conseil ISO',
     iconName: 'settings_suggest',
     title: 'Certification ISO',
-    description: 'Accompagnement complet vers la certification ISO 9001, 14001, 27001 et 45001.',
+    description: 'Accompagnement complet vers la certification ISO 9001, 14001, 45001 et 21001.',
     subPoints: ['Audit pré-diagnostic', 'Mise en place SMI', 'Formation interne']
   },
   {
@@ -194,46 +212,32 @@ export const servicesData: Service[] = [
 export const teamData = [
   {
     id: 'tm-1',
-    name: 'Marc-Antoine Durand',
-    role: 'Associé Fondateur',
+    name: 'Mihoub Rezgui',
+    role: 'Gérant',
     imageUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&q=80',
-    bio: 'Expert-comptable inscrit à l\'OECT avec 20 ans d\'expérience en audit légal et conseil stratégique pour des groupes internationaux.'
+    bio: 'Expert-comptable inscrit à l\'OECT, gérant de RM Consulting. Supervise l\'ensemble des missions d\'audit, de conseil et d\'accompagnement à la certification.'
   },
   {
     id: 'tm-2',
-    name: 'Sophie Martin',
-    role: 'Chef de Mission',
-    imageUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&q=80',
-    bio: 'Spécialiste en consolidation et comptabilité IFRS. 15 ans d\'expérience dans l\'accompagnement des groupes multinotionaux.'
+    name: 'Youssef Garbaa',
+    role: 'Expert Comptable',
+    imageUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&q=80',
+    bio: 'Spécialiste en audit contractuel et audit légal. Chef du département Expertise Comptable.'
   },
   {
     id: 'tm-3',
-    name: 'Lucas Chen',
-    role: 'Directeur',
-    imageUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&q=80',
-    bio: 'Expert en fusions-acquisitions et restructurations financières. Diplômé de HEC Paris, il pilote les transactions les plus sensibles du cabinet.'
+    name: 'Khaireddine Kerkeni',
+    role: 'Expert Comptable',
+    imageUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80',
+    bio: 'Spécialiste en tenue de comptabilité et assistance comptable. Chef du département Audit.'
   },
   {
     id: 'tm-4',
-    name: 'Benoit Lefebvre',
+    name: 'Ridha Ouhibi',
     role: 'Expert Fiscal',
-    imageUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80',
-    bio: 'Consultant fiscal international, il optimise les stratégies fiscales de nos clients tout en assurant une conformité irréprochable.'
-  },
-  {
-    id: 'tm-5',
-    name: 'Claire Rousseau',
-    role: 'Juriste d\'Affaires',
-    imageUrl: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=400&q=80',
-    bio: 'Juriste spécialisée en droit des sociétés et en droit commercial, elle sécurise l\'ensemble des opérations juridiques de nos clients.'
-  },
-  {
-    id: 'tm-6',
-    name: 'Youssef Benzarti',
-    role: 'Manager Audit',
     imageUrl: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&q=80',
-    bio: 'Manager audit certifié, il supervise les missions de certification et de due diligence pour les clients industriels et technologiques.'
-  }
+    bio: 'Expert en assistance fiscale, contentieux fiscal et diligence raisonnable. Chef du département Taxe.'
+  },
 ];
 
 // --- Testimonials ---
@@ -241,33 +245,33 @@ export const testimonialsData = [
   {
     id: 'tst-1',
     quote: 'RM Consulting a transformé notre approche de l\'audit. Leur rigueur et leur capacité à anticiper les risques financiers nous ont fait gagner un temps précieux.',
-    author: 'Henri Dupont',
-    role: 'Directeur Financier',
-    company: 'SOTIPAPIER',
+    author: 'Directeur Financier',
+    role: 'Client Industrie',
+    company: 'Secteur BTP',
     imageUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&q=80'
   },
   {
     id: 'tst-2',
-    quote: 'L\'accompagnement en fusion-acquisition de Lucas Chen et son équipe a été déterminant pour la réussite de notre opération. Un partenaire de confiance.',
-    author: 'Nadia Slimi',
-    role: 'PDG',
-    company: 'Groupe CHIRAZ',
+    quote: 'L\'accompagnement en restructuration de RM Consulting a été déterminant pour la réussite de notre opération. Un partenaire de confiance.',
+    author: 'PDG',
+    role: 'Client International',
+    company: 'Secteur BTP',
     imageUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&q=80'
   },
   {
     id: 'tst-3',
     quote: 'Depuis que nous travaillons avec RM Consulting, notre conformité fiscale est assurée et nous avons identifié des opportunités d\'optimisation significatives.',
-    author: 'Karim Trabelsi',
-    role: 'DAF',
-    company: 'Vermeg',
+    author: 'DAF',
+    role: 'Client Tech',
+    company: 'Secteur Numérique',
     imageUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80'
   },
   {
     id: 'tst-4',
-    quote: 'La certification ISO obtenue grâce à RM Consulting a boosté notre crédibilité auprès de nos partenaires internationaux. Un investissement rentabilisé en moins de 6 mois.',
-    author: 'Amira Ben Salah',
-    role: 'Quality Manager',
-    company: 'SIPHAT',
+    quote: 'La certification ISO obtenue grâce à RM Consulting a boosté notre crédibilité auprès de nos partenaires internationaux.',
+    author: 'Quality Manager',
+    role: 'Client Pharma',
+    company: 'Secteur Santé',
     imageUrl: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&q=80'
   }
 ];

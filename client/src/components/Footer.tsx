@@ -18,7 +18,7 @@ export default function Footer() {
             <span className="font-display font-bold text-xl text-white">RM Consulting</span>
           </div>
           <p className="font-sans text-xs sm:text-sm text-white/80 leading-relaxed">
-            Cabinet d'excellence en audit, conseil et comptabilité de premier plan à Tunis. Partenaire de votre gouvernance et conformité financière depuis 2010.
+            Société d'expertise comptable, d'audit et de conseils en gestion. Membre de l'OECT, agréée par la BERD. Depuis 2017.
           </p>
         </div>
 
@@ -54,9 +54,9 @@ export default function Footer() {
           <ul className="space-y-2.5 font-sans text-xs sm:text-sm text-white/80">
             <li>Commissariat aux comptes</li>
             <li>Conseil fiscal &amp; restructuration</li>
-            <li>Certification ISO 9001/14001/27001</li>
+            <li>Certification ISO 9001/14001/45001</li>
             <li>Due diligence d'acquisition</li>
-            <li>Secrétariat juridique du RNE</li>
+            <li>Expertise IFRS &amp; consolidation</li>
           </ul>
         </div>
 
@@ -68,7 +68,7 @@ export default function Footer() {
           <ul className="space-y-3 font-sans text-xs sm:text-sm text-white/80">
             <li className="flex gap-2.5 items-start">
               <MapPin className="w-4 h-4 text-secondary-fixed shrink-0 mt-0.5" />
-              <span>Les Berges du Lac 2, Tunis, Tunisie</span>
+              <span>1 Rue du Lac Homes, Les Berges du Lac 1053, Tunis</span>
             </li>
             <li className="flex gap-2.5 items-center">
               <Phone className="w-4 h-4 text-secondary-fixed shrink-0" />
@@ -76,8 +76,8 @@ export default function Footer() {
             </li>
             <li className="flex gap-2.5 items-center">
               <Mail className="w-4 h-4 text-secondary-fixed shrink-0" />
-              <a href="mailto:contact@rm-consulting.tn" className="hover:underline">
-                contact@rm-consulting.tn
+              <a href="mailto:rezgui.mihoub@rmconsulting.tn" className="hover:underline">
+                rezgui.mihoub@rmconsulting.tn
               </a>
             </li>
           </ul>
@@ -88,10 +88,10 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-6 pt-8 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="text-left">
           <p className="font-sans text-[11px] text-white/60">
-            © {new Date().getFullYear()} RM Consulting Tunis. Tous droits réservés.
+            © {new Date().getFullYear()} RM Consulting — Société RM Consulting. Tous droits réservés.
           </p>
           <p className="font-sans text-[10px] text-white/40 mt-1">
-            Cabinet enregistré auprès de l'Ordre des Experts Comptables de Tunisie (OECT).
+            Membre de l'Ordre des Experts Comptables de Tunisie (OECT) — Matricule fiscal : 1500536V
           </p>
         </div>
 

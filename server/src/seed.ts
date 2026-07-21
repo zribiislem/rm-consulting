@@ -20,93 +20,74 @@ const seedData = async () => {
 
     await Department.insertMany([
       {
-        name: 'Audit Légal',
-        description: "Certification des comptes et commissariat aux comptes. Évaluation rigoureuse des risques financiers et de la conformité réglementaire pour sécuriser vos partenaires tiers.",
-        head: 'Marc-Antoine Durand (Associé)',
-        staffCount: 12,
+        name: 'Département Expertise Comptable',
+        description: "Département spécialisé en audit contractuel et audit légal, supervisé par Youssef Garbaa.",
+        head: 'Youssef Garbaa',
+        staffCount: 4,
         activeProjects: 8,
         services: [
-          "Commissariat aux comptes (certification annuelle)",
-          "Audits d'acquisition et due diligence financière",
-          "Évaluation du contrôle interne et conformité",
-          "Audit d'introduction en bourse ou de restructuration"
+          "Audit contractuel",
+          "Audit légal"
         ]
       },
       {
-        name: 'Conseil & Stratégie',
-        description: "Accompagnement stratégique lors des fusions-acquisitions, restructurations financières et transition managériale. Maximisez la valeur de vos transactions et facilitez vos prises de décision.",
-        head: 'Lucas Chen (Directeur)',
-        staffCount: 8,
+        name: 'Département Audit',
+        description: "Département spécialisé en tenue de comptabilité et assistance comptable, supervisé par Khaireddine Kerkeni.",
+        head: 'Khaireddine Kerkeni',
+        staffCount: 5,
+        activeProjects: 10,
+        services: [
+          "Tenue de comptabilité",
+          "Assistance"
+        ]
+      },
+      {
+        name: 'Département Taxe',
+        description: "Département spécialisé en assistance fiscale, contentieux fiscal et diligence raisonnable, supervisé par Ridha Ouhibi.",
+        head: 'Ridha Ouhibi',
+        staffCount: 3,
+        activeProjects: 6,
+        services: [
+          "Assistance Fiscale",
+          "Contentieux fiscal",
+          "Diligence raisonnable"
+        ]
+      },
+      {
+        name: 'Département Consulting',
+        description: "Département spécialisé en accompagnement à la certification, restructuration d'entreprise et autres missions spéciales, supervisé par Mihoub Rezgui.",
+        head: 'Mihoub Rezgui',
+        staffCount: 2,
         activeProjects: 5,
         services: [
-          "Accompagnement en fusions & acquisitions (M&A)",
-          "Restructuration financière et optimisation de trésorerie",
-          "Élaboration de business plans et prévisionnels stratégiques",
-          "Conseil en gouvernance et pilotage de la performance"
-        ]
-      },
-      {
-        name: 'Comptabilité & Expertise',
-        description: "Tenue, révision et consolidation des comptes. De la gestion comptable quotidienne aux reportings financiers consolidés complexes, nous assurons une visibilité parfaite sur vos indicateurs.",
-        head: 'Sophie Martin (Chef de Mission)',
-        staffCount: 18,
-        activeProjects: 14,
-        services: [
-          "Tenue complète ou partagée de la comptabilité",
-          "Établissement des comptes annuels (bilans, comptes de résultat)",
-          "Consolidation de comptes en normes nationales ou IFRS",
-          "Tableaux de bord mensuels et indicateurs clés d'activité (KPI)"
-        ]
-      },
-      {
-        name: 'Fiscalité',
-        description: "Optimisation de la stratégie fiscale d'entreprise et accompagnement lors des contrôles. Nous sécurisons vos opérations tout en identifiant les opportunités fiscales légitimes.",
-        head: 'Benoit Lefebvre (Expert Fiscal)',
-        staffCount: 6,
-        activeProjects: 9,
-        services: [
-          "Conseil et ingénierie fiscale (nationale & internationale)",
-          "Audit fiscal préventif et sécurisation des risques",
-          "Assistance en cas de vérification ou de contrôle fiscal",
-          "Optimisation des dispositifs d'innovation (CIR, CII, Statut JEI)"
-        ]
-      },
-      {
-        name: 'Juridique & Droit',
-        description: "Gestion de la vie sociale de votre entreprise, de la constitution à la dissolution. Nous sécurisons vos contrats commerciaux, pactes d'actionnaires et l'ensemble des formalités administratives.",
-        head: 'Claire Rousseau (Juriste d\'Affaires)',
-        staffCount: 5,
-        activeProjects: 7,
-        services: [
-          "Secrétariat juridique annuel (AG, rapports de gestion)",
-          "Rédaction de pactes d'associés et contrats commerciaux complexes",
-          "Opérations sur capital (augmentations, réductions)",
-          "Assistance juridique lors de la création ou restructuration de sociétés"
+          "Accompagnement à la certification",
+          "Restructuration d'entreprise",
+          "Autres missions spéciales"
         ]
       }
     ]);
 
     await Mission.insertMany([
       {
-        title: 'Audit Annuel 2023',
-        client: 'TechFlow SAS',
-        department: 'Audit Légal',
-        status: 'REVUE FINAL',
-        progression: 85
+        title: 'Restructuration Entreprise BTP',
+        client: 'Routes Voiries & Ouvrages Hydrauliques',
+        department: 'Consulting',
+        status: 'EN COURS',
+        progression: 65
       },
       {
-        title: 'Fusion-Acquisition',
-        client: 'ImmoBail SARL',
+        title: 'Programme Création Services',
+        client: 'Partenaire Bancaire',
         department: 'Conseil',
-        status: 'DUE DILIGENCE',
-        progression: 42
+        status: 'TERMINÉ',
+        progression: 100
       },
       {
-        title: 'Consolidation Comptes',
-        client: 'Global Logistics',
-        department: 'Comptabilité',
-        status: 'VALIDE',
-        progression: 100
+        title: 'Certification ISO 9001 & 21001',
+        client: 'Établissement Privé Enseignement',
+        department: 'Consulting',
+        status: 'EN COURS',
+        progression: 45
       }
     ]);
 

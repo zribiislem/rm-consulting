@@ -39,20 +39,20 @@ export default function About() {
               À Propos de RM Consulting
             </span>
             <h2 className="font-display text-3xl sm:text-4xl font-extrabold text-on-surface mb-6 leading-tight">
-              Une vision analytique pour un <span className="text-gradient-gold">impact durable</span>
+              Une expertise au service de votre <span className="text-gradient-gold">croissance</span>
             </h2>
             <p className="font-sans text-base text-on-surface-variant mb-6 leading-relaxed">
-              Fondée sur des principes d'intégrité absolue et de précision chirurgicale, RM Consulting s'est imposée comme le partenaire privilégié des entreprises tunisiennes et internationales cherchant à sécuriser leur croissance.
+              RM Consulting est une société d'expertise comptable, d'audit et de conseils en gestion, membre de l'Ordre des Experts Comptables de Tunisie (O.E.C.T), créée le 01/01/2017. La structure permanente, la compétence technique et l'expérience professionnelle du gérant et du personnel permettent d'offrir aux entreprises des services de qualité.
             </p>
             <p className="font-sans text-base text-on-surface-variant mb-8 leading-relaxed">
-              Nous traduisons la complexité des chiffres en stratégies actionnables. Notre approche s'articule autour d'une écoute attentive des besoins spécifiques de chaque dirigeant, combinée à une rigueur opérationnelle éprouvée.
+              RM Consulting est dotée des outils de travail les plus appropriés pour assurer un bon déroulement des missions conformément aux normes et réglementations en vigueur. La supervision des missions est assurée exclusivement par le gérant, et chaque dossier fait l'objet d'un contrôle de qualité. Le cabinet est agrée par la Banque Européenne de Restructuration et de Développement.
             </p>
 
             <ul className="space-y-4 mb-8">
               {[
-                'Rigueur et conformité absolue aux normes comptables tunisiennes et internationales (IFRS)',
-                'Accompagnement personnalisé de haut niveau par des experts-comptables inscrits à l\'OECT',
-                'Expertise multidisciplinaire intégrée : Comptabilité, Audit, Juridique et ISO',
+                'Expertise comptable, audit et conseil en gestion — Membre OECT',
+                'Agrément BERD pour les projets internationaux de soutien aux PME',
+                'Supervision exclusive par le gérant avec contrôle de qualité systématique',
               ].map((point, index) => (
                 <li key={index} className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-secondary shrink-0 mt-0.5" />

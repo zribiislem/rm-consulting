@@ -10,18 +10,18 @@ export default function WhyChooseUs() {
       icon: <Shield className="w-8 h-8 text-primary group-hover:text-white transition-all duration-300" />,
     },
     {
-      title: 'Expertise Pointue',
-      desc: 'Une formation constante aux nouvelles normes internationales et de nombreux cas pratiques résolus à Tunis et à l\'étranger.',
+      title: 'Compétence Technique',
+      desc: 'Des outils de travail conformes aux normes en vigueur, des actions de formation continue et un contrôle de qualité systématique par le gérant.',
       icon: <Brain className="w-8 h-8 text-primary group-hover:text-white transition-all duration-300" />,
     },
     {
-      title: 'Seniorité des Associés',
-      desc: 'Chaque dossier est supervisé directement par un associé senior fort de 15+ années de pratique, garantissant une qualité irréprochable.',
+      title: 'Supervision Directe',
+      desc: 'La supervision des missions est assurée exclusivement par le gérant, garantissant une qualité irréprochable sur chaque dossier.',
       icon: <Star className="w-8 h-8 text-primary group-hover:text-white transition-all duration-300" />,
     },
     {
-      title: 'Impact Opérationnel',
-      desc: 'Des recommandations concrètes et adaptées au terrain, conçues comme de véritables leviers de création de valeur et de rentabilité.',
+      title: 'Agrément BERD',
+      desc: 'Cabinet agréé par la Banque Européenne de Restructuration et de Développement pour les projets internationaux de soutien aux PME.',
       icon: <Rocket className="w-8 h-8 text-primary group-hover:text-white transition-all duration-300" />,
     },
   ];

@@ -1,16 +1,26 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, CheckCircle2 } from 'lucide-react';
 import { clientReferences } from '../data';
 
 export default function References() {
   const [selectedTag, setSelectedTag] = useState<string>('Tous');
 
-  const tags = ['Tous', 'Banque', 'Industrie', 'Pharma', 'Tech', 'Agro'];
+  const allCategories = [...new Set(clientReferences.map((r) => r.category))];
+  const tags = ['Tous', ...allCategories];
 
   const filteredRefs = clientReferences.filter(
     (item) => selectedTag === 'Tous' || item.category === selectedTag
   );
+
+  function getInitials(name: string) {
+    return name
+      .split(/[\s&()]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0])
+      .join('')
+      .toUpperCase();
+  }
 
   return (
     <section id="references" className="py-20 sm:py-24 bg-surface-container-low border-y border-outline-variant/30 scroll-mt-12">
@@ -23,9 +33,9 @@ export default function References() {
           <h2 className="font-display text-3xl sm:text-4xl font-extrabold text-on-surface mb-6">
             Ils Nous Font Confiance
           </h2>
-          
+
           {/* Tag filters row */}
-          <div className="flex flex-wrap justify-center gap-2 max-w-2xl mx-auto">
+          <div className="flex flex-wrap justify-center gap-2 max-w-3xl mx-auto">
             {tags.map((tag) => {
               const isActive = selectedTag === tag;
               return (
@@ -45,29 +55,34 @@ export default function References() {
           </div>
         </div>
 
-        {/* References logos / text displays */}
+        {/* References Logo Grid */}
         <motion.div
           layout
-          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 items-center"
+          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6 items-center"
         >
           <AnimatePresence mode="popLayout">
-            {filteredRefs.map((item, idx) => (
+            {filteredRefs.map((item) => (
               <motion.div
                 key={item.name}
                 layout
                 initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 0.75, scale: 1 }}
+                animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                whileHover={{ opacity: 1, scale: 1.05 }}
-                transition={{ duration: 0.3 }}
-                className="h-16 flex flex-col items-center justify-center bg-white rounded-xl border border-secondary/10 p-3 shadow-sm grayscale hover:grayscale-0 transition-all duration-300 group relative cursor-pointer"
+                transition={{ duration: 0.25 }}
+                className="h-20 flex items-center justify-center bg-white rounded-xl border border-secondary/10 p-4 shadow-sm hover:shadow-md hover:border-secondary/30 transition-all duration-300 group"
               >
-                <span className="font-display font-extrabold text-sm sm:text-base text-primary/70 group-hover:text-primary tracking-widest transition-colors">
-                  {item.name}
-                </span>
-                <span className="absolute bottom-1 text-[8px] font-bold text-gray-400 group-hover:text-secondary tracking-wider uppercase font-sans">
-                  {item.category}
-                </span>
+                {item.logo ? (
+                  <img
+                    src={item.logo}
+                    alt={item.name}
+                    className="max-h-full max-w-full object-contain grayscale group-hover:grayscale-0 transition-all duration-300"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <span className="font-display font-extrabold text-sm sm:text-base text-primary/60 group-hover:text-primary tracking-wider transition-colors text-center leading-tight">
+                    {item.name}
+                  </span>
+                )}
               </motion.div>
             ))}
           </AnimatePresence>

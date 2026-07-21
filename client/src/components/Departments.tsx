@@ -1,46 +1,107 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Landmark, FileCheck, Scale, Layers } from 'lucide-react';
+import { Landmark, FileCheck, Scale, Layers, Briefcase, Building2, Shield, Users, HelpCircle } from 'lucide-react';
 import { COMPTA_DEPT_IMAGE, AUDIT_DEPT_IMAGE, ABOUT_BOARD_IMAGE, ISO_DEPT_IMAGE } from '../data';
 
+interface DepartmentDoc {
+  _id: string;
+  name: string;
+  description: string;
+  head: string;
+  staffCount: number;
+  activeProjects: number;
+  services: string[];
+  imageUrl: string;
+}
+
+const FALLBACK_IMAGES = [COMPTA_DEPT_IMAGE, AUDIT_DEPT_IMAGE, ABOUT_BOARD_IMAGE, ISO_DEPT_IMAGE];
+const ICON_POOL = [Landmark, FileCheck, Scale, Layers, Briefcase, Building2, Shield, Users];
+
+function getIcon(index: number) {
+  const Icon = ICON_POOL[index % ICON_POOL.length];
+  const isEven = index % 2 === 0;
+  return <Icon className={`w-6 h-6 ${isEven ? 'text-primary' : 'text-secondary'}`} />;
+}
+
+function getTagColor(index: number) {
+  return index % 2 === 0
+    ? 'bg-primary/10 text-primary border-primary/20'
+    : 'bg-secondary/10 text-secondary border-secondary/20';
+}
+
+function getBulletColor(index: number) {
+  return index % 2 === 0 ? 'bg-secondary' : 'bg-primary';
+}
+
+function mapDocToCard(doc: DepartmentDoc, index: number) {
+  return {
+    title: doc.name,
+    description: doc.description,
+    image: doc.imageUrl || FALLBACK_IMAGES[index % FALLBACK_IMAGES.length],
+    icon: getIcon(index),
+    tagColor: getTagColor(index),
+    bulletIcon: getBulletColor(index),
+    points: doc.services,
+  };
+}
+
+const FALLBACK_DEPARTMENTS = [
+  {
+    title: 'Département Expertise Comptable',
+    description: 'Département spécialisé en audit contractuel et audit légal, supervisé par Youssef Garbaa.',
+    image: COMPTA_DEPT_IMAGE,
+    icon: <Landmark className="w-6 h-6 text-primary" />,
+    tagColor: 'bg-primary/10 text-primary border-primary/20',
+    bulletIcon: 'bg-secondary',
+    points: ['Audit contractuel', 'Audit légal'],
+  },
+  {
+    title: 'Département Audit',
+    description: 'Département spécialisé en tenue de comptabilité et assistance comptable, supervisé par Khaireddine Kerkeni.',
+    image: AUDIT_DEPT_IMAGE,
+    icon: <FileCheck className="w-6 h-6 text-secondary" />,
+    tagColor: 'bg-secondary/10 text-secondary border-secondary/20',
+    bulletIcon: 'bg-primary',
+    points: ['Tenue de comptabilité', 'Assistance'],
+  },
+  {
+    title: 'Département Taxe',
+    description: "Département spécialisé en assistance fiscale, contentieux fiscal et diligence raisonnable, supervisé par Ridha Ouhibi.",
+    image: ABOUT_BOARD_IMAGE,
+    icon: <Scale className="w-6 h-6 text-primary" />,
+    tagColor: 'bg-primary/10 text-primary border-primary/20',
+    bulletIcon: 'bg-secondary',
+    points: ['Assistance Fiscale', 'Contentieux fiscal', 'Diligence raisonnable'],
+  },
+  {
+    title: 'Département Consulting',
+    description: "Département spécialisé en accompagnement à la certification, restructuration d'entreprise et autres missions spéciales, supervisé par Mihoub Rezgui.",
+    image: ISO_DEPT_IMAGE,
+    icon: <Layers className="w-6 h-6 text-secondary" />,
+    tagColor: 'bg-secondary/10 text-secondary border-secondary/20',
+    bulletIcon: 'bg-primary',
+    points: ['Accompagnement à la certification', 'Restructuration d\'entreprise', 'Autres missions spéciales'],
+  },
+];
+
 export default function Departments() {
-  const departments = [
-    {
-      title: 'Département Expertise Comptable',
-      description: 'Tenue et surveillance de votre comptabilité, reporting de gestion régulier, élaboration des états financiers et conformité complète de vos entités.',
-      image: COMPTA_DEPT_IMAGE,
-      icon: <Landmark className="w-6 h-6 text-primary" />,
-      tagColor: 'bg-primary/10 text-primary border-primary/20',
-      bulletIcon: 'bg-secondary',
-      points: ['Tenue & Surveillance Comptable', 'États Financiers & Bilans Annuels', 'Déclarations Sociales & Fiscales'],
-    },
-    {
-      title: 'Département Audit',
-      description: 'Certification légale des comptes, commissariat aux comptes rigoureux, due diligence d’acquisition et diagnostics approfondis de contrôle interne.',
-      image: AUDIT_DEPT_IMAGE,
-      icon: <FileCheck className="w-6 h-6 text-secondary" />,
-      tagColor: 'bg-secondary/10 text-secondary border-secondary/20',
-      bulletIcon: 'bg-primary',
-      points: ['Commissariat aux Comptes', 'Audit Financier & Contractuel', 'Audit d’Acquisition (Due Diligence)'],
-    },
-    {
-      title: 'Département Taxe',
-      description: 'Conseil fiscal permanent, audit fiscal de prévention, optimisation fiscale stratégique et assistance complète en cas de contrôle par l’administration.',
-      image: ABOUT_BOARD_IMAGE,
-      icon: <Scale className="w-6 h-6 text-primary" />,
-      tagColor: 'bg-primary/10 text-primary border-primary/20',
-      bulletIcon: 'bg-secondary',
-      points: ['Optimisation Fiscale Légale', 'Assistance Contrôle Fiscal', 'Conseil Fiscal & Veille Permanente'],
-    },
-    {
-      title: 'Département Consulting',
-      description: 'Accompagnement méthodologique à la certification ISO, élaboration de business plans solides, restructuration d’entreprise et réingénierie des processus.',
-      image: ISO_DEPT_IMAGE,
-      icon: <Layers className="w-6 h-6 text-secondary" />,
-      tagColor: 'bg-secondary/10 text-secondary border-secondary/20',
-      bulletIcon: 'bg-primary',
-      points: ['Accompagnement Normes ISO', 'Business Plans & Stratégie', 'Réingénierie des Processus'],
-    },
-  ];
+  const [departments, setDepartments] = useState(FALLBACK_DEPARTMENTS);
+
+  useEffect(() => {
+    fetch('/api/departments')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch');
+        return res.json();
+      })
+      .then((data: DepartmentDoc[]) => {
+        if (data.length > 0) {
+          setDepartments(data.map((doc, i) => mapDocToCard(doc, i)));
+        }
+      })
+      .catch(() => {
+        // keep fallback departments
+      });
+  }, []);
 
   return (
     <section id="departments" className="py-20 sm:py-28 bg-white scroll-mt-12">
@@ -55,7 +116,7 @@ export default function Departments() {
           </h2>
           <div className="w-16 h-1 bg-secondary mx-auto rounded-full mb-6" />
           <p className="font-sans text-base text-on-surface-variant max-w-xl mx-auto leading-relaxed">
-            Nous structurons nos expertises en quatre pôles d’excellence autonomes et complémentaires pour répondre avec réactivité et technicité à tous vos défis de gestion.
+            Nous structurons nos expertises en pôles d'excellence autonomes et complémentaires pour répondre avec réactivité et technicité à tous vos défis de gestion.
           </p>
         </div>
 
@@ -76,9 +137,8 @@ export default function Departments() {
                   className="w-full h-full bg-cover bg-center group-hover:scale-105 transition-transform duration-700"
                   style={{ backgroundImage: `url(${dept.image})` }}
                 />
-                {/* Backdrop overlay */}
                 <div className="absolute inset-0 bg-primary/10 group-hover:bg-primary/5 transition-colors duration-300" />
-                
+
                 {/* Icon Circle */}
                 <div className="absolute bottom-4 left-4 bg-white p-3 rounded-xl shadow-md border border-gray-100 flex items-center justify-center">
                   {dept.icon}

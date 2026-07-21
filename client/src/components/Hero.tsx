@@ -32,7 +32,7 @@ export default function Hero({ onBookConsultation, onExploreServices }: HeroProp
             className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider text-secondary-fixed mb-6 border border-white/10"
           >
             <Sparkles className="w-3.5 h-3.5 text-secondary-fixed animate-pulse" />
-            Cabinet Certifié OECT Tunis
+            Cabinet Agréé BERD — Membre OECT
           </motion.div>
 
           <motion.h1
@@ -51,7 +51,7 @@ export default function Hero({ onBookConsultation, onExploreServices }: HeroProp
             transition={{ duration: 0.8, delay: 0.2 }}
             className="font-sans text-base sm:text-lg lg:text-xl opacity-90 max-w-xl mb-10 leading-relaxed font-light"
           >
-            RM Consulting accompagne les leaders d'aujourd'hui dans la maîtrise et la sécurisation de leurs enjeux comptables, fiscaux, d'audit et organisationnels avec une rigueur institutionnelle absolue.
+            RM Consulting accompagne les entreprises tunisiennes et internationales dans la maîtrise et la sécurisation de leurs enjeux comptables, fiscaux, d'audit et organisationnels avec une rigueur institutionnelle absolue.
           </motion.p>
         </div>
 
@@ -83,29 +83,29 @@ export default function Hero({ onBookConsultation, onExploreServices }: HeroProp
               <div className="text-left">
                 <h3 className="font-display font-bold text-lg text-primary">L'Expertise RM</h3>
                 <p className="text-on-surface-variant font-sans text-xs uppercase tracking-wider font-semibold">
-                  Cabinet d'Audit &amp; Conseil Stratégique
+                  Expertise Comptable, Audit &amp; Conseil
                 </p>
               </div>
             </div>
 
             {/* Quick Pitch Description */}
-            <p className="text-sm text-gray-700 leading-relaxed text-left mb-6">
-              Nous réunissons les meilleurs talents pluridisciplinaires à Tunis pour structurer, auditer et propulser vos performances financières locales et internationales.
-            </p>
+              <p className="text-sm text-gray-700 leading-relaxed text-left mb-6">
+                Société d'expertise comptable, d'audit et de conseils en gestion, membre de l'OECT. Agréée par la Banque Européenne de Restructuration et de Développement.
+              </p>
 
             {/* Mini Dashboard Metrics Grid */}
             <div className="grid grid-cols-3 gap-2 border-t border-secondary/10 pt-6">
               <div className="text-center">
-                <div className="text-primary font-display font-extrabold text-xl sm:text-2xl">248</div>
-                <div className="text-on-surface-variant text-[10px] font-medium tracking-wide uppercase mt-1">Rapports d'Audit</div>
-              </div>
-              <div className="text-center border-x border-secondary/10">
-                <div className="text-primary font-display font-extrabold text-xl sm:text-2xl">82</div>
+                <div className="text-primary font-display font-extrabold text-xl sm:text-2xl">80</div>
                 <div className="text-on-surface-variant text-[10px] font-medium tracking-wide uppercase mt-1">Clients Actifs</div>
               </div>
+              <div className="text-center border-x border-secondary/10">
+                <div className="text-primary font-display font-extrabold text-xl sm:text-2xl">14</div>
+                <div className="text-on-surface-variant text-[10px] font-medium tracking-wide uppercase mt-1">Collaborateurs</div>
+              </div>
               <div className="text-center">
-                <div className="text-primary font-display font-extrabold text-xl sm:text-2xl">36</div>
-                <div className="text-on-surface-variant text-[10px] font-medium tracking-wide uppercase mt-1">Certifs ISO</div>
+                <div className="text-primary font-display font-extrabold text-xl sm:text-2xl">4</div>
+                <div className="text-on-surface-variant text-[10px] font-medium tracking-wide uppercase mt-1">Départements</div>
               </div>
             </div>
           </div>

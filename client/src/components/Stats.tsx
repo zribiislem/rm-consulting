@@ -2,10 +2,10 @@ import { motion } from 'motion/react';
 
 export default function Stats() {
   const stats = [
-    { value: '80+', label: 'Clients Fidèles' },
-    { value: '14+', label: 'Experts Seniors' },
-    { value: '3', label: 'Départements Spécialisés' },
-    { value: '15+', label: 'Années d’Expérience' },
+    { value: '80+', label: 'Clients Actifs' },
+    { value: '14', label: 'Experts & Collaborateurs' },
+    { value: '4', label: 'Départements' },
+    { value: '8+', label: 'Années d\'Expérience' },
   ];
 
   return (

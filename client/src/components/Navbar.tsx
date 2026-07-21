@@ -91,7 +91,7 @@ export default function Navbar({ onBookConsultation }: NavbarProps) {
           {/* Action Buttons */}
           <div className="hidden lg:flex items-center gap-4">
             <a
-              href="http://localhost:5000"
+              href="http://localhost:3001"
               target="_blank"
               rel="noopener noreferrer"
               className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors ${
@@ -114,7 +114,7 @@ export default function Navbar({ onBookConsultation }: NavbarProps) {
           {/* Mobile Menu Button */}
           <div className="flex items-center gap-3 md:hidden">
             <a
-              href="http://localhost:5000"
+              href="http://localhost:3001"
               target="_blank"
               rel="noopener noreferrer"
               className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded border ${
@@ -185,7 +185,7 @@ export default function Navbar({ onBookConsultation }: NavbarProps) {
 
         <div className="flex flex-col gap-3 pt-6 border-t border-gray-100">
           <a
-            href="http://localhost:5000"
+            href="http://localhost:3001"
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => setIsMobileMenuOpen(false)}
