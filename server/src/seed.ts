@@ -7,6 +7,8 @@ import Mission from './models/Mission.js';
 import Message from './models/Message.js';
 import AvailableDate from './models/AvailableDate.js';
 import Appointment from './models/Appointment.js';
+import Stat from './models/Stat.js';
+import Reference from './models/Reference.js';
 
 const seedData = async () => {
   try {
@@ -21,6 +23,8 @@ const seedData = async () => {
     await Message.deleteMany({});
     await AvailableDate.deleteMany({});
     await Appointment.deleteMany({});
+    await Stat.deleteMany({});
+    await Reference.deleteMany({});
 
     await Department.insertMany([
       {
@@ -136,6 +140,44 @@ const seedData = async () => {
       }
     }
     await AvailableDate.insertMany(availDates);
+
+    await Stat.insertMany([
+      { value: '80+', label: 'Clients Actifs', order: 1 },
+      { value: '14', label: 'Experts & Collaborateurs', order: 2 },
+      { value: '4', label: 'Départements', order: 3 },
+      { value: '8+', label: "Années d'Expérience", order: 4 },
+    ]);
+
+    await Reference.insertMany([
+      { name: 'SOBATRAP', category: 'BTP', order: 1, imageUrl: '' },
+      { name: 'UIB', category: 'Banque', order: 2, imageUrl: '' },
+      { name: 'UPES', category: 'Éducation', order: 3, imageUrl: '' },
+      { name: 'API', category: 'Conseil', order: 4, imageUrl: '' },
+      { name: 'The Face', category: 'Restauration', order: 5, imageUrl: '' },
+      { name: 'A-WEB', category: 'Loisir', order: 6, imageUrl: '' },
+      { name: 'ATOG', category: 'Énergie', order: 7, imageUrl: '' },
+      { name: 'VAGA LAND', category: 'Loisir', order: 8, imageUrl: '' },
+      { name: 'SOBMTI', category: 'BTP', order: 9, imageUrl: '' },
+      { name: 'Sword Corp', category: 'Technologie', order: 10, imageUrl: '' },
+      { name: 'Groupe Sécure', category: 'Sécurité', order: 11, imageUrl: '' },
+      { name: 'GFA Consulting Group', category: 'Conseil', order: 12, imageUrl: '' },
+      { name: 'Harmonia Pharma', category: 'Pharma', order: 13, imageUrl: '' },
+      { name: 'Uthina Chemical Industries', category: 'Industrie', order: 14, imageUrl: '' },
+      { name: 'ECC', category: 'BTP', order: 15, imageUrl: '' },
+      { name: 'Top Oilfield Services', category: 'Énergie', order: 16, imageUrl: '' },
+      { name: 'KSS', category: 'Sécurité', order: 17, imageUrl: '' },
+      { name: 'VoyageKom', category: 'Tourisme', order: 18, imageUrl: '' },
+      { name: 'Méditerranée Thalasso & Golf', category: 'Hôtellerie', order: 19, imageUrl: '' },
+      { name: 'Radisson Hotel Sfax', category: 'Hôtellerie', order: 20, imageUrl: '' },
+      { name: 'Houria Palace', category: 'Hôtellerie', order: 21, imageUrl: '' },
+      { name: 'Umm Algouzlan Travel', category: 'Tourisme', order: 22, imageUrl: '' },
+      { name: 'Vacanza Tours', category: 'Tourisme', order: 23, imageUrl: '' },
+      { name: 'Tunisie Transformateurs', category: 'Industrie', order: 24, imageUrl: '' },
+      { name: 'ENSIT', category: 'Éducation', order: 25, imageUrl: '' },
+      { name: 'Hôtel Nour Congress & Resort', category: 'Hôtellerie', order: 26, imageUrl: '' },
+      { name: 'The Sindbad Hotel', category: 'Hôtellerie', order: 27, imageUrl: '' },
+      { name: 'Gîte du Pêcheur', category: 'Hôtellerie', order: 28, imageUrl: '' },
+    ]);
 
     console.log('Database seeded successfully!');
     process.exit(0);

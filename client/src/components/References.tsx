@@ -1,26 +1,59 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { clientReferences } from '../data';
+import { useState, useEffect, useRef } from 'react';
+import { motion, useMotionValue, useAnimationFrame } from 'motion/react';
+
+interface Reference {
+  _id: string;
+  name: string;
+  category: string;
+  imageUrl?: string;
+}
 
 export default function References() {
-  const [selectedTag, setSelectedTag] = useState<string>('Tous');
+  const [references, setReferences] = useState<Reference[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isHovered, setIsHovered] = useState(false);
+  const [singleSetWidth, setSingleSetWidth] = useState(0);
 
-  const allCategories = [...new Set(clientReferences.map((r) => r.category))];
-  const tags = ['Tous', ...allCategories];
+  const x = useMotionValue(0);
+  const trackRef = useRef<HTMLDivElement>(null);
 
-  const filteredRefs = clientReferences.filter(
-    (item) => selectedTag === 'Tous' || item.category === selectedTag
-  );
+  useEffect(() => {
+    const fetchRefs = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/references');
+        if (res.ok) {
+          const data = await res.json();
+          setReferences(data);
+        }
+      } catch {
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRefs();
+  }, []);
 
-  function getInitials(name: string) {
-    return name
-      .split(/[\s&()]+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0])
-      .join('')
-      .toUpperCase();
-  }
+  const filteredRefs = references;
+
+  useEffect(() => {
+    if (trackRef.current) {
+      setSingleSetWidth(trackRef.current.scrollWidth / 2);
+    }
+  }, [filteredRefs]);
+
+  useAnimationFrame((_timestamp, delta) => {
+    if (!isHovered && singleSetWidth > 0 && filteredRefs.length > 0) {
+      const speed = 1 * (delta / 16.67);
+      const currentX = x.get();
+      if (currentX <= -singleSetWidth) {
+        x.set(0);
+      } else {
+        x.set(currentX - speed);
+      }
+    }
+  });
+
+  const allItems = [...filteredRefs, ...filteredRefs];
 
   return (
     <section id="references" className="py-20 sm:py-24 bg-surface-container-low border-y border-outline-variant/30 scroll-mt-12">
@@ -34,59 +67,53 @@ export default function References() {
             Ils Nous Font Confiance
           </h2>
 
-          {/* Tag filters row */}
-          <div className="flex flex-wrap justify-center gap-2 max-w-3xl mx-auto">
-            {tags.map((tag) => {
-              const isActive = selectedTag === tag;
-              return (
-                <button
-                  key={tag}
-                  onClick={() => setSelectedTag(tag)}
-                  className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer border ${
-                    isActive
-                      ? 'bg-secondary text-white border-secondary shadow-sm'
-                      : 'bg-white text-gray-500 border-gray-200 hover:border-secondary hover:text-secondary'
-                  }`}
-                >
-                  {tag}
-                </button>
-              );
-            })}
-          </div>
         </div>
 
-        {/* References Logo Grid */}
-        <motion.div
-          layout
-          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6 items-center"
+        {/* Carousel */}
+        <div
+          className="relative overflow-visible"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
         >
-          <AnimatePresence mode="popLayout">
-            {filteredRefs.map((item) => (
-              <motion.div
-                key={item.name}
-                layout
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ duration: 0.25 }}
-                className="h-20 flex items-center justify-center bg-white rounded-xl border border-secondary/10 p-4 shadow-sm hover:shadow-md hover:border-secondary/30 transition-all duration-300 group"
-              >
-                {item.logo ? (
-                  <img
-                    src={item.logo}
-                    alt={item.name}
-                    className="max-h-full max-w-full object-contain grayscale group-hover:grayscale-0 transition-all duration-300"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <span className="font-display font-extrabold text-sm sm:text-base text-primary/60 group-hover:text-primary tracking-wider transition-colors text-center leading-tight">
-                    {item.name}
-                  </span>
-                )}
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </motion.div>
+          {loading ? (
+            <div className="flex gap-6 overflow-hidden">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="min-w-[200px] h-28 bg-white rounded-xl border border-secondary/10 p-4 animate-pulse flex items-center justify-center shrink-0">
+                  <div className="h-4 bg-gray-200 rounded w-20" />
+                </div>
+              ))}
+            </div>
+          ) : filteredRefs.length === 0 ? (
+            <div className="text-center py-12 text-sm text-on-surface-variant">
+              Aucune référence dans cette catégorie
+            </div>
+          ) : (
+            <motion.div
+              ref={trackRef}
+              style={{ x }}
+              className="flex gap-6"
+            >
+              {allItems.map((item, index) => (
+                <div
+                  key={`${item._id}-${index}`}
+                  className="min-w-[200px] h-28 flex items-center justify-center bg-white rounded-xl border border-secondary/10 p-6 shadow-sm hover:scale-110 hover:shadow-xl hover:shadow-secondary/20 hover:border-secondary transition-all duration-300 group shrink-0 cursor-pointer"
+                >
+                  {item.imageUrl ? (
+                    <img
+                      src={item.imageUrl}
+                      alt={item.name}
+                      className="max-h-full max-w-full w-full h-full object-contain transition-transform duration-300 group-hover:scale-110"
+                    />
+                  ) : (
+                    <span className="font-display font-extrabold text-sm sm:text-base text-primary/60 group-hover:text-primary tracking-wider transition-all duration-300 text-center leading-tight group-hover:scale-110">
+                      {item.name}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </div>
       </div>
     </section>
   );

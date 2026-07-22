@@ -12,6 +12,8 @@ import messagesRouter from './routes/messages.js';
 import appointmentsRouter from './routes/appointments.js';
 import availableDatesRouter from './routes/available-dates.js';
 import sendEmailRouter from './routes/send-email.js';
+import statsRouter from './routes/stats.js';
+import referencesRouter from './routes/references.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,6 +30,8 @@ app.use('/api/messages', messagesRouter);
 app.use('/api/appointments', appointmentsRouter);
 app.use('/api/available-dates', availableDatesRouter);
 app.use('/api/send-email', sendEmailRouter);
+app.use('/api/stats', statsRouter);
+app.use('/api/references', referencesRouter);
 
 app.get('/api', (_req, res) => {
   res.json({

@@ -24,7 +24,6 @@ export default function Navbar({ onBookConsultation }: NavbarProps) {
   const navLinks = [
     { name: 'À propos', href: '#about', action: 'about' },
     { name: 'Départements', href: '#departments', action: 'departments' },
-    { name: 'Équipe', href: '#team', action: 'team' },
     { name: 'Relation Client', href: '#references', action: 'references' },
     { name: 'Contact', href: '#contact', action: 'contact' },
     { name: 'Rendez-vous', href: '#contact', action: 'rdv' },

@@ -9,7 +9,6 @@ import Stats from './components/Stats';
 import About from './components/About';
 import Departments from './components/Departments';
 import WhyChooseUs from './components/WhyChooseUs';
-import Team from './components/Team';
 import References from './components/References';
 import ContactSection from './components/ContactSection';
 import Footer from './components/Footer';
@@ -57,9 +56,6 @@ export default function App() {
 
         {/* Why choose us branding values section */}
         <WhyChooseUs />
-
-        {/* Managing associates team list */}
-        <Team />
 
         {/* Trust logos and Sector references with filters */}
         <References />

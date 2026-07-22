@@ -42,7 +42,7 @@ export default function Hero({ onBookConsultation, onExploreServices }: HeroProp
             className="font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tight mb-6"
           >
             Votre partenaire de confiance en{' '}
-            <span className="text-secondary-fixed font-semibold">excellence financière</span>
+            <span className="text-secondary-fixed font-semibold">expertise comptable, audit et conseil en gestion</span>
           </motion.h1>
 
           <motion.p
@@ -51,7 +51,7 @@ export default function Hero({ onBookConsultation, onExploreServices }: HeroProp
             transition={{ duration: 0.8, delay: 0.2 }}
             className="font-sans text-base sm:text-lg lg:text-xl opacity-90 max-w-xl mb-10 leading-relaxed font-light"
           >
-            RM Consulting accompagne les leaders d'aujourd'hui dans la maîtrise et la sécurisation de leurs enjeux comptables, fiscaux, d'audit et organisationnels avec une rigueur institutionnelle absolue.
+            RM CONSULTING accompagne les entreprises avec professionnalisme, proximité et excellence.
           </motion.p>
         </div>
 

@@ -79,40 +79,6 @@ export const faqData = [
   }
 ];
 
-// --- Client References ---
-export const clientReferences = [
-  { name: 'SOBATRAP', logo: '/logos/sobatrap.png', category: 'BTP' },
-  { name: 'UIB', logo: '/logos/uib.png', category: 'Banque' },
-  { name: 'UPES', logo: '/logos/upes.png', category: 'Éducation' },
-  { name: 'APII', logo: '/logos/apii.png', category: 'Conseil' },
-  { name: 'The Face', logo: '/logos/aweb.png', category: 'Restauration' },
-  { name: 'Aweb', logo: '/logos/aweb.png', category: 'Immobilier' },
-  { name: 'Anglo Tunisian Oil & Gas', logo: '/logos/Anglo Tunisian Oil & Gas.png', category: 'Énergie' },
-  { name: 'Vaga Land', logo: '/logos/vaga land.png', category: 'Loisir' },
-  { name: 'SOBA', logo: '/logos/vaga land.png', category: 'Loisir' },
-  { name: 'SOBMTI', logo: '/logos/SOBMTI.png', category: 'BTP' },
-  { name: 'Sword', logo: '/logos/sword.png', category: 'Sécurité' },
-  { name: 'Groupe Secure', logo: '/logos/groupe secure.png', category: 'Sécurité' },
-  { name: 'GFA Consulting Group', logo: '/logos/gfa.png', category: 'Conseil' },
-  { name: 'Harmonia Pharma', logo: '/logos/harmonia.png', category: 'Pharma' },
-  { name: 'Engineering & Construction Company', logo: '/logos/engineering and construction company.png', category: 'Énergie' },
-  { name: 'Top Oilfield Services', logo: '/logos/Top Oilfield Services.png', category: 'Énergie' },
-  { name: 'KSS', logo: '/logos/kss.png', category: 'Sécurité' },
-  { name: 'Voyagekom', logo: '/logos/voyagekom.png', category: 'Tourisme' },
-  { name: 'Hôtel Méditerranée', logo: '/logos/hôtel méditerranée thalasso golf.png', category: 'Hôtellerie' },
-  { name: 'SUNMED', logo: '/logos/radisson sfax.png', category: 'Hôtellerie' },
-  { name: 'YADIS', logo: '/logos/YADIS.png', category: 'Hôtellerie' },
-  { name: 'Houria Palace', logo: '/logos/houria palace hotel.png', category: 'Hôtellerie' },
-  { name: 'Umm Elgouzlane Travel', logo: '/logos/umm al gouzlan travel.png', category: 'Tourisme' },
-  { name: 'Vacanza', logo: '/logos/vacanza.png', category: 'Tourisme' },
-  { name: 'Tunisie Transformateurs', logo: '/logos/tunisie transformateur.png', category: 'Industrie' },
-  { name: 'ENSIT', logo: '/logos/ensit.png', category: 'Éducation' },
-  { name: 'Hotel Résidence Nour', logo: '/logos/hotel residence nour.png', category: 'Hôtellerie' },
-  { name: 'The Sindbad', logo: '/logos/the sindbad.png', category: 'Hôtellerie' },
-  { name: 'Harmonia Thalasso', logo: '/logos/harmonia.png', category: 'Santé' },
-  { name: 'Gîte du Pêcheur', logo: '/logos/cite de pecheur.png', category: 'Hôtellerie' },
-];
-
 // --- Services ---
 export const servicesData: Service[] = [
   {

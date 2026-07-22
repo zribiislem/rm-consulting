@@ -36,45 +36,26 @@ export default function About() {
           {/* Right Side: Narrative */}
           <div className="lg:col-span-6 text-left">
             <span className="text-primary font-display font-bold tracking-widest text-xs uppercase block mb-3">
-              À Propos de RM Consulting
+              Qui sommes-nous ?
             </span>
             <h2 className="font-display text-3xl sm:text-4xl font-extrabold text-on-surface mb-6 leading-tight">
-              Une expertise au service de votre <span className="text-gradient-gold">croissance</span>
+              À propos de <span className="text-gradient-gold">RM CONSULTING</span>
             </h2>
             <p className="font-sans text-base text-on-surface-variant mb-6 leading-relaxed">
-              RM CONSULTING est une société d'expertise comptable, d'audit et de conseils en gestion, membre de l'Ordre des Experts Comptables de Tunisie (O.E.C.T). La structure permanente, la compétence technique et l'expérience professionnelle du gérant, des partenaires et du personnel d'intervention permettent à notre société d'offrir aux entreprises des services de qualité.
-            </p>
-            <p className="font-sans text-base text-on-surface-variant mb-6 leading-relaxed">
-              RM CONSULTING est dotée des outils de travail les plus appropriés pour assurer un bon déroulement des missions conformément aux normes et réglementations en vigueur (manuel d'audit, matériel et applications informatiques, etc.). La supervision des missions est assurée exclusivement par le gérant. Le personnel technique bénéficie d'actions de formation continue pour améliorer son efficacité.
-            </p>
-            <p className="font-sans text-base text-on-surface-variant mb-6 leading-relaxed">
-              Avant la présentation des rapports de fin de mission, chaque dossier de travail fait l'objet d'un contrôle de qualité exercé par le gérant. RM CONSULTING fait appel à des consultants externes pour la réalisation des travaux spécifiques de conseil, organisation et audit des entreprises (audit de production, mise en place de systèmes de management selon les standards internationaux, conception et mise en place des systèmes informatiques, etc.) qui font partie intégrante de sa mission et nécessitent des compétences techniques particulières.
+              <strong>RM CONSULTING</strong> est un cabinet d'expertise comptable, d'audit et de conseil en gestion, membre de l'Ordre des Experts Comptables de Tunisie (O.E.C.T.). Nous accompagnons les entreprises à chaque étape de leur développement en leur proposant des solutions sur mesure en comptabilité, audit, fiscalité et conseil.
             </p>
             <p className="font-sans text-base text-on-surface-variant mb-8 leading-relaxed">
-              RM CONSULTING est un cabinet agrée par la Banque Européenne de Restructuration et de Développement.
+              Notre approche repose sur la rigueur, l'expertise et la proximité. Grâce à une équipe qualifiée, des outils performants et une veille permanente des évolutions réglementaires, nous garantissons des prestations conformes aux normes professionnelles les plus exigeantes.
+            </p>
+            <p className="font-sans text-base text-on-surface-variant mb-8 leading-relaxed">
+              Chaque mission est supervisée avec le plus haut niveau d'exigence afin d'assurer un accompagnement fiable, confidentiel et créateur de valeur. Agréé par la <strong>Banque Européenne pour la Reconstruction et le Développement (BERD)</strong>, RM CONSULTING est le partenaire de confiance des entreprises souhaitant sécuriser leur gestion et soutenir leur croissance.
             </p>
 
-            <ul className="space-y-4 mb-8">
-              {[
-                'Expertise comptable, audit et conseil en gestion — Membre OECT',
-                'Agrément BERD pour les projets internationaux de soutien aux PME',
-                'Supervision exclusive par le gérant avec contrôle de qualité systématique',
-                'Consultants externes pour des missions spécialisées',
-              ].map((point, index) => (
-                <li key={index} className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-secondary shrink-0 mt-0.5" />
-                  <span className="font-sans text-sm sm:text-base text-on-surface font-medium">
-                    {point}
-                  </span>
-                </li>
-              ))}
-            </ul>
-
             <a
-              href="#contact"
+              href="#services"
               className="inline-flex items-center gap-1 text-primary hover:text-primary-container font-bold text-sm hover:gap-3 transition-all uppercase tracking-wider"
             >
-              Découvrir notre méthode de travail
+              Découvrir nos services
               <ArrowUpRight className="w-4 h-4" />
             </a>
           </div>

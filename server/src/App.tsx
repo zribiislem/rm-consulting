@@ -90,7 +90,7 @@ const getDeptIcon = (id: string) => {
 
 export default function App() {
   // Navigation active tab
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'clients' | 'reporting' | 'settings' | 'departments' | 'appointments'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'clients' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'references'>('dashboard');
 
   // Departments dynamic state
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -144,6 +144,23 @@ export default function App() {
   const [selectedTimeSlots, setSelectedTimeSlots] = useState<string[]>([]);
   const [editingTimeSlotId, setEditingTimeSlotId] = useState<string | null>(null);
 
+  // References state
+  interface Reference {
+    _id: string;
+    name: string;
+    category: string;
+    order: number;
+    imageUrl?: string;
+  }
+  const [references, setReferences] = useState<Reference[]>([]);
+  const [isRefModalOpen, setIsRefModalOpen] = useState(false);
+  const [editingRef, setEditingRef] = useState<Reference | null>(null);
+  const [refName, setRefName] = useState('');
+  const [refCategory, setRefCategory] = useState('');
+  const [refImageFile, setRefImageFile] = useState<File | null>(null);
+  const [refImagePreview, setRefImagePreview] = useState<string | null>(null);
+  const [refExistingImageUrl, setRefExistingImageUrl] = useState<string | null>(null);
+
   const PRESET_TIME_SLOTS = [
     '08:00 - 09:00',
     '09:00 - 10:00',
@@ -160,23 +177,26 @@ export default function App() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [deptRes, missionRes, msgRes, apptRes, availRes] = await Promise.all([
+        const [deptRes, missionRes, msgRes, apptRes, availRes, refRes] = await Promise.all([
           fetch(`${API_URL}/departments`),
           fetch(`${API_URL}/missions`),
           fetch(`${API_URL}/messages`),
           fetch(`${API_URL}/appointments`),
-          fetch(`${API_URL}/available-dates`)
+          fetch(`${API_URL}/available-dates`),
+          fetch(`${API_URL}/references`)
         ]);
         const depts = await deptRes.json();
         const missionsData = await missionRes.json();
         const msgs = await msgRes.json();
         const appts = await apptRes.json();
         const avails = await availRes.json();
+        const refs = await refRes.json();
         setDepartments(depts.map((d: any) => ({ ...d, id: d._id })));
         setMissions(missionsData.map((m: any) => ({ ...m, id: m._id })));
         setMessages(msgs.map((m: any) => ({ ...m, id: m._id })));
         setAppointments(appts);
         setAvailableDatesList(avails);
+        setReferences(refs);
       } catch (err) {
         console.error('Failed to fetch data from API:', err);
       }
@@ -456,6 +476,88 @@ export default function App() {
     addToast(`Le département "${deptToDelete.name}" a été supprimé.`, 'info');
   };
 
+  // References CRUD handlers
+  const handleOpenAddRef = () => {
+    setEditingRef(null);
+    setRefName('');
+    setRefCategory('');
+    setRefImageFile(null);
+    setRefImagePreview(null);
+    setRefExistingImageUrl(null);
+    setIsRefModalOpen(true);
+  };
+
+  const handleOpenEditRef = (ref: Reference) => {
+    setEditingRef(ref);
+    setRefName(ref.name);
+    setRefCategory(ref.category);
+    setRefImageFile(null);
+    setRefImagePreview(null);
+    setRefExistingImageUrl(ref.imageUrl || null);
+    setIsRefModalOpen(true);
+  };
+
+  const handleDeleteRef = async (refId: string) => {
+    const refToDelete = references.find(r => r._id === refId);
+    if (!refToDelete) return;
+    try {
+      await fetch(`${API_URL}/references/${refId}`, { method: 'DELETE' });
+      setReferences(prev => prev.filter(r => r._id !== refId));
+      addToast(`"${refToDelete.name}" a été supprimé.`, 'info');
+    } catch {
+      addToast('Erreur lors de la suppression.', 'error');
+    }
+  };
+
+  const handleSubmitRef = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!refName.trim() || !refCategory.trim()) {
+      addToast('Veuillez remplir tous les champs.', 'info');
+      return;
+    }
+    try {
+      const formData = new FormData();
+      formData.append('name', refName.trim());
+      formData.append('category', refCategory.trim());
+      formData.append('order', String(editingRef ? editingRef.order : references.length + 1));
+
+      if (refImageFile) {
+        formData.append('image', refImageFile);
+      } else if (editingRef && !refExistingImageUrl) {
+        formData.append('removeImage', 'true');
+      }
+
+      if (editingRef) {
+        const res = await fetch(`${API_URL}/references/${editingRef._id}`, {
+          method: 'PUT',
+          body: formData,
+        });
+        if (!res.ok) {
+          addToast('Erreur lors de la modification.', 'info');
+          return;
+        }
+        const updated = await res.json();
+        setReferences(prev => prev.map(r => r._id === editingRef._id ? updated : r));
+        addToast('Référence modifiée.', 'info');
+      } else {
+        const res = await fetch(`${API_URL}/references`, {
+          method: 'POST',
+          body: formData,
+        });
+        if (!res.ok) {
+          addToast('Erreur lors de l\'ajout.', 'info');
+          return;
+        }
+        const created = await res.json();
+        setReferences(prev => [...prev, created]);
+        addToast('Référence ajoutée.', 'info');
+      }
+      setIsRefModalOpen(false);
+    } catch {
+      addToast('Erreur lors de l\'enregistrement.', 'error');
+    }
+  };
+
   const handleSubmitDept = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deptName.trim() || !deptDescription.trim() || !deptHead.trim()) {
@@ -610,6 +712,18 @@ export default function App() {
           >
             <CalendarIcon className="w-5 h-5" />
             <span className="text-sm">Rendez-vous</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('references')}
+            className={`w-full flex items-center gap-3 p-3 rounded-lg font-medium transition-all duration-150 ${
+              activeTab === 'references'
+                ? 'sidebar-active text-white'
+                : 'text-on-surface-variant hover:bg-secondary-container/20 hover:text-secondary'
+            }`}
+          >
+            <ClipboardList className="w-5 h-5" />
+            <span className="text-sm">Nos Références</span>
           </button>
 
           {/* NOTE: "Reporting" has been strictly removed per user request. */}
@@ -1875,37 +1989,126 @@ export default function App() {
               </motion.div>
             )}
 
+            {/* 7. REFERENCES VIEW */}
+            {activeTab === 'references' && (
+              <motion.div
+                key="references"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-8"
+              >
+                {/* Header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-headline text-2xl font-bold text-primary">Nos Références</h3>
+                    <p className="text-xs text-on-surface-variant">
+                      Gérez les entreprises et partenaires affichés dans la section « Ils Nous Font Confiance ».
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleOpenAddRef}
+                    className="bg-secondary hover:bg-secondary/80 text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Ajouter une Référence
+                  </button>
+                </div>
+
+                {/* Stats Bar */}
+                <div className="flex flex-wrap gap-4 text-xs text-on-surface-variant">
+                  <span className="font-semibold">
+                    Total : <span className="text-primary font-bold">{references.length}</span> références
+                  </span>
+                  <span className="font-semibold">
+                    Catégories : <span className="text-primary font-bold">{new Set(references.map(r => r.category)).size}</span>
+                  </span>
+                </div>
+
+                {/* References Table */}
+                <div className="bg-white rounded-2xl border border-secondary/10 overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-100">
+                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">#</th>
+                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Logo</th>
+                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Nom</th>
+                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Catégorie</th>
+                          <th className="text-right py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {references.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-12 text-center">
+                              <ClipboardList className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                              <p className="text-sm text-gray-400 font-medium">Aucune référence pour le moment</p>
+                              <button
+                                onClick={handleOpenAddRef}
+                                className="mt-3 text-secondary hover:text-secondary/80 text-xs font-bold cursor-pointer"
+                              >
+                                + Ajouter votre première référence
+                              </button>
+                            </td>
+                          </tr>
+                        ) : (
+                          references.map((ref, idx) => (
+                            <tr key={ref._id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                              <td className="py-3 px-4 text-xs text-gray-400 font-mono">{idx + 1}</td>
+                              <td className="py-3 px-4">
+                                {ref.imageUrl ? (
+                                  <img
+                                    src={ref.imageUrl}
+                                    alt={ref.name}
+                                    className="w-10 h-10 object-contain rounded-lg border border-gray-200 bg-white"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 flex items-center justify-center bg-gray-100 rounded-lg border border-gray-200">
+                                    <ImageIcon className="w-4 h-4 text-gray-400" />
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 font-semibold text-primary">{ref.name}</td>
+                              <td className="py-3 px-4">
+                                <span className="inline-block bg-secondary/10 text-secondary px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider">
+                                  {ref.category}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => handleOpenEditRef(ref)}
+                                    className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary-fixed/20 rounded-lg transition-all cursor-pointer"
+                                    title="Modifier"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteRef(ref._id)}
+                                    className="p-1.5 text-gray-400 hover:text-error hover:bg-error/10 rounded-lg transition-all cursor-pointer"
+                                    title="Supprimer"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
           </AnimatePresence>
         </div>
-
-        {/* Global Footer */}
-        <footer className="w-full py-8 bg-surface-container-highest border-t border-secondary/20 mt-auto">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 max-w-7xl mx-auto px-8">
-            <div className="md:col-span-2">
-              <h5 className="font-headline text-sm font-bold text-primary mb-3">RM Consulting</h5>
-              <p className="text-xs text-on-tertiary-fixed-variant leading-relaxed mb-4">
-                Excellence en Expertise Comptable et Audit. Nous accompagnons les leaders de demain dans leur croissance et leur conformité financière avec rigueur et intégrité.
-              </p>
-              <p className="text-xs text-on-surface-variant">© 2026 RM Consulting. Tous droits réservés.</p>
-            </div>
-            <div>
-              <h6 className="text-xs font-bold text-on-surface mb-3">Navigation</h6>
-              <ul className="space-y-1.5 text-xs text-on-tertiary-fixed-variant">
-                <li><button onClick={() => { setActiveTab('dashboard'); }} className="hover:text-primary transition-colors cursor-pointer text-left">Dashboard</button></li>
-                <li><button onClick={() => { setActiveTab('missions'); }} className="hover:text-primary transition-colors cursor-pointer text-left">Nos Services &amp; Missions</button></li>
-                <li><button onClick={() => { setActiveTab('clients'); }} className="hover:text-primary transition-colors cursor-pointer text-left">Portefeuille Client</button></li>
-              </ul>
-            </div>
-            <div>
-              <h6 className="text-xs font-bold text-on-surface mb-3">Légal &amp; Qualité</h6>
-              <ul className="space-y-1.5 text-xs text-on-tertiary-fixed-variant">
-                <li><a className="hover:text-primary transition-colors" href="#">Mentions Légales</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">Confidentialité</a></li>
-                <li><a className="hover:text-primary transition-colors" href="#">ISO 9001</a></li>
-              </ul>
-            </div>
-          </div>
-        </footer>
 
       </main>
 
@@ -2589,6 +2792,126 @@ export default function App() {
                   </button>
                 </div>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: REFERENCES ADD/EDIT */}
+      <AnimatePresence>
+        {isRefModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setIsRefModalOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-lg z-10"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h4 className="font-headline text-lg font-bold text-primary">
+                  {editingRef ? 'Modifier la référence' : 'Ajouter une référence'}
+                </h4>
+                <button
+                  onClick={() => setIsRefModalOpen(false)}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitRef} className="space-y-5">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Nom de l'entreprise</label>
+                  <input
+                    type="text"
+                    value={refName}
+                    onChange={e => setRefName(e.target.value)}
+                    placeholder="Ex: SOBATRAP"
+                    className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Catégorie</label>
+                  <input
+                    type="text"
+                    value={refCategory}
+                    onChange={e => setRefCategory(e.target.value)}
+                    placeholder="Ex: BTP, Banque, Éducation..."
+                    className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                    Logo <span className="font-normal text-gray-400 normal-case">(optionnel)</span>
+                  </label>
+                  {(refImagePreview || refExistingImageUrl) && (
+                    <div className="relative mb-2 inline-block">
+                      <img
+                        src={refImagePreview || refExistingImageUrl || ''}
+                        alt="Aperçu"
+                        className="w-full h-28 object-contain rounded-xl border border-gray-200 bg-white p-2"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRefImageFile(null);
+                          setRefImagePreview(null);
+                          setRefExistingImageUrl(null);
+                        }}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 cursor-pointer hover:bg-red-600"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                  <label className="flex items-center justify-center gap-2 w-full border border-dashed border-gray-300 rounded-xl p-4 text-xs text-gray-500 hover:border-secondary hover:bg-secondary/5 transition-colors cursor-pointer">
+                    <Upload className="w-4 h-4" />
+                    {refImageFile ? refImageFile.name : 'Choisir une image (JPG, PNG, WebP)'}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setRefImageFile(file);
+                          setRefExistingImageUrl(null);
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setRefImagePreview(ev.target?.result as string);
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsRefModalOpen(false)}
+                    className="px-5 py-2.5 text-xs font-bold text-on-surface-variant border border-outline-variant rounded-xl hover:bg-surface-container transition-colors cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 text-xs font-bold bg-secondary text-white rounded-xl hover:bg-secondary/80 transition-all cursor-pointer"
+                  >
+                    {editingRef ? 'Enregistrer' : 'Ajouter'}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

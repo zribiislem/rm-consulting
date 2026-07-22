@@ -38,9 +38,6 @@ export default function Footer() {
               <a href="#services" className="hover:text-secondary-fixed transition-colors">Catalogue Services</a>
             </li>
             <li>
-              <a href="#team" className="hover:text-secondary-fixed transition-colors">Notre Équipe</a>
-            </li>
-            <li>
               <a href="#contact" className="hover:text-secondary-fixed transition-colors">Prendre RDV</a>
             </li>
           </ul>
