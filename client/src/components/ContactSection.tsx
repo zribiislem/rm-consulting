@@ -5,7 +5,10 @@ import { MapPin, Phone, Mail, Clock, Calendar, Send, CheckCircle2, AlertCircle, 
 interface AvailableDate {
   _id: string;
   date: string;
+  startTime: string;
+  endTime: string;
   timeSlots: string[];
+  bookedSlots: string[];
 }
 
 const MONTH_NAMES = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
@@ -55,12 +58,13 @@ export default function ContactSection() {
   const [calYear, setCalYear] = useState(today.getFullYear());
   const [availableDates, setAvailableDates] = useState<AvailableDate[]>([]);
   const [selectedDateSlots, setSelectedDateSlots] = useState<string[]>([]);
+  const [bookedSlotsForDate, setBookedSlotsForDate] = useState<string[]>([]);
 
   // Fetch available dates
   useEffect(() => {
     fetch('/api/available-dates')
       .then((r) => r.json())
-      .then((data: AvailableDate[]) => setAvailableDates(data))
+      .then((data: any) => setAvailableDates(Array.isArray(data) ? data : []))
       .catch(() => {});
   }, []);
 
@@ -69,10 +73,14 @@ export default function ContactSection() {
     if (rdvDate) {
       const match = availableDates.find((d) => d.date.split('T')[0] === rdvDate);
       if (match) {
+        const booked = match.bookedSlots || [];
         setSelectedDateSlots(match.timeSlots);
-        setRdvTime(match.timeSlots[0] || '');
+        setBookedSlotsForDate(booked);
+        const firstAvailable = match.timeSlots.find(s => !booked.includes(s));
+        setRdvTime(firstAvailable || '');
       } else {
         setSelectedDateSlots([]);
+        setBookedSlotsForDate([]);
         setRdvTime('');
       }
     }
@@ -108,6 +116,10 @@ export default function ContactSection() {
     }
     if (activeTab === 'rdv' && !rdvTime) {
       setValidationError('Veuillez sélectionner un créneau horaire.');
+      return;
+    }
+    if (activeTab === 'rdv' && bookedSlotsForDate.includes(rdvTime)) {
+      setValidationError('Ce créneau est déjà réservé. Veuillez en choisir un autre.');
       return;
     }
 
@@ -164,6 +176,7 @@ export default function ContactSection() {
     setRdvDate('');
     setRdvTime('');
     setSelectedDateSlots([]);
+    setBookedSlotsForDate([]);
     setIsSuccess(false);
   };
 
@@ -443,31 +456,38 @@ export default function ContactSection() {
                   {selectedDateSlots.length > 0 && (
                     <div>
                       <label className="block text-xs sm:text-sm font-bold text-gray-700 mb-3">
-                        Créneau Horaire Préféré
+                        Créneau Horaire Préféré (30 min)
                       </label>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {selectedDateSlots.map((slot) => (
-                          <button
-                            key={slot}
-                            type="button"
-                            onClick={() => setRdvTime(slot)}
-                            className={`p-3 rounded-xl border text-sm font-medium text-left transition-all cursor-pointer ${
-                              rdvTime === slot
-                                ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary'
-                                : 'border-gray-200 text-gray-600 hover:border-primary/40 hover:bg-gray-50'
-                            }`}
-                          >
-                            <Clock className="w-4 h-4 inline mr-2" />
-                            {slot}
-                          </button>
-                        ))}
+                        {selectedDateSlots.map((slot) => {
+                          const isBooked = bookedSlotsForDate.includes(slot);
+                          return (
+                            <button
+                              key={slot}
+                              type="button"
+                              disabled={isBooked}
+                              onClick={() => setRdvTime(slot)}
+                              className={`p-3 rounded-xl border text-sm font-medium text-left transition-all ${
+                                isBooked
+                                  ? 'border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed line-through'
+                                  : rdvTime === slot
+                                  ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary cursor-pointer'
+                                  : 'border-gray-200 text-gray-600 hover:border-primary/40 hover:bg-gray-50 cursor-pointer'
+                              }`}
+                            >
+                              <Clock className="w-4 h-4 inline mr-2" />
+                              {slot}
+                              {isBooked && <span className="text-[10px] text-red-400 ml-2">Réservé</span>}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
 
-                  {rdvDate && selectedDateSlots.length === 0 && (
+                  {rdvDate && selectedDateSlots.length > 0 && bookedSlotsForDate.length === selectedDateSlots.length && (
                     <p className="text-xs text-amber-600 bg-amber-50 p-3 rounded-xl">
-                      Aucun créneau disponible pour cette date.
+                      Tous les créneaux sont réservés pour cette date.
                     </p>
                   )}
                 </motion.div>

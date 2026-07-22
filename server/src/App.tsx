@@ -126,12 +126,17 @@ export default function App() {
     timeSlot: string;
     subject: string;
     details: string;
-    status: 'pending' | 'confirmed' | 'cancelled';
+    status: 'pending' | 'confirmed' | 'cancelled' | 'rescheduled';
+    rescheduledDate: string;
+    rescheduledTimeSlot: string;
   }
   interface AvailableDateData {
     _id: string;
     date: string;
+    startTime: string;
+    endTime: string;
     timeSlots: string[];
+    bookedSlots: string[];
   }
   const [appointments, setAppointments] = useState<AppointmentData[]>([]);
   const [availableDatesList, setAvailableDatesList] = useState<AvailableDateData[]>([]);
@@ -141,20 +146,25 @@ export default function App() {
   const [timeSlotModalOpen, setTimeSlotModalOpen] = useState(false);
   const [timeSlotDateStr, setTimeSlotDateStr] = useState('');
   const [timeSlotDayNum, setTimeSlotDayNum] = useState(0);
-  const [selectedTimeSlots, setSelectedTimeSlots] = useState<string[]>([]);
+  const [newSlotStartTime, setNewSlotStartTime] = useState('08:00');
+  const [newSlotEndTime, setNewSlotEndTime] = useState('18:00');
+  const [selectedModalSlots, setSelectedModalSlots] = useState<string[]>([]);
   const [editingTimeSlotId, setEditingTimeSlotId] = useState<string | null>(null);
 
-  const PRESET_TIME_SLOTS = [
-    '08:00 - 09:00',
-    '09:00 - 10:00',
-    '10:00 - 11:00',
-    '11:00 - 12:00',
-    '13:00 - 14:00',
-    '14:00 - 15:00',
-    '15:00 - 16:00',
-    '16:00 - 17:00',
-    '17:00 - 18:00',
-  ];
+  const generateClientSlots = (start: string, end: string): string[] => {
+    const slots: string[] = [];
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    let startMin = sh * 60 + sm;
+    const endMin = eh * 60 + em;
+    while (startMin + 30 <= endMin) {
+      const slotEnd = startMin + 30;
+      const fmt = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+      slots.push(`${fmt(startMin)} - ${fmt(slotEnd)}`);
+      startMin += 60;
+    }
+    return slots;
+  };
 
   // Fetch data from API on mount
   useEffect(() => {
@@ -217,6 +227,15 @@ export default function App() {
   const [replyText, setReplyText] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
+  const [rejectTargetName, setRejectTargetName] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
+  const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
+  const [rescheduleTargetName, setRescheduleTargetName] = useState('');
+  const [rescheduleNewDate, setRescheduleNewDate] = useState('');
+  const [rescheduleNewTimeSlot, setRescheduleNewTimeSlot] = useState('');
 
   // Department contact modal state
   const [isDeptContactOpen, setIsDeptContactOpen] = useState(false);
@@ -984,9 +1003,10 @@ export default function App() {
                                   <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
                                     appt.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
                                     appt.status === 'cancelled' ? 'bg-gray-100 text-gray-500' :
+                                    appt.status === 'rescheduled' ? 'bg-blue-100 text-blue-700' :
                                     'bg-amber-100 text-amber-700'
                                   }`}>
-                                    {appt.status === 'confirmed' ? 'CONFIRMÉ' : appt.status === 'cancelled' ? 'ANNULÉ' : 'EN ATTENTE'}
+                                    {appt.status === 'confirmed' ? 'CONFIRMÉ' : appt.status === 'cancelled' ? 'ANNULÉ' : appt.status === 'rescheduled' ? 'REPORTÉ' : 'EN ATTENTE'}
                                   </span>
                                 </div>
                                 <p className="text-[11px] text-on-surface-variant mt-0.5">
@@ -1709,14 +1729,18 @@ export default function App() {
                               if (match) {
                                 setTimeSlotDateStr(dateStr);
                                 setTimeSlotDayNum(day);
-                                setSelectedTimeSlots(match.timeSlots);
+                                setNewSlotStartTime(match.startTime || '08:00');
+                                setNewSlotEndTime(match.endTime || '18:00');
+                                setSelectedModalSlots(match.timeSlots || []);
                                 setEditingTimeSlotId(match._id);
                                 setTimeSlotModalOpen(true);
                               }
                             } else {
                               setTimeSlotDateStr(dateStr);
                               setTimeSlotDayNum(day);
-                              setSelectedTimeSlots([]);
+                              setNewSlotStartTime('08:00');
+                              setNewSlotEndTime('18:00');
+                              setSelectedModalSlots([]);
                               setEditingTimeSlotId(null);
                               setTimeSlotModalOpen(true);
                             }
@@ -1748,18 +1772,26 @@ export default function App() {
                     {availableDatesList.length > 0 && (
                       <div className="mt-4 space-y-2">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Dates programmées</p>
+                        <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
                         {availableDatesList.map(d => (
                           <div key={d._id} className="p-2 bg-emerald-50 rounded-lg border border-emerald-100">
                             <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs font-medium text-emerald-800">
-                                {new Date(d.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                              </span>
+                              <div>
+                                <span className="text-xs font-medium text-emerald-800">
+                                  {new Date(d.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                </span>
+                                <span className="text-[10px] text-emerald-600 ml-2">
+                                  {d.startTime} - {d.endTime}
+                                </span>
+                              </div>
                               <div className="flex gap-2">
                                 <button
                                   onClick={() => {
                                     setTimeSlotDateStr(d.date.split('T')[0]);
                                     setTimeSlotDayNum(new Date(d.date).getDate());
-                                    setSelectedTimeSlots(d.timeSlots);
+                                    setNewSlotStartTime(d.startTime || '08:00');
+                                    setNewSlotEndTime(d.endTime || '18:00');
+                                    setSelectedModalSlots(d.timeSlots || []);
                                     setEditingTimeSlotId(d._id);
                                     setTimeSlotModalOpen(true);
                                   }}
@@ -1779,14 +1811,22 @@ export default function App() {
                               </div>
                             </div>
                             <div className="flex flex-wrap gap-1">
-                              {d.timeSlots.map((slot, si) => (
-                                <span key={si} className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
-                                  {slot}
-                                </span>
-                              ))}
+                              {d.timeSlots.map((slot, si) => {
+                                const isBooked = (d.bookedSlots || []).includes(slot);
+                                return (
+                                  <span key={si} className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                                    isBooked
+                                      ? 'bg-red-100 text-red-500 line-through'
+                                      : 'bg-emerald-100 text-emerald-700'
+                                  }`}>
+                                    {slot}
+                                  </span>
+                                );
+                              })}
                             </div>
                           </div>
                         ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1796,7 +1836,7 @@ export default function App() {
                     <div className="p-6 border-b border-secondary/10">
                       <h4 className="font-headline text-base font-bold text-on-surface">Demandes de Rendez-vous</h4>
                     </div>
-                    <div className="flex-1 p-4 space-y-3 overflow-y-auto max-h-[600px] custom-scrollbar">
+                    <div className="flex-1 p-4 space-y-3 overflow-y-auto max-h-[440px] custom-scrollbar">
                       {appointments.length === 0 ? (
                         <div className="text-center py-12 text-sm text-on-surface-variant flex flex-col items-center gap-2">
                           <CalendarIcon className="w-8 h-8 text-on-surface-variant/30" />
@@ -1807,6 +1847,7 @@ export default function App() {
                           <div key={appt._id} className={`p-4 rounded-xl border transition-all ${
                             appt.status === 'pending' ? 'border-amber-200 bg-amber-50/50' :
                             appt.status === 'confirmed' ? 'border-emerald-200 bg-emerald-50/50' :
+                            appt.status === 'rescheduled' ? 'border-blue-200 bg-blue-50/50' :
                             'border-gray-200 bg-gray-50/50 opacity-60'
                           }`}>
                             <div className="flex items-start justify-between mb-2">
@@ -1817,9 +1858,10 @@ export default function App() {
                               <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
                                 appt.status === 'pending' ? 'bg-amber-100 text-amber-700' :
                                 appt.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
+                                appt.status === 'rescheduled' ? 'bg-blue-100 text-blue-700' :
                                 'bg-gray-100 text-gray-500'
                               }`}>
-                                {appt.status === 'pending' ? 'EN ATTENTE' : appt.status === 'confirmed' ? 'CONFIRMÉ' : 'ANNULÉ'}
+                                {appt.status === 'pending' ? 'EN ATTENTE' : appt.status === 'confirmed' ? 'CONFIRMÉ' : appt.status === 'rescheduled' ? 'REPORTÉ' : 'ANNULÉ'}
                               </span>
                             </div>
                             <div className="flex items-center gap-3 text-[11px] text-on-surface-variant mb-2">
@@ -1834,6 +1876,12 @@ export default function App() {
                             </div>
                             <p className="text-xs font-semibold text-on-surface mb-1">{appt.subject}</p>
                             {appt.details && <p className="text-[11px] text-on-surface-variant line-clamp-2 mb-3">{appt.details}</p>}
+                            {appt.status === 'rescheduled' && appt.rescheduledDate && (
+                              <div className="text-[11px] text-blue-600 font-semibold mb-3 flex items-center gap-1">
+                                <CalendarIcon className="w-3 h-3" />
+                                Nouveau RDV : {new Date(appt.rescheduledDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })} — {appt.rescheduledTimeSlot}
+                              </div>
+                            )}
                             {appt.status === 'pending' && (
                               <div className="flex gap-2">
                                 <button
@@ -1851,18 +1899,27 @@ export default function App() {
                                   Confirmer
                                 </button>
                                 <button
-                                  onClick={async () => {
-                                    await fetch(`${API_URL}/appointments/${appt._id}`, {
-                                      method: 'PUT',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ status: 'cancelled' })
-                                    });
-                                    setAppointments(prev => prev.map(a => a._id === appt._id ? { ...a, status: 'cancelled' } : a));
-                                    addToast(`RDV avec ${appt.clientName} annulé.`, 'info');
+                                  onClick={() => {
+                                    setRejectTargetId(appt._id);
+                                    setRejectTargetName(appt.clientName);
+                                    setRejectionReason('');
+                                    setRejectModalOpen(true);
                                   }}
                                   className="px-3 py-1.5 border border-red-300 text-red-600 text-[10px] font-bold rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
                                 >
                                   Refuser
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setRescheduleTargetId(appt._id);
+                                    setRescheduleTargetName(appt.clientName);
+                                    setRescheduleNewDate('');
+                                    setRescheduleNewTimeSlot('');
+                                    setRescheduleModalOpen(true);
+                                  }}
+                                  className="px-3 py-1.5 border border-amber-300 text-amber-600 text-[10px] font-bold rounded-lg hover:bg-amber-50 transition-colors cursor-pointer"
+                                >
+                                  Reporter
                                 </button>
                               </div>
                             )}
@@ -2501,31 +2558,80 @@ export default function App() {
 
               <div className="p-6 space-y-4">
                 <p className="text-xs text-on-surface-variant">
-                  Sélectionnez les créneaux horaires disponibles pour cette date.
+                  Choisissez l'intervalle horaire, puis sélectionnez les créneaux de 30 min que vous souhaitez rendre disponibles.
                 </p>
 
-                <div className="grid grid-cols-2 gap-2">
-                  {PRESET_TIME_SLOTS.map(slot => {
-                    const isSelected = selectedTimeSlots.includes(slot);
-                    return (
-                      <button
-                        key={slot}
-                        type="button"
-                        onClick={() => {
-                          setSelectedTimeSlots(prev =>
-                            isSelected ? prev.filter(s => s !== slot) : [...prev, slot]
-                          );
-                        }}
-                        className={`text-xs font-medium p-2.5 rounded-lg border transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-primary text-white border-primary shadow-sm'
-                            : 'bg-surface-container-low text-on-surface border-outline-variant hover:border-primary/50'
-                        }`}
-                      >
-                        {slot}
-                      </button>
-                    );
-                  })}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-on-surface block mb-1">Heure de début</label>
+                    <input
+                      type="time"
+                      value={newSlotStartTime}
+                      onChange={(e) => {
+                        setNewSlotStartTime(e.target.value);
+                        setSelectedModalSlots([]);
+                      }}
+                      className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-on-surface block mb-1">Heure de fin</label>
+                    <input
+                      type="time"
+                      value={newSlotEndTime}
+                      onChange={(e) => {
+                        setNewSlotEndTime(e.target.value);
+                        setSelectedModalSlots([]);
+                      }}
+                      className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Créneaux disponibles</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const all = generateClientSlots(newSlotStartTime, newSlotEndTime);
+                        if (selectedModalSlots.length === all.length) {
+                          setSelectedModalSlots([]);
+                        } else {
+                          setSelectedModalSlots(all);
+                        }
+                      }}
+                      className="text-[10px] text-primary font-bold cursor-pointer hover:underline"
+                    >
+                      {selectedModalSlots.length === generateClientSlots(newSlotStartTime, newSlotEndTime).length ? 'Tout désélectionner' : 'Tout sélectionner'}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {generateClientSlots(newSlotStartTime, newSlotEndTime).map((slot) => {
+                      const isSelected = selectedModalSlots.includes(slot);
+                      return (
+                        <button
+                          key={slot}
+                          type="button"
+                          onClick={() => {
+                            setSelectedModalSlots(prev =>
+                              isSelected ? prev.filter(s => s !== slot) : [...prev, slot]
+                            );
+                          }}
+                          className={`text-xs font-medium p-2.5 rounded-lg border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-primary text-white border-primary shadow-sm'
+                              : 'bg-surface-container-low text-on-surface border-outline-variant hover:border-primary/50'
+                          }`}
+                        >
+                          {slot}
+                        </button>
+                      );
+                    })}
+                    {generateClientSlots(newSlotStartTime, newSlotEndTime).length === 0 && (
+                      <p className="col-span-2 text-[10px] text-on-surface-variant italic text-center py-2">Aucun créneau possible</p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="pt-4 flex justify-end gap-3 border-t border-secondary/10">
@@ -2552,19 +2658,19 @@ export default function App() {
                   </button>
                   <button
                     type="button"
-                    disabled={selectedTimeSlots.length === 0}
+                    disabled={selectedModalSlots.length === 0}
                     onClick={async () => {
-                      if (selectedTimeSlots.length === 0) return;
+                      if (selectedModalSlots.length === 0) return;
                       if (editingTimeSlotId) {
                         const res = await fetch(`${API_URL}/available-dates/${editingTimeSlotId}`, {
                           method: 'PUT',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ timeSlots: selectedTimeSlots })
+                          body: JSON.stringify({ startTime: newSlotStartTime, endTime: newSlotEndTime, timeSlots: selectedModalSlots })
                         });
                         if (res.ok) {
                           const updated = await res.json();
                           setAvailableDatesList(prev =>
-                            prev.map(d => d._id === editingTimeSlotId ? updated : d)
+                            prev.map(d => d._id === editingTimeSlotId ? { ...updated, bookedSlots: d.bookedSlots } : d)
                           );
                           addToast(`Horaires mis à jour pour le ${timeSlotDayNum}.`);
                         }
@@ -2572,12 +2678,12 @@ export default function App() {
                         const res = await fetch(`${API_URL}/available-dates`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ date: timeSlotDateStr, timeSlots: selectedTimeSlots })
+                          body: JSON.stringify({ date: timeSlotDateStr, startTime: newSlotStartTime, endTime: newSlotEndTime, timeSlots: selectedModalSlots })
                         });
                         if (res.ok) {
                           const created = await res.json();
-                          setAvailableDatesList(prev => [...prev, created]);
-                          addToast(`Date ${timeSlotDayNum} ajoutée avec ${selectedTimeSlots.length} créneau(x).`);
+                          setAvailableDatesList(prev => [...prev, { ...created, bookedSlots: [] }]);
+                          addToast(`Date ${timeSlotDayNum} ajoutée avec ${selectedModalSlots.length} créneau(x).`);
                         }
                       }
                       setTimeSlotModalOpen(false);
@@ -2588,6 +2694,194 @@ export default function App() {
                     {editingTimeSlotId ? 'Enregistrer' : 'Ajouter la date'}
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: REJECT APPOINTMENT */}
+      <AnimatePresence>
+        {rejectModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setRejectModalOpen(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="relative w-full max-w-md bg-white border border-outline-variant rounded-xl shadow-2xl z-10 overflow-hidden p-6 space-y-4"
+            >
+              <div className="flex justify-between items-center border-b border-secondary/10 pb-3">
+                <h4 className="font-headline font-bold text-sm text-red-600 flex items-center gap-2">
+                  <X className="w-5 h-5 text-red-600" />
+                  Refuser le rendez-vous
+                </h4>
+                <button
+                  onClick={() => setRejectModalOpen(false)}
+                  className="p-1 hover:bg-surface-container rounded-full text-on-surface-variant cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-xs text-on-surface-variant">
+                Vous êtes sur le point de refuser le rendez-vous avec <strong>{rejectTargetName}</strong>.
+                Veuillez indiquer la raison du refus, elle sera envoyée par email au client.
+              </p>
+
+              <textarea
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="Saisissez la raison du refus..."
+                rows={4}
+                className="w-full border border-outline-variant rounded-lg p-3 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
+              />
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  onClick={() => setRejectModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold border border-outline-variant text-on-surface-variant rounded-lg hover:bg-surface-container cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  disabled={!rejectionReason.trim()}
+                  onClick={async () => {
+                    if (!rejectTargetId) return;
+                    await fetch(`${API_URL}/appointments/${rejectTargetId}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ status: 'cancelled', rejectionReason: rejectionReason.trim() })
+                    });
+                    setAppointments(prev => prev.map(a => a._id === rejectTargetId ? { ...a, status: 'cancelled' } : a));
+                    setRejectModalOpen(false);
+                    addToast(`RDV avec ${rejectTargetName} refusé. Email envoyé.`, 'info');
+                  }}
+                  className="px-4 py-2 text-xs font-bold bg-red-600 text-white hover:bg-red-700 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Confirmer le refus
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: RESCHEDULE APPOINTMENT */}
+      <AnimatePresence>
+        {rescheduleModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setRescheduleModalOpen(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="relative w-full max-w-md bg-white border border-outline-variant rounded-xl shadow-2xl z-10 overflow-hidden p-6 space-y-4"
+            >
+              <div className="flex justify-between items-center border-b border-secondary/10 pb-3">
+                <h4 className="font-headline font-bold text-sm text-amber-600 flex items-center gap-2">
+                  <CalendarIcon className="w-5 h-5 text-amber-600" />
+                  Reporter le rendez-vous
+                </h4>
+                <button
+                  onClick={() => setRescheduleModalOpen(false)}
+                  className="p-1 hover:bg-surface-container rounded-full text-on-surface-variant cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-xs text-on-surface-variant">
+                Vous êtes sur le point de reporter le rendez-vous avec <strong>{rescheduleTargetName}</strong>.
+                Sélectionnez une nouvelle date et un créneau horaire.
+              </p>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[11px] font-bold text-on-surface block mb-1">Nouvelle date</label>
+                  <select
+                    value={rescheduleNewDate}
+                    onChange={(e) => {
+                      setRescheduleNewDate(e.target.value);
+                      setRescheduleNewTimeSlot('');
+                    }}
+                    className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  >
+                    <option value="">Sélectionner une date</option>
+                    {availableDatesList.map((ad) => (
+                      <option key={ad._id} value={ad.date}>
+                        {new Date(ad.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {rescheduleNewDate && (
+                  <div>
+                    <label className="text-[11px] font-bold text-on-surface block mb-1">Créneau horaire</label>
+                    <div className="flex flex-wrap gap-2">
+                      {availableDatesList
+                        .find((ad) => ad.date === rescheduleNewDate)
+                        ?.timeSlots.map((slot) => (
+                          <button
+                            key={slot}
+                            onClick={() => setRescheduleNewTimeSlot(slot)}
+                            className={`px-3 py-1.5 text-[10px] font-bold rounded-lg border transition-colors cursor-pointer ${
+                              rescheduleNewTimeSlot === slot
+                                ? 'bg-amber-600 text-white border-amber-600'
+                                : 'border-outline-variant text-on-surface-variant hover:bg-amber-50'
+                            }`}
+                          >
+                            {slot}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  onClick={() => setRescheduleModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold border border-outline-variant text-on-surface-variant rounded-lg hover:bg-surface-container cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  disabled={!rescheduleNewDate || !rescheduleNewTimeSlot}
+                  onClick={async () => {
+                    if (!rescheduleTargetId) return;
+                    await fetch(`${API_URL}/appointments/${rescheduleTargetId}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        status: 'rescheduled',
+                        rescheduledDate: rescheduleNewDate,
+                        rescheduledTimeSlot: rescheduleNewTimeSlot
+                      })
+                    });
+                    setAppointments(prev => prev.map(a => a._id === rescheduleTargetId
+                      ? { ...a, status: 'rescheduled' as const, rescheduledDate: rescheduleNewDate, rescheduledTimeSlot: rescheduleNewTimeSlot }
+                      : a));
+                    setRescheduleModalOpen(false);
+                    addToast(`RDV avec ${rescheduleTargetName} reporté. Email envoyé.`, 'info');
+                  }}
+                  className="px-4 py-2 text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Confirmer le report
+                </button>
               </div>
             </motion.div>
           </div>

@@ -8,6 +8,9 @@ export interface IAppointment extends Document {
   subject: string;
   details: string;
   status: string;
+  rejectionReason: string;
+  rescheduledDate: string;
+  rescheduledTimeSlot: string;
 }
 
 const AppointmentSchema = new Schema<IAppointment>({
@@ -17,7 +20,10 @@ const AppointmentSchema = new Schema<IAppointment>({
   timeSlot: { type: String, required: true },
   subject: { type: String, default: '' },
   details: { type: String, default: '' },
-  status: { type: String, default: 'EN ATTENTE' }
+  status: { type: String, default: 'pending' },
+  rejectionReason: { type: String, default: '' },
+  rescheduledDate: { type: String, default: '' },
+  rescheduledTimeSlot: { type: String, default: '' }
 }, { timestamps: true });
 
 export default mongoose.model<IAppointment>('Appointment', AppointmentSchema);
