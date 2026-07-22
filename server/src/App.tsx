@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import MapPicker from './MapPicker.js';
 import {
   LayoutDashboard,
   Briefcase,
@@ -90,7 +91,7 @@ const getDeptIcon = (id: string) => {
 
 export default function App() {
   // Navigation active tab
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'clients' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'references'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'references'>('dashboard');
 
   // Departments dynamic state
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -168,6 +169,19 @@ export default function App() {
   const [refImagePreview, setRefImagePreview] = useState<string | null>(null);
   const [refExistingImageUrl, setRefExistingImageUrl] = useState<string | null>(null);
 
+  // Parameters state
+  interface Parameter {
+    _id: string;
+    key: string;
+    value: string;
+    order: number;
+  }
+  const [parameters, setParameters] = useState<Parameter[]>([]);
+  const [isParamModalOpen, setIsParamModalOpen] = useState(false);
+  const [editingParam, setEditingParam] = useState<Parameter | null>(null);
+  const [paramKey, setParamKey] = useState('');
+  const [paramValue, setParamValue] = useState('');
+
   const generateClientSlots = (start: string, end: string): string[] => {
     const slots: string[] = [];
     const [sh, sm] = start.split(':').map(Number);
@@ -187,13 +201,14 @@ export default function App() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [deptRes, missionRes, msgRes, apptRes, availRes, refRes] = await Promise.all([
+        const [deptRes, missionRes, msgRes, apptRes, availRes, refRes, paramRes] = await Promise.all([
           fetch(`${API_URL}/departments`),
           fetch(`${API_URL}/missions`),
           fetch(`${API_URL}/messages`),
           fetch(`${API_URL}/appointments`),
           fetch(`${API_URL}/available-dates`),
-          fetch(`${API_URL}/references`)
+          fetch(`${API_URL}/references`),
+          fetch(`${API_URL}/parameters`)
         ]);
         const depts = await deptRes.json();
         const missionsData = await missionRes.json();
@@ -201,12 +216,14 @@ export default function App() {
         const appts = await apptRes.json();
         const avails = await availRes.json();
         const refs = await refRes.json();
+        const params = await paramRes.json();
         setDepartments(depts.map((d: any) => ({ ...d, id: d._id })));
         setMissions(missionsData.map((m: any) => ({ ...m, id: m._id })));
         setMessages(msgs.map((m: any) => ({ ...m, id: m._id })));
         setAppointments(appts);
         setAvailableDatesList(avails);
         setReferences(refs);
+        setParameters(params);
       } catch (err) {
         console.error('Failed to fetch data from API:', err);
       }
@@ -577,6 +594,67 @@ export default function App() {
     }
   };
 
+  // Parameters CRUD handlers
+  const handleOpenAddParam = () => {
+    setEditingParam(null);
+    setParamKey('');
+    setParamValue('');
+    setIsParamModalOpen(true);
+  };
+
+  const handleOpenEditParam = (param: Parameter) => {
+    setEditingParam(param);
+    setParamKey(param.key);
+    setParamValue(param.value);
+    setIsParamModalOpen(true);
+  };
+
+  const handleDeleteParam = async (paramId: string) => {
+    const paramToDelete = parameters.find(p => p._id === paramId);
+    if (!paramToDelete) return;
+    try {
+      await fetch(`${API_URL}/parameters/${paramId}`, { method: 'DELETE' });
+      setParameters(prev => prev.filter(p => p._id !== paramId));
+      addToast(`"${paramToDelete.key}" supprimé.`, 'info');
+    } catch {
+      addToast('Erreur lors de la suppression.', 'info');
+    }
+  };
+
+  const handleSubmitParam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paramKey.trim() || !paramValue.trim()) {
+      addToast('Veuillez remplir tous les champs.', 'info');
+      return;
+    }
+    try {
+      if (editingParam) {
+        const res = await fetch(`${API_URL}/parameters/${editingParam._id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: paramKey.trim(), value: paramValue.trim() }),
+        });
+        if (!res.ok) { addToast('Erreur lors de la modification.', 'info'); return; }
+        const updated = await res.json();
+        setParameters(prev => prev.map(p => p._id === editingParam._id ? updated : p));
+        addToast('Paramètre modifié.', 'info');
+      } else {
+        const res = await fetch(`${API_URL}/parameters`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: paramKey.trim(), value: paramValue.trim(), order: parameters.length + 1 }),
+        });
+        if (!res.ok) { addToast('Erreur lors de l\'ajout.', 'info'); return; }
+        const created = await res.json();
+        setParameters(prev => [...prev, created]);
+        addToast('Paramètre ajouté.', 'info');
+      }
+      setIsParamModalOpen(false);
+    } catch {
+      addToast('Erreur lors de l\'enregistrement.', 'info');
+    }
+  };
+
   const handleSubmitDept = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deptName.trim() || !deptDescription.trim() || !deptHead.trim()) {
@@ -709,17 +787,7 @@ export default function App() {
 
           {/* NOTE: "Documents" and "Missions" have been strictly removed per user request. */}
 
-          <button
-            onClick={() => setActiveTab('clients')}
-            className={`w-full flex items-center gap-3 p-3 rounded-lg font-medium transition-all duration-150 ${
-              activeTab === 'clients'
-                ? 'sidebar-active text-white'
-                : 'text-on-surface-variant hover:bg-secondary-container/20 hover:text-secondary'
-            }`}
-          >
-            <Users className="w-5 h-5" />
-            <span className="text-sm">Clients</span>
-          </button>
+
 
           <button
             onClick={() => setActiveTab('appointments')}
@@ -1705,57 +1773,79 @@ export default function App() {
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
               >
-                <div>
-                  <h3 className="font-headline text-xl font-bold text-on-surface">Paramètres Globaux</h3>
-                  <p className="text-xs text-on-surface-variant">Configurez votre environnement de travail et gérez vos préférences de profil.</p>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-headline text-xl font-bold text-on-surface">Paramètres Globaux</h3>
+                    <p className="text-xs text-on-surface-variant">Gérez les informations d'entreprise affichées sur le site.</p>
+                  </div>
+                  <button
+                    onClick={handleOpenAddParam}
+                    className="bg-primary hover:bg-primary-container text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Ajouter un paramètre
+                  </button>
                 </div>
 
-                <div className="glass-card p-6 rounded-xl max-w-2xl space-y-6">
-                  {/* Account Settings */}
-                  <div className="space-y-4">
-                    <h4 className="font-bold text-sm text-on-surface pb-2 border-b border-secondary/10">Profil Utilisateur</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-on-surface-variant mb-1">Nom Complet</label>
-                        <input
-                          type="text"
-                          defaultValue="Marc-Antoine Durand"
-                          className="w-full bg-surface-container-low border border-outline-variant rounded-lg p-2 text-xs text-on-surface focus:outline-primary"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-on-surface-variant mb-1">Adresse Email</label>
-                        <input
-                          type="email"
-                          defaultValue="ma.durand@rmconsulting.fr"
-                          className="w-full bg-surface-container-low border border-outline-variant rounded-lg p-2 text-xs text-on-surface focus:outline-primary"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Notification Settings */}
-                  <div className="space-y-4 pt-4">
-                    <h4 className="font-bold text-sm text-on-surface pb-2 border-b border-secondary/10">Préférences de Notification</h4>
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-3 text-xs font-medium text-on-surface">
-                        <input type="checkbox" defaultChecked className="rounded text-primary focus:ring-primary w-4 h-4" />
-                        <span>Notifications push en cas de nouvelle mission</span>
-                      </label>
-                      <label className="flex items-center gap-3 text-xs font-medium text-on-surface">
-                        <input type="checkbox" defaultChecked className="rounded text-primary focus:ring-primary w-4 h-4" />
-                        <span>Alertes par email pour les rendez-vous en attente</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="pt-4 flex justify-end">
-                    <button
-                      onClick={() => addToast('Paramètres mis à jour.')}
-                      className="bg-primary hover:bg-primary-container text-white px-4 py-2 rounded-lg text-xs font-bold cursor-pointer"
-                    >
-                      Enregistrer les modifications
-                    </button>
+                {/* Parameters Table */}
+                <div className="bg-white rounded-2xl border border-secondary/10 overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-100">
+                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">#</th>
+                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Clé</th>
+                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Valeur</th>
+                          <th className="text-right py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parameters.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="py-12 text-center">
+                              <Settings className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                              <p className="text-sm text-gray-400 font-medium">Aucun paramètre pour le moment</p>
+                              <button
+                                onClick={handleOpenAddParam}
+                                className="mt-3 text-secondary hover:text-secondary/80 text-xs font-bold cursor-pointer"
+                              >
+                                + Ajouter votre premier paramètre
+                              </button>
+                            </td>
+                          </tr>
+                        ) : (
+                          parameters.map((param, idx) => (
+                            <tr key={param._id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                              <td className="py-3 px-4 text-xs text-gray-400 font-mono">{idx + 1}</td>
+                              <td className="py-3 px-4">
+                                <span className="inline-block bg-primary/10 text-primary px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider">
+                                  {param.key}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-sm text-on-surface max-w-md truncate">{param.value}</td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => handleOpenEditParam(param)}
+                                    className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary-fixed/20 rounded-lg transition-all cursor-pointer"
+                                    title="Modifier"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteParam(param._id)}
+                                    className="p-1.5 text-gray-400 hover:text-error hover:bg-error/10 rounded-lg transition-all cursor-pointer"
+                                    title="Supprimer"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </motion.div>
@@ -3206,6 +3296,89 @@ export default function App() {
                   Confirmer le report
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: PARAMETERS ADD/EDIT */}
+      <AnimatePresence>
+        {isParamModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setIsParamModalOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-lg z-10"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h4 className="font-headline text-lg font-bold text-primary">
+                  {editingParam ? 'Modifier le paramètre' : 'Ajouter un paramètre'}
+                </h4>
+                <button
+                  onClick={() => setIsParamModalOpen(false)}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitParam} className="space-y-5">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Clé</label>
+                  <input
+                    type="text"
+                    value={paramKey}
+                    onChange={e => setParamKey(e.target.value)}
+                    placeholder="Ex: address, phone, email, hours..."
+                    className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Valeur</label>
+                  <textarea
+                    rows={3}
+                    value={paramValue}
+                    onChange={e => setParamValue(e.target.value)}
+                    placeholder="Valeur du paramètre..."
+                    className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none"
+                    required
+                  />
+                </div>
+
+                {paramKey.toLowerCase() === 'address' && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                      Sélectionner sur la carte
+                    </label>
+                    <MapPicker value={paramValue} onChange={setParamValue} />
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsParamModalOpen(false)}
+                    className="px-5 py-2.5 text-xs font-bold text-on-surface-variant border border-outline-variant rounded-xl hover:bg-surface-container transition-colors cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 text-xs font-bold bg-secondary text-white rounded-xl hover:bg-secondary/80 transition-all cursor-pointer"
+                  >
+                    {editingParam ? 'Enregistrer' : 'Ajouter'}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

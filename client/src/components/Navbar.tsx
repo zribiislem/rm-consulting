@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ArrowRight, Building, HelpCircle, Phone, FileText, Users, Calendar } from 'lucide-react';
+import { Menu, X, ArrowRight, Building, HelpCircle, Phone, FileText, Users, Calendar, Briefcase } from 'lucide-react';
 
 interface NavbarProps {
   onBookConsultation: () => void;
@@ -25,6 +25,7 @@ export default function Navbar({ onBookConsultation }: NavbarProps) {
     { name: 'À propos', href: '#about', action: 'about' },
     { name: 'Départements', href: '#departments', action: 'departments' },
     { name: 'Relation Client', href: '#references', action: 'references' },
+    { name: 'Candidature', href: '#job-application', action: 'job' },
     { name: 'Contact', href: '#contact', action: 'contact' },
     { name: 'Rendez-vous', href: '#contact', action: 'rdv' },
   ];

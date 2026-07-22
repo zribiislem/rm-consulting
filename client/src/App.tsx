@@ -10,6 +10,7 @@ import About from './components/About';
 import Departments from './components/Departments';
 import WhyChooseUs from './components/WhyChooseUs';
 import References from './components/References';
+import JobApplication from './components/JobApplication';
 import ContactSection from './components/ContactSection';
 import Footer from './components/Footer';
 
@@ -59,6 +60,9 @@ export default function App() {
 
         {/* Trust logos and Sector references with filters */}
         <References />
+
+        {/* Job Application Form */}
+        <JobApplication />
 
         {/* Dual-tab contact & RDV Booking forms */}
         <ContactSection />

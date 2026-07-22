@@ -9,6 +9,7 @@ import AvailableDate from './models/AvailableDate.js';
 import Appointment from './models/Appointment.js';
 import Stat from './models/Stat.js';
 import Reference from './models/Reference.js';
+import Parameter from './models/Parameter.js';
 
 const seedData = async () => {
   try {
@@ -24,6 +25,7 @@ const seedData = async () => {
     await AvailableDate.deleteMany({});
     await Appointment.deleteMany({});
     await Stat.deleteMany({});
+    await Parameter.deleteMany({});
     await Reference.deleteMany({});
 
     await Department.insertMany([
@@ -177,6 +179,13 @@ const seedData = async () => {
       { name: 'Hôtel Nour Congress & Resort', category: 'Hôtellerie', order: 26, imageUrl: '' },
       { name: 'The Sindbad Hotel', category: 'Hôtellerie', order: 27, imageUrl: '' },
       { name: 'Gîte du Pêcheur', category: 'Hôtellerie', order: 28, imageUrl: '' },
+    ]);
+
+    await Parameter.insertMany([
+      { key: 'address', value: 'RM Consulting, Lot 17 DDHBC, Lotissement Ennasim, Monplaisir, Tunis, Tunisie', order: 1 },
+      { key: 'phone', value: '+216 71 000 000 / +216 22 000 000', order: 2 },
+      { key: 'email', value: 'contact@rm-consulting.tn', order: 3 },
+      { key: 'hours', value: 'Lun - Ven: 08:30 - 17:30 (Heure de Tunis)', order: 4 },
     ]);
 
     console.log('Database seeded successfully!');

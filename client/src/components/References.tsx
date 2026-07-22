@@ -20,7 +20,7 @@ export default function References() {
   useEffect(() => {
     const fetchRefs = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/references');
+        const res = await fetch('/api/references');
         if (res.ok) {
           const data = await res.json();
           setReferences(data);

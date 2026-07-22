@@ -14,12 +14,14 @@ import availableDatesRouter from './routes/available-dates.js';
 import sendEmailRouter from './routes/send-email.js';
 import statsRouter from './routes/stats.js';
 import referencesRouter from './routes/references.js';
+import parametersRouter from './routes/parameters.js';
+import jobApplicationsRouter from './routes/job-applications.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
@@ -32,6 +34,8 @@ app.use('/api/available-dates', availableDatesRouter);
 app.use('/api/send-email', sendEmailRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/references', referencesRouter);
+app.use('/api/parameters', parametersRouter);
+app.use('/api/job-applications', jobApplicationsRouter);
 
 app.get('/api', (_req, res) => {
   res.json({
