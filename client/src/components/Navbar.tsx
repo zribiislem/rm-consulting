@@ -3,9 +3,10 @@ import { Menu, X, ArrowRight, Building, HelpCircle, Phone, FileText, Users, Cale
 
 interface NavbarProps {
   onBookConsultation: () => void;
+  onOpenLogin: () => void;
 }
 
-export default function Navbar({ onBookConsultation }: NavbarProps) {
+export default function Navbar({ onBookConsultation, onOpenLogin }: NavbarProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -90,18 +91,6 @@ export default function Navbar({ onBookConsultation }: NavbarProps) {
 
           {/* Action Buttons */}
           <div className="hidden lg:flex items-center gap-4">
-            <a
-              href="http://localhost:3001"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors ${
-                isScrolled
-                  ? 'border-primary/20 text-primary hover:bg-primary/5'
-                  : 'border-white/30 text-white hover:bg-white/10'
-              }`}
-            >
-              Se connecter
-            </a>
             <button
               onClick={onBookConsultation}
               className="bg-secondary text-white px-5 py-2.5 rounded-lg font-sans font-semibold text-sm hover:bg-secondary/90 shadow-md active:scale-95 transition-all flex items-center gap-1.5"
@@ -113,18 +102,16 @@ export default function Navbar({ onBookConsultation }: NavbarProps) {
 
           {/* Mobile Menu Button */}
           <div className="flex items-center gap-3 md:hidden">
-            <a
-              href="http://localhost:3001"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded border ${
+            <button
+              onClick={onOpenLogin}
+              className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded border cursor-pointer ${
                 isScrolled
                   ? 'border-primary/20 text-primary'
                   : 'border-white/30 text-white'
               }`}
             >
-              Se connecter
-            </a>
+              Administration
+            </button>
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className={`p-2 rounded-lg transition-colors ${
@@ -184,15 +171,15 @@ export default function Navbar({ onBookConsultation }: NavbarProps) {
         </div>
 
         <div className="flex flex-col gap-3 pt-6 border-t border-gray-100">
-          <a
-            href="http://localhost:3001"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="w-full text-center border border-gray-200 text-gray-700 py-3 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+          <button
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              onOpenLogin();
+            }}
+            className="w-full text-center border border-gray-200 text-gray-700 py-3 rounded-xl font-medium hover:bg-gray-50 transition-colors cursor-pointer"
           >
-            Se connecter
-          </a>
+            Administration
+          </button>
           <button
             onClick={() => {
               setIsMobileMenuOpen(false);

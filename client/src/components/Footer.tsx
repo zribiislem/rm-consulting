@@ -1,6 +1,10 @@
-import { ArrowUp, Mail, Phone, MapPin, ExternalLink } from 'lucide-react';
+import { ArrowUp, Mail, Phone, MapPin } from 'lucide-react';
 
-export default function Footer() {
+interface FooterProps {
+  onOpenLogin: () => void;
+}
+
+export default function Footer({ onOpenLogin }: FooterProps) {
   const handleScrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -76,6 +80,14 @@ export default function Footer() {
               <a href="mailto:rezgui.mihoub@rmconsulting.tn" className="hover:underline">
                 rezgui.mihoub@rmconsulting.tn
               </a>
+            </li>
+            <li>
+              <button
+                onClick={onOpenLogin}
+                className="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-secondary-fixed text-primary text-xs font-bold rounded-lg hover:bg-white transition-colors cursor-pointer"
+              >
+                Administration
+              </button>
             </li>
           </ul>
         </div>

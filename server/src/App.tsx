@@ -299,7 +299,7 @@ export default function App() {
 
   // Stats computation
   const activeMissionsCount = missions.length + 21; // Mock constant added to make it matches the original "24"
-  const unreadMessagesCount = messages.filter((m) => m.isUnread && m.sender !== 'Marc-Antoine Durand' && !m.parentId).length;
+  const unreadMessagesCount = messages.filter((m) => m.isUnread && m.sender !== 'Rezgui Mihoub' && !m.parentId).length;
 
   // Handle Nouvelle Mission
   const handleCreateMission = async (e: React.FormEvent) => {
@@ -380,8 +380,8 @@ export default function App() {
     })();
 
     const replyData = {
-      sender: 'Marc-Antoine Durand',
-      role: 'Expert Comptable Senior',
+      sender: 'Rezgui Mihoub',
+      role: 'Expert-Comptable | Associé Gérant',
       initials: 'MA',
       time: timeStr,
       content: replyText.trim(),
@@ -413,7 +413,7 @@ export default function App() {
             to: clientEmail,
             subject: `Re: ${subject} — RM Consulting`,
             text: replyText.trim(),
-            senderName: 'Marc-Antoine Durand',
+            senderName: 'Rezgui Mihoub',
           })
         });
         addToast(`Email envoyé à ${clientEmail}`);
@@ -832,7 +832,7 @@ export default function App() {
           {/* NOTE: "Nouvelle Mission" and "Aide" buttons have been strictly removed per user request. */}
 
           <button
-            onClick={() => addToast('Déconnexion simulée avec succès.', 'info')}
+            onClick={() => window.location.href = 'http://localhost:3000/#login'}
             className="w-full text-left text-on-surface-variant hover:text-error flex items-center gap-3 p-2 rounded-lg text-sm transition-colors cursor-pointer"
           >
             <LogOut className="w-5 h-5 text-on-surface-variant" />
@@ -847,7 +847,7 @@ export default function App() {
         {/* TopAppBar Header */}
         <header className="sticky top-0 bg-surface/95 backdrop-blur-md border-b border-secondary/20 h-16 flex items-center justify-between px-8 z-30 shadow-sm">
           <div>
-            <h2 className="font-headline text-lg font-semibold text-on-surface">Bonjour, Marc-Antoine</h2>
+            <h2 className="font-headline text-lg font-semibold text-on-surface">Bonjour, Rezgui</h2>
             <p className="text-[11px] text-on-surface-variant">Voici le récapitulatif de RM Consulting pour aujourd'hui.</p>
           </div>
 
@@ -881,12 +881,12 @@ export default function App() {
                         </span>
                       </div>
                       <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
-                        {messages.filter(m => m.isUnread && m.sender !== 'Marc-Antoine Durand' && !m.parentId).length === 0 ? (
+                        {messages.filter(m => m.isUnread && m.sender !== 'Rezgui Mihoub' && !m.parentId).length === 0 ? (
                           <div className="text-center py-4 text-xs text-on-surface-variant">
                             Aucune nouvelle notification
                           </div>
                         ) : (
-                          messages.filter(m => m.isUnread && m.sender !== 'Marc-Antoine Durand' && !m.parentId).map((msg) => (
+                          messages.filter(m => m.isUnread && m.sender !== 'Rezgui Mihoub' && !m.parentId).map((msg) => (
                             <div
                               key={msg.id}
                               onClick={() => {
@@ -914,12 +914,12 @@ export default function App() {
 
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
-                <p className="text-xs font-semibold text-on-surface">M.A. Durand</p>
-                <p className="text-[10px] text-on-surface-variant">Expert Comptable Senior</p>
+                <p className="text-xs font-semibold text-on-surface">R. Mihoub</p>
+                <p className="text-[10px] text-on-surface-variant">Expert-Comptable | Associé Gérant</p>
               </div>
               <img
                 className="w-10 h-10 rounded-full object-cover border-2 border-primary/20"
-                alt="Marc-Antoine Durand"
+                alt="Rezgui Mihoub"
                 src="https://lh3.googleusercontent.com/aida-public/AB6AXuDFY1AX2x_o1O4QscnU0BaZ3ua0nFiUZsq_0nlZ3LWpp3-TYZIT083pMkowacPzs6IrGD2acBFVbLsooN0ZZ4VMTVMVJD6oo8s5uG-EB_tXqghd9jZ_z9M5nN2VeE8dXwfJm2yzKTI59tuFyq41MAL7QMxVTtg0U7myvURir-yDJiwSNn0EolHVybo5XBUn20j5K0c-qHvvEG0BzJc61HFAVXRMItNbbWwSAhVM650aPjatC_2pRzWXjg"
               />
             </div>
@@ -1010,7 +1010,7 @@ export default function App() {
                     <div className="flex-1 p-4 space-y-4 overflow-y-auto max-h-[350px] custom-scrollbar">
                       <AnimatePresence initial={false}>
                         {(() => {
-                          const clientMessages = messages.filter(m => m.sender !== 'Marc-Antoine Durand' && !m.parentId).sort((a, b) => (a.isUnread === b.isUnread ? 0 : a.isUnread ? -1 : 1));
+                          const clientMessages = messages.filter(m => m.sender !== 'Rezgui Mihoub' && !m.parentId).sort((a, b) => (a.isUnread === b.isUnread ? 0 : a.isUnread ? -1 : 1));
                           return clientMessages.length === 0 ? (
                             <div className="text-center py-8 text-sm text-on-surface-variant flex flex-col items-center gap-2">
                               <MessageSquare className="w-8 h-8 text-on-surface-variant/30" />
@@ -2442,7 +2442,7 @@ export default function App() {
                     });
 
                   return threadMessages.map((msg, idx) => {
-                    const isMe = msg.sender === 'Marc-Antoine Durand';
+                    const isMe = msg.sender === 'Rezgui Mihoub';
                     const prevMsg = threadMessages[idx - 1];
                     const showHeader = !prevMsg || prevMsg.sender !== msg.sender;
 

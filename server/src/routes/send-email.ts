@@ -36,7 +36,7 @@ router.post('/', async (req: Request, res: Response) => {
           </div>
           <div style="background: #f9f9f9; padding: 20px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">
             <p style="color: #333; font-size: 14px;">Bonjour,</p>
-            <p style="color: #333; font-size: 14px;">${senderName || 'Marc-Antoine Durand'} vous a répondu depuis votre espace client RM Consulting :</p>
+            <p style="color: #333; font-size: 14px;">${senderName || 'Rezgui Mihoub'} vous a répondu depuis votre espace client RM Consulting :</p>
             <div style="background: white; border-left: 4px solid #6c0042; padding: 15px; margin: 15px 0; border-radius: 0 8px 8px 0;">
               <p style="color: #555; font-size: 13px; margin: 0; line-height: 1.6;">${text.replace(/\n/g, '<br>')}</p>
             </div>
