@@ -20,6 +20,16 @@ export default function App() {
   const [showLogin, setShowLogin] = useState(() => window.location.hash === '#login');
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('logout') === '1') {
+      localStorage.removeItem('rm_admin_token');
+      window.history.replaceState({}, '', window.location.pathname);
+      window.location.hash = 'login';
+      setShowLogin(true);
+    }
+  }, []);
+
+  useEffect(() => {
     const onHashChange = () => setShowLogin(window.location.hash === '#login');
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);

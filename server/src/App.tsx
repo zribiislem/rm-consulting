@@ -90,6 +90,8 @@ const getDeptIcon = (id: string) => {
 };
 
 export default function App() {
+  const [isAuthChecked, setIsAuthChecked] = useState(false);
+
   // Navigation active tab
   const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'references'>('dashboard');
 
@@ -288,6 +290,41 @@ export default function App() {
 
   // Notifications alerts
   const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'info' }[]>([]);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const urlToken = params.get('token');
+      let token = localStorage.getItem('rm_admin_token');
+
+      if (urlToken) {
+        token = urlToken;
+        localStorage.setItem('rm_admin_token', urlToken);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      if (!token) {
+        window.location.href = 'http://localhost:3000/#login';
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          localStorage.removeItem('rm_admin_token');
+          window.location.href = 'http://localhost:3000/#login';
+          return;
+        }
+        setIsAuthChecked(true);
+      } catch {
+        window.location.href = 'http://localhost:3000/#login';
+      }
+    };
+
+    checkAuth();
+  }, []);
 
   const addToast = (message: string, type: 'success' | 'info' = 'success') => {
     const id = Date.now().toString();
@@ -724,6 +761,17 @@ export default function App() {
     return acc;
   }, {});
 
+  if (!isAuthChecked) {
+    return (
+      <div className="min-h-screen bg-[#f9f9f9] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-[#6c0042] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-[#554249]">Vérification de l'authentification...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background text-on-surface font-sans flex relative overflow-x-hidden">
       
@@ -832,7 +880,7 @@ export default function App() {
           {/* NOTE: "Nouvelle Mission" and "Aide" buttons have been strictly removed per user request. */}
 
           <button
-            onClick={() => window.location.href = 'http://localhost:3000/#login'}
+            onClick={() => { localStorage.removeItem('rm_admin_token'); window.location.href = 'http://localhost:3000/?logout=1'; }}
             className="w-full text-left text-on-surface-variant hover:text-error flex items-center gap-3 p-2 rounded-lg text-sm transition-colors cursor-pointer"
           >
             <LogOut className="w-5 h-5 text-on-surface-variant" />

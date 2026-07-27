@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft } from 'lucide-react';
 import { LoginHeroSection } from './LoginHeroSection';
@@ -11,6 +11,40 @@ interface LoginPageProps {
 
 export default function LoginPage({ onBackToHome }: LoginPageProps) {
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState<boolean>(false);
+  const [isChecking, setIsChecking] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem('rm_admin_token');
+    if (token) {
+      fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => {
+          if (res.ok) {
+            window.location.href = `http://localhost:3001/?token=${token}`;
+          } else {
+            localStorage.removeItem('rm_admin_token');
+            setIsChecking(false);
+          }
+        })
+        .catch(() => {
+          setIsChecking(false);
+        });
+    } else {
+      setIsChecking(false);
+    }
+  }, []);
+
+  if (isChecking) {
+    return (
+      <div className="min-h-screen bg-[#f9f9f9] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-[#6c0042] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-[#554249]">Vérification de l'authentification...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f9f9f9] text-[#1a1c1c] overflow-x-hidden font-sans select-none">

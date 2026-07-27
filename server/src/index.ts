@@ -16,6 +16,7 @@ import statsRouter from './routes/stats.js';
 import referencesRouter from './routes/references.js';
 import parametersRouter from './routes/parameters.js';
 import jobApplicationsRouter from './routes/job-applications.js';
+import authRouter from './routes/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,6 +36,8 @@ app.use('/api/send-email', sendEmailRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/references', referencesRouter);
 app.use('/api/parameters', parametersRouter);
+app.use('/api/auth', authRouter);
+
 app.use('/api/job-applications', jobApplicationsRouter);
 
 app.get('/api', (_req, res) => {
@@ -64,8 +67,7 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
-connectDB().finally(() => {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
+connectDB();
