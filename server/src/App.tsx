@@ -958,6 +958,16 @@ export default function App() {
               </AnimatePresence>
             </div>
 
+            <a
+              href="http://localhost:3000"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-all"
+            >
+              <Globe className="w-4 h-4" />
+              <span className="hidden sm:inline">Voir le site</span>
+            </a>
+
             <div className="h-8 w-[1px] bg-secondary/20" />
 
             <div className="flex items-center gap-3">
