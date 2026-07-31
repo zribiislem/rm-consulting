@@ -73,6 +73,50 @@ interface Department {
 
 const API_URL = '/api';
 
+const getHostname = (): string => window.location.hostname || 'localhost';
+
+const siteOrigin = (): string => {
+  try {
+    const stored = localStorage.getItem('rm_site_origin');
+    if (stored) return stored;
+  } catch {
+    // localStorage unavailable (sandboxed iframe) — fall through to default
+  }
+  return `${window.location.protocol}//${getHostname()}:3000`;
+};
+
+const safeGetToken = (): string | null => {
+  try {
+    return localStorage.getItem('rm_admin_token');
+  } catch {
+    return null;
+  }
+};
+
+const safeSetToken = (token: string): void => {
+  try {
+    localStorage.setItem('rm_admin_token', token);
+  } catch {
+    // ignore storage errors
+  }
+};
+
+const safeRemoveToken = (): void => {
+  try {
+    localStorage.removeItem('rm_admin_token');
+  } catch {
+    // ignore storage errors
+  }
+};
+
+const safeSetSiteOrigin = (origin: string): void => {
+  try {
+    localStorage.setItem('rm_site_origin', origin);
+  } catch {
+    // ignore storage errors
+  }
+};
+
 const getDeptIcon = (id: string) => {
   switch (id) {
     case 'audit':
@@ -337,16 +381,18 @@ export default function App() {
     const checkAuth = async () => {
       const params = new URLSearchParams(window.location.search);
       const urlToken = params.get('token');
-      let token = localStorage.getItem('rm_admin_token');
+      let token = safeGetToken();
 
       if (urlToken) {
         token = urlToken;
-        localStorage.setItem('rm_admin_token', urlToken);
+        safeSetToken(urlToken);
+        const site = params.get('site');
+        if (site) safeSetSiteOrigin(site);
         window.history.replaceState({}, document.title, window.location.pathname);
       }
 
       if (!token) {
-        window.location.href = 'http://localhost:3000/#login';
+        window.location.href = `${siteOrigin()}/#login`;
         return;
       }
 
@@ -355,13 +401,13 @@ export default function App() {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
-          localStorage.removeItem('rm_admin_token');
-          window.location.href = 'http://localhost:3000/#login';
+          safeRemoveToken();
+          window.location.href = `${siteOrigin()}/#login`;
           return;
         }
         setIsAuthChecked(true);
       } catch {
-        window.location.href = 'http://localhost:3000/#login';
+        window.location.href = `${siteOrigin()}/#login`;
       }
     };
 
@@ -946,7 +992,7 @@ export default function App() {
           {/* NOTE: "Nouvelle Mission" and "Aide" buttons have been strictly removed per user request. */}
 
           <button
-            onClick={() => { localStorage.removeItem('rm_admin_token'); window.location.href = 'http://localhost:3000/?logout=1'; }}
+            onClick={() => { safeRemoveToken(); window.location.href = `${siteOrigin()}/?logout=1`; }}
             className="w-full text-left text-on-surface-variant hover:text-error flex items-center gap-3 p-2 rounded-lg text-sm transition-colors cursor-pointer"
           >
             <LogOut className="w-5 h-5 text-on-surface-variant" />
@@ -1025,7 +1071,7 @@ export default function App() {
             </div>
 
             <a
-              href="http://localhost:3000"
+              href={siteOrigin()}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-all"
@@ -2571,7 +2617,7 @@ export default function App() {
                               applicationDeadline: new Date(offerDeadline).toISOString(),
                             };
                             try {
-                              const token = localStorage.getItem('rm_admin_token');
+                              const token = safeGetToken();
                               const headers: Record<string, string> = { 'Content-Type': 'application/json' };
                               if (token) headers['Authorization'] = 'Bearer ' + token;
 

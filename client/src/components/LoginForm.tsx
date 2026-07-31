@@ -76,7 +76,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onOpenForgotPassword }) =>
       }
 
       localStorage.setItem('rm_admin_token', data.token);
-      window.location.href = `http://localhost:3001/?token=${data.token}`;
+      const adminUrl = `${window.location.protocol}//${window.location.hostname || 'localhost'}:3001`;
+      window.location.href = `${adminUrl}/?token=${data.token}&site=${encodeURIComponent(window.location.origin)}`;
     } catch {
       setIsVerifying(false);
       setVerifyError('Erreur de connexion au serveur.');

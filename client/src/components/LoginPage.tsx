@@ -21,7 +21,8 @@ export default function LoginPage({ onBackToHome }: LoginPageProps) {
       })
         .then((res) => {
           if (res.ok) {
-            window.location.href = `http://localhost:3001/?token=${token}`;
+            const adminUrl = `${window.location.protocol}//${window.location.hostname || 'localhost'}:3001`;
+            window.location.href = `${adminUrl}/?token=${token}&site=${encodeURIComponent(window.location.origin)}`;
           } else {
             localStorage.removeItem('rm_admin_token');
             setIsChecking(false);
