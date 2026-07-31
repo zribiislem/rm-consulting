@@ -3,6 +3,7 @@ dotenv.config();
 
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import connectDB from './config/db.js';
@@ -16,16 +17,20 @@ import statsRouter from './routes/stats.js';
 import referencesRouter from './routes/references.js';
 import parametersRouter from './routes/parameters.js';
 import jobApplicationsRouter from './routes/job-applications.js';
+import jobOffersRouter from './routes/job-offers.js';
 import authRouter from './routes/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3001;
 
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: false,
+}));
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
 
 app.use('/api/departments', departmentsRouter);
 app.use('/api/missions', missionsRouter);
@@ -39,6 +44,9 @@ app.use('/api/parameters', parametersRouter);
 app.use('/api/auth', authRouter);
 
 app.use('/api/job-applications', jobApplicationsRouter);
+app.use('/api/job-offers', jobOffersRouter);
+
+const PORT = process.env.PORT || 3001;
 
 app.get('/api', (_req, res) => {
   res.json({

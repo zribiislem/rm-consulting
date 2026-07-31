@@ -33,7 +33,8 @@ import {
   Trash2,
   Image as ImageIcon,
   Upload,
-  XCircle
+  XCircle,
+  FileText
 } from 'lucide-react';
 
 // Interfaces
@@ -93,7 +94,7 @@ export default function App() {
   const [isAuthChecked, setIsAuthChecked] = useState(false);
 
   // Navigation active tab
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'references'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'references' | 'recruitment' | 'offers'>('dashboard');
 
   // Departments dynamic state
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -171,6 +172,41 @@ export default function App() {
   const [refImagePreview, setRefImagePreview] = useState<string | null>(null);
   const [refExistingImageUrl, setRefExistingImageUrl] = useState<string | null>(null);
 
+  // Job applications state
+  interface JobApp {
+    _id: string;
+    lastName: string;
+    firstName: string;
+    email: string;
+    phone: string;
+    position: string;
+    education: string;
+    experience?: string;
+    address?: string;
+    cvUrl: string;
+    coverLetterUrl?: string;
+    motivationMessage?: string;
+    status: 'pending' | 'reviewed' | 'accepted' | 'rejected';
+    createdAt: string;
+  }
+  const [jobApps, setJobApps] = useState<JobApp[]>([]);
+  const [selectedApp, setSelectedApp] = useState<JobApp | null>(null);
+  const [isAppDetailOpen, setIsAppDetailOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [appToDelete, setAppToDelete] = useState<string | null>(null);
+
+  // Job offers state
+  const [jobOffers, setJobOffers] = useState<any[]>([]);
+  const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
+  const [editingOffer, setEditingOffer] = useState<any>(null);
+  const [offerTitle, setOfferTitle] = useState('');
+  const [offerDepartment, setOfferDepartment] = useState('');
+  const [offerLocation, setOfferLocation] = useState('');
+  const [offerContractType, setOfferContractType] = useState('');
+  const [offerDescription, setOfferDescription] = useState('');
+  const [offerSkillsText, setOfferSkillsText] = useState('');
+  const [offerDeadline, setOfferDeadline] = useState('');
+
   // Parameters state
   interface Parameter {
     _id: string;
@@ -203,14 +239,16 @@ export default function App() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [deptRes, missionRes, msgRes, apptRes, availRes, refRes, paramRes] = await Promise.all([
+        const [deptRes, missionRes, msgRes, apptRes, availRes, refRes, paramRes, jobRes, offerRes] = await Promise.all([
           fetch(`${API_URL}/departments`),
           fetch(`${API_URL}/missions`),
           fetch(`${API_URL}/messages`),
           fetch(`${API_URL}/appointments`),
           fetch(`${API_URL}/available-dates`),
           fetch(`${API_URL}/references`),
-          fetch(`${API_URL}/parameters`)
+          fetch(`${API_URL}/parameters`),
+          fetch(`${API_URL}/job-applications`),
+          fetch(`${API_URL}/job-offers`)
         ]);
         const depts = await deptRes.json();
         const missionsData = await missionRes.json();
@@ -219,6 +257,8 @@ export default function App() {
         const avails = await availRes.json();
         const refs = await refRes.json();
         const params = await paramRes.json();
+        const jobs = await jobRes.json();
+        const offersData = await offerRes.json();
         setDepartments(depts.map((d: any) => ({ ...d, id: d._id })));
         setMissions(missionsData.map((m: any) => ({ ...m, id: m._id })));
         setMessages(msgs.map((m: any) => ({ ...m, id: m._id })));
@@ -226,6 +266,8 @@ export default function App() {
         setAvailableDatesList(avails);
         setReferences(refs);
         setParameters(params);
+        setJobApps(jobs);
+        setJobOffers(offersData);
       } catch (err) {
         console.error('Failed to fetch data from API:', err);
       }
@@ -847,6 +889,30 @@ export default function App() {
           >
             <CalendarIcon className="w-5 h-5" />
             <span className="text-sm">Rendez-vous</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('recruitment')}
+            className={`w-full flex items-center gap-3 p-3 rounded-lg font-medium transition-all duration-150 ${
+              activeTab === 'recruitment'
+                ? 'sidebar-active text-white'
+                : 'text-on-surface-variant hover:bg-secondary-container/20 hover:text-secondary'
+            }`}
+          >
+            <Briefcase className="w-5 h-5" />
+            <span className="text-sm">Recrutement</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('offers')}
+            className={`w-full flex items-center gap-3 p-3 rounded-lg font-medium transition-all duration-150 ${
+              activeTab === 'offers'
+                ? 'sidebar-active text-white'
+                : 'text-on-surface-variant hover:bg-secondary-container/20 hover:text-secondary'
+            }`}
+          >
+            <ClipboardList className="w-5 h-5" />
+            <span className="text-sm">Offres d'emploi</span>
           </button>
 
           <button
@@ -1813,6 +1879,759 @@ export default function App() {
             )}
 
             {/* 5. SETTINGS VIEW */}
+            {activeTab === 'recruitment' && (
+              <motion.div
+                key="recruitment"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-8"
+              >
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-headline text-2xl font-bold text-primary">Recrutement</h3>
+                    <p className="text-xs text-on-surface-variant">
+                      Gérez les candidatures reçues. <strong>{jobApps.length}</strong> candidature(s) au total.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold">
+                      {jobApps.filter(a => a.status === 'new').length} Nouvelle(s)
+                    </span>
+                    <span className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold">
+                      {jobApps.filter(a => a.status === 'analyzing').length} Analyse(s)
+                    </span>
+                    <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold">
+                      {jobApps.filter(a => a.status === 'accepted').length} Acceptée(s)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Search & Filters */}
+                <div className="glass-card rounded-xl p-4 flex flex-col md:flex-row gap-4">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Rechercher un candidat..."
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        fetch(`${API_URL}/job-applications${val ? `?search=${encodeURIComponent(val)}` : ''}`)
+                          .then(r => r.json())
+                          .then(setJobApps)
+                          .catch(() => {});
+                      }}
+                    />
+                  </div>
+                  <select
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      fetch(`${API_URL}/job-applications${val ? `?status=${val}` : ''}`)
+                        .then(r => r.json())
+                        .then(setJobApps)
+                        .catch(() => {});
+                    }}
+                    className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none"
+                  >
+                    <option value="">Tous les statuts</option>
+                    <option value="new">Nouvelle</option>
+                    <option value="analyzing">En cours d'analyse</option>
+                    <option value="interview">Entretien programmé</option>
+                    <option value="accepted">Acceptée</option>
+                    <option value="rejected">Refusée</option>
+                  </select>
+                  <select
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      fetch(`${API_URL}/job-applications${val ? `?position=${encodeURIComponent(val)}` : ''}`)
+                        .then(r => r.json())
+                        .then(setJobApps)
+                        .catch(() => {});
+                    }}
+                    className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none"
+                  >
+                    <option value="">Tous les postes</option>
+                    {[...new Set(jobApps.map(a => a.position))].map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                  <select
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const [sortBy, sortOrder] = val.split('-');
+                      fetch(`${API_URL}/job-applications?sortBy=${sortBy}&sortOrder=${sortOrder || 'desc'}`)
+                        .then(r => r.json())
+                        .then(setJobApps)
+                        .catch(() => {});
+                    }}
+                    className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none"
+                  >
+                    <option value="date-desc">Plus récent</option>
+                    <option value="date-asc">Plus ancien</option>
+                    <option value="name-asc">Nom A-Z</option>
+                    <option value="name-desc">Nom Z-A</option>
+                  </select>
+                </div>
+
+                {jobApps.length === 0 ? (
+                  <div className="glass-card p-12 text-center rounded-2xl border border-dashed border-secondary/20">
+                    <Briefcase className="w-12 h-12 text-on-surface-variant/40 mx-auto mb-4" />
+                    <p className="text-sm font-semibold text-on-surface">Aucune candidature</p>
+                    <p className="text-xs text-on-surface-variant mt-1">Les candidatures des postulants apparaîtront ici.</p>
+                  </div>
+                ) : (
+                  <div className="glass-card rounded-xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-surface-container-low border-b border-secondary/10">
+                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Candidat</th>
+                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Poste</th>
+                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Email</th>
+                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Date</th>
+                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Statut</th>
+                            <th className="text-right p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {jobApps.map((app: any) => (
+                            <tr key={app._id} className="border-b border-secondary/5 hover:bg-surface-container-low/50 transition-colors">
+                              <td className="p-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                                    {app.firstName?.[0]}{app.lastName?.[0]}
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-on-surface text-sm">{app.firstName} {app.lastName}</p>
+                                    <p className="text-[10px] text-on-surface-variant">{app.phone}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="p-4 text-on-surface font-medium text-sm">{app.position}</td>
+                              <td className="p-4 text-on-surface-variant text-sm">{app.email}</td>
+                              <td className="p-4 text-on-surface-variant text-sm">{new Date(app.createdAt).toLocaleDateString('fr-FR')}</td>
+                              <td className="p-4">
+                                <span className={`inline-block text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                                  app.status === 'new' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                  app.status === 'analyzing' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                                  app.status === 'interview' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                                  app.status === 'accepted' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                  'bg-red-50 text-red-700 border border-red-200'
+                                }`}>
+                                  {app.status === 'new' ? 'Nouvelle' : app.status === 'analyzing' ? 'Analyse' : app.status === 'interview' ? 'Entretien' : app.status === 'accepted' ? 'Acceptée' : 'Refusée'}
+                                </span>
+                              </td>
+                              <td className="p-4 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedApp(app);
+                                      setIsAppDetailOpen(true);
+                                    }}
+                                    className="p-2 text-on-surface-variant hover:text-primary hover:bg-primary/5 rounded-lg transition-all cursor-pointer"
+                                    title="Voir détails"
+                                  >
+                                    <Search className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const pdfWindow = window.open('', '_blank');
+                                      if (!pdfWindow) return;
+                                      const statusLabel = app.status === 'new' ? 'Nouvelle' : app.status === 'analyzing' ? 'En cours d\'analyse' : app.status === 'interview' ? 'Entretien programmé' : app.status === 'accepted' ? 'Acceptée' : 'Refusée';
+                                      pdfWindow.document.write(`
+                                        <html>
+                                        <head><style>
+                                          body { font-family: 'Inter', Arial, sans-serif; padding: 40px; color: #1a1c1c; max-width: 800px; margin: 0 auto; }
+                                          h1 { font-size: 24px; color: #6c0042; border-bottom: 2px solid #C8A96A; padding-bottom: 10px; }
+                                          .section { margin: 20px 0; }
+                                          .label { font-size: 11px; text-transform: uppercase; color: #735b24; font-weight: 700; letter-spacing: 1px; }
+                                          .value { font-size: 14px; margin: 4px 0 16px 0; color: #1a1c1c; }
+                                          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+                                          .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+                                          .badge-new { background: #fef3c7; color: #b45309; }
+                                          .badge-analyzing { background: #dbeafe; color: #1d4ed8; }
+                                          .badge-interview { background: #f3e8ff; color: #7c3aed; }
+                                          .badge-accepted { background: #d1fae5; color: #047857; }
+                                          .badge-rejected { background: #fee2e2; color: #b91c1c; }
+                                          footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af; text-align: center; }
+                                          table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+                                          th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
+                                          th { color: #735b24; font-weight: 700; font-size: 11px; text-transform: uppercase; }
+                                        </style></head>
+                                        <body>
+                                          <h1>Fiche Candidat</h1>
+                                          <p style="color: #735b24; font-size: 12px; margin-top: -5px;">RM Consulting — Recrutement</p>
+                                          <div class="section"><div class="label">Nom complet</div><div class="value">${app.firstName} ${app.lastName}</div></div>
+                                          <div class="grid">
+                                            <div><div class="label">Email</div><div class="value">${app.email}</div></div>
+                                            <div><div class="label">Téléphone</div><div class="value">${app.phone}</div></div>
+                                          </div>
+                                          <div class="section"><div class="label">Poste recherché</div><div class="value">${app.position}</div></div>
+                                          <div class="grid">
+                                            <div><div class="label">Niveau d'étude</div><div class="value">${app.education}</div></div>
+                                            <div><div class="label">Expérience</div><div class="value">${app.experience || 'Non spécifiée'}</div></div>
+                                          </div>
+                                          <div class="section"><div class="label">Adresse</div><div class="value">${app.address || 'Non spécifiée'}</div></div>
+                                          ${app.motivationMessage ? '<div class="section"><div class="label">Message de motivation</div><div class="value">' + app.motivationMessage + '</div></div>' : ''}
+                                          <div class="section"><div class="label">Statut</div><div><span class="badge badge-${app.status}">${statusLabel}</span></div></div>
+                                          <div class="section"><div class="label">Date de candidature</div><div class="value">${new Date(app.createdAt).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div></div>
+                                          ${app.attachments && app.attachments.length > 0 ? '<div class="section"><div class="label">Pièces jointes</div><table><tr><th>Fichier</th><th>Type</th><th>Taille</th></tr>' + app.attachments.map((a: any) => '<tr><td>' + a.originalName + '</td><td>' + a.type + '</td><td>' + Math.round(a.size / 1024) + ' Ko</td></tr>').join('') + '</table></div>' : ''}
+                                          <footer>RM Consulting — Expertise Comptable & Audit — Document généré le ${new Date().toLocaleDateString('fr-FR')}</footer>
+                                          <script>window.onload = function() { window.print(); }<\/script>
+                                        </body>
+                                        </html>
+                                      `);
+                                      pdfWindow.document.close();
+                                    }}
+                                    className="p-2 text-on-surface-variant hover:text-secondary hover:bg-secondary/5 rounded-lg transition-all cursor-pointer"
+                                    title="Exporter PDF"
+                                  >
+                                    <FileText className="w-4 h-4" />
+                                  </button>
+                                  <select
+                                    value={app.status}
+                                    onChange={async (e) => {
+                                      const newStatus = e.target.value;
+                                      try {
+                                        const res = await fetch(`${API_URL}/job-applications/${app._id}`, {
+                                          method: 'PUT',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ status: newStatus }),
+                                        });
+                                        if (res.ok) {
+                                          setJobApps((prev: any[]) => prev.map((a: any) => a._id === app._id ? { ...a, status: newStatus } : a));
+                                          if (selectedApp?._id === app._id) setSelectedApp((prev: any) => prev ? { ...prev, status: newStatus } : null);
+                                          addToast(`Statut mis à jour : ${app.firstName} ${app.lastName}`);
+                                        }
+                                      } catch { addToast('Erreur lors de la mise à jour', 'info'); }
+                                    }}
+                                    className={`text-[10px] font-bold px-2 py-1.5 rounded-lg border cursor-pointer ${
+                                      app.status === 'new' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                      app.status === 'analyzing' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                      app.status === 'interview' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                      app.status === 'accepted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                      'bg-red-50 text-red-700 border-red-200'
+                                    }`}
+                                  >
+                                    <option value="new">Nouvelle</option>
+                                    <option value="analyzing">Analyse</option>
+                                    <option value="interview">Entretien</option>
+                                    <option value="accepted">Acceptée</option>
+                                    <option value="rejected">Refusée</option>
+                                  </select>
+                                  <button
+                                    onClick={() => {
+                                      setAppToDelete(app._id);
+                                      setIsDeleteConfirmOpen(true);
+                                    }}
+                                    className="p-2 text-on-surface-variant hover:text-error hover:bg-red-50 rounded-lg transition-all cursor-pointer"
+                                    title="Supprimer"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Detail Modal */}
+                <AnimatePresence>
+                  {isAppDetailOpen && selectedApp && (
+                    <>
+                      <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setIsAppDetailOpen(false)} />
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+                      >
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar pointer-events-auto">
+                          <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
+                            <h3 className="font-headline font-bold text-lg text-primary">Détails du candidat</h3>
+                            <button onClick={() => setIsAppDetailOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">
+                              <X className="w-5 h-5 text-gray-500" />
+                            </button>
+                          </div>
+                          <div className="p-6 space-y-6">
+                            <div className="flex items-center gap-4">
+                              <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
+                                {selectedApp.firstName?.[0]}{selectedApp.lastName?.[0]}
+                              </div>
+                              <div>
+                                <h4 className="font-headline font-bold text-lg text-on-surface">{selectedApp.firstName} {selectedApp.lastName}</h4>
+                                <span className={`inline-block mt-1 text-[10px] font-bold px-2 py-1 rounded-full ${
+                                  selectedApp.status === 'new' ? 'bg-amber-50 text-amber-700' :
+                                  selectedApp.status === 'analyzing' ? 'bg-blue-50 text-blue-700' :
+                                  selectedApp.status === 'interview' ? 'bg-purple-50 text-purple-700' :
+                                  selectedApp.status === 'accepted' ? 'bg-emerald-50 text-emerald-700' :
+                                  'bg-red-50 text-red-700'
+                                }`}>
+                                  {selectedApp.status === 'new' ? 'Nouvelle' : selectedApp.status === 'analyzing' ? 'En cours d\'analyse' : selectedApp.status === 'interview' ? 'Entretien programmé' : selectedApp.status === 'accepted' ? 'Acceptée' : 'Refusée'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="bg-surface-container-low rounded-xl p-4">
+                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Email</p>
+                                <p className="text-sm font-medium text-on-surface mt-1">{selectedApp.email}</p>
+                              </div>
+                              <div className="bg-surface-container-low rounded-xl p-4">
+                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Téléphone</p>
+                                <p className="text-sm font-medium text-on-surface mt-1">{selectedApp.phone}</p>
+                              </div>
+                              <div className="bg-surface-container-low rounded-xl p-4">
+                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Poste recherché</p>
+                                <p className="text-sm font-medium text-on-surface mt-1">{selectedApp.position}</p>
+                              </div>
+                              <div className="bg-surface-container-low rounded-xl p-4">
+                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Date</p>
+                                <p className="text-sm font-medium text-on-surface mt-1">{new Date(selectedApp.createdAt).toLocaleDateString('fr-FR')}</p>
+                              </div>
+                              <div className="bg-surface-container-low rounded-xl p-4">
+                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Niveau d'étude</p>
+                                <p className="text-sm font-medium text-on-surface mt-1">{selectedApp.education}</p>
+                              </div>
+                              <div className="bg-surface-container-low rounded-xl p-4">
+                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Expérience</p>
+                                <p className="text-sm font-medium text-on-surface mt-1">{selectedApp.experience || 'Non spécifiée'}</p>
+                              </div>
+                            </div>
+
+                            {selectedApp.address && (
+                              <div className="bg-surface-container-low rounded-xl p-4">
+                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Adresse</p>
+                                <p className="text-sm font-medium text-on-surface mt-1">{selectedApp.address}</p>
+                              </div>
+                            )}
+
+                            {selectedApp.motivationMessage && (
+                              <div className="bg-surface-container-low rounded-xl p-4">
+                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Message de motivation</p>
+                                <p className="text-sm font-medium text-on-surface mt-1 whitespace-pre-wrap">{selectedApp.motivationMessage}</p>
+                              </div>
+                            )}
+
+                            {/* Attachments */}
+                            {selectedApp.attachments && selectedApp.attachments.length > 0 && (
+                              <div className="space-y-3">
+                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Pièces jointes</p>
+                                {selectedApp.attachments.map((att: any, idx: number) => (
+                                  <a
+                                    key={idx}
+                                    href={att.url}
+                                    target="_blank"
+                                    className="flex items-center justify-between bg-surface-container-low rounded-xl px-4 py-3 hover:bg-secondary/5 transition-colors group"
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <FileText className="w-5 h-5 text-secondary" />
+                                      <div>
+                                        <p className="text-sm font-medium text-on-surface group-hover:text-primary transition-colors">{att.originalName}</p>
+                                        <p className="text-[10px] text-on-surface-variant">{att.type === 'cv' ? 'CV' : att.type === 'coverLetter' ? 'Lettre de motivation' : 'Certificat'} — {Math.round(att.size / 1024)} Ko</p>
+                                      </div>
+                                    </div>
+                                    <span className="text-xs text-secondary font-bold">Voir →</span>
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Status update */}
+                            <div className="border-t border-gray-100 pt-4">
+                              <p className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-2">Statut</p>
+                              <select
+                                value={selectedApp.status}
+                                onChange={async (e) => {
+                                  const newStatus = e.target.value;
+                                  try {
+                                    const res = await fetch(`${API_URL}/job-applications/${selectedApp._id}`, {
+                                      method: 'PUT',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ status: newStatus }),
+                                    });
+                                    if (res.ok) {
+                                      const updated = await res.json();
+                                      setJobApps((prev: any[]) => prev.map((a: any) => a._id === selectedApp._id ? updated : a));
+                                      setSelectedApp(updated);
+                                      addToast(`Statut mis à jour : ${selectedApp.firstName} ${selectedApp.lastName}`);
+                                    }
+                                  } catch { addToast('Erreur', 'info'); }
+                                }}
+                                className={`text-sm font-bold px-3 py-2 rounded-lg border w-full cursor-pointer ${
+                                  selectedApp.status === 'new' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                  selectedApp.status === 'analyzing' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                  selectedApp.status === 'interview' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                  selectedApp.status === 'accepted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                  'bg-red-50 text-red-700 border-red-200'
+                                }`}
+                              >
+                                <option value="new">Nouvelle</option>
+                                <option value="analyzing">En cours d'analyse</option>
+                                <option value="interview">Entretien programmé</option>
+                                <option value="accepted">Acceptée</option>
+                                <option value="rejected">Refusée</option>
+                              </select>
+                            </div>
+
+                            {/* Notes */}
+                            <div className="border-t border-gray-100 pt-4">
+                              <p className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-3">Notes internes</p>
+                              <div className="space-y-2 mb-4">
+                                {(selectedApp.notes || []).length === 0 ? (
+                                  <p className="text-xs text-gray-400 italic">Aucune note pour le moment.</p>
+                                ) : (
+                                  selectedApp.notes.map((note: any, idx: number) => (
+                                    <div key={idx} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                                      <div className="flex justify-between items-start mb-1">
+                                        <span className="text-[10px] font-bold text-primary">{note.addedBy}</span>
+                                        <span className="text-[9px] text-gray-400">{new Date(note.createdAt).toLocaleDateString('fr-FR')}</span>
+                                      </div>
+                                      <p className="text-xs text-gray-700">{note.text}</p>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                              <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                const form = e.target as HTMLFormElement;
+                                const input = form.elements.namedItem('note') as HTMLInputElement;
+                                const text = input.value.trim();
+                                if (!text) return;
+                                try {
+                                  const res = await fetch(`${API_URL}/job-applications/${selectedApp._id}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ note: text }),
+                                  });
+                                  if (res.ok) {
+                                    const updated = await res.json();
+                                    setJobApps((prev: any[]) => prev.map((a: any) => a._id === selectedApp._id ? updated : a));
+                                    setSelectedApp(updated);
+                                    input.value = '';
+                                    addToast('Note ajoutée');
+                                  }
+                                } catch { addToast('Erreur', 'info'); }
+                              }} className="flex gap-2">
+                                <input
+                                  name="note"
+                                  type="text"
+                                  placeholder="Ajouter une note..."
+                                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none"
+                                />
+                                <button type="submit" className="px-4 py-2.5 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary-container transition-all cursor-pointer">
+                                  <Send className="w-4 h-4" />
+                                </button>
+                              </form>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+
+                {/* Delete confirmation */}
+                <AnimatePresence>
+                  {isDeleteConfirmOpen && (
+                    <>
+                      <div className="fixed inset-0 bg-black/40 z-50" onClick={() => { setIsDeleteConfirmOpen(false); setAppToDelete(null); }} />
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                      >
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 text-center">
+                          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Trash2 className="w-6 h-6 text-red-500" />
+                          </div>
+                          <h3 className="font-headline font-bold text-lg text-on-surface mb-2">Confirmer la suppression</h3>
+                          <p className="text-sm text-on-surface-variant mb-6">Cette action est irréversible. Tous les fichiers seront également supprimés.</p>
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => { setIsDeleteConfirmOpen(false); setAppToDelete(null); }}
+                              className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold text-on-surface hover:bg-gray-50 transition-all cursor-pointer"
+                            >
+                              Annuler
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!appToDelete) return;
+                                try {
+                                  const res = await fetch(`${API_URL}/job-applications/${appToDelete}`, { method: 'DELETE' });
+                                  if (res.ok) {
+                                    setJobApps((prev: any[]) => prev.filter((a: any) => a._id !== appToDelete));
+                                    addToast('Candidature supprimée');
+                                  }
+                                } catch { addToast('Erreur lors de la suppression', 'info'); }
+                                setIsDeleteConfirmOpen(false);
+                                setAppToDelete(null);
+                              }}
+                              className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-all cursor-pointer"
+                            >
+                              Supprimer
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            )}
+
+            {activeTab === 'offers' && (
+              <motion.div
+                key="offers"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-8"
+              >
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-headline text-2xl font-bold text-primary">Offres d'emploi</h3>
+                    <p className="text-xs text-on-surface-variant">
+                      Gérez les offres publiées. <strong>{jobOffers.length}</strong> offre(s) au total.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingOffer(null);
+                      setOfferTitle('');
+                      setOfferDepartment('');
+                      setOfferLocation('');
+                      setOfferContractType('');
+                      setOfferDescription('');
+                      setOfferSkillsText('');
+                      setOfferDeadline('');
+                      setIsOfferModalOpen(true);
+                    }}
+                    className="px-4 py-2.5 bg-primary text-white hover:bg-primary-container rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md active:scale-95"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Nouvelle offre
+                  </button>
+                </div>
+
+                {jobOffers.length === 0 ? (
+                  <div className="glass-card p-12 text-center rounded-2xl border border-dashed border-secondary/20">
+                    <Briefcase className="w-12 h-12 text-on-surface-variant/40 mx-auto mb-4" />
+                    <p className="text-sm font-semibold text-on-surface">Aucune offre d'emploi</p>
+                    <p className="text-xs text-on-surface-variant mt-1">Créez votre première offre pour commencer à recruter.</p>
+                  </div>
+                ) : (
+                  <div className="glass-card rounded-xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-surface-container-low border-b border-secondary/10">
+                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Titre</th>
+                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Département</th>
+                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Localisation</th>
+                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Contrat</th>
+                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Deadline</th>
+                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Statut</th>
+                            <th className="text-right p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {jobOffers.map((offer: any) => (
+                            <tr key={offer._id} className="border-b border-secondary/5 hover:bg-surface-container-low/50 transition-colors">
+                              <td className="p-4">
+                                <p className="font-bold text-on-surface text-sm">{offer.title}</p>
+                              </td>
+                              <td className="p-4 text-on-surface-variant text-sm">{offer.department}</td>
+                              <td className="p-4 text-on-surface-variant text-sm">{offer.location}</td>
+                              <td className="p-4 text-on-surface-variant text-sm">{offer.contractType}</td>
+                              <td className="p-4 text-on-surface-variant text-sm">{new Date(offer.applicationDeadline).toLocaleDateString('fr-FR')}</td>
+                              <td className="p-4">
+                                <span className={`inline-block text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                                  offer.isActive
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    : 'bg-gray-50 text-gray-500 border border-gray-200'
+                                }`}>
+                                  {offer.isActive ? 'Active' : 'Inactive'}
+                                </span>
+                              </td>
+                              <td className="p-4 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setEditingOffer(offer);
+                                      setOfferTitle(offer.title);
+                                      setOfferDepartment(offer.department);
+                                      setOfferLocation(offer.location);
+                                      setOfferContractType(offer.contractType);
+                                      setOfferDescription(offer.description);
+                                      setOfferSkillsText(offer.requiredSkills?.join('\n') || '');
+                                      setOfferDeadline(new Date(offer.applicationDeadline).toISOString().split('T')[0]);
+                                      setIsOfferModalOpen(true);
+                                    }}
+                                    className="p-2 text-on-surface-variant hover:text-primary hover:bg-primary/5 rounded-lg transition-all cursor-pointer"
+                                    title="Modifier"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const res = await fetch(`${API_URL}/job-offers/${offer._id}/toggle`, { method: 'PATCH' });
+                                        if (res.ok) {
+                                          const updated = await res.json();
+                                          setJobOffers((prev: any[]) => prev.map((o: any) => o._id === offer._id ? updated : o));
+                                          addToast(`Offre ${updated.isActive ? 'activée' : 'désactivée'}`);
+                                        }
+                                      } catch { addToast('Erreur', 'info'); }
+                                    }}
+                                    className={`p-2 rounded-lg transition-all cursor-pointer ${
+                                      offer.isActive
+                                        ? 'text-emerald-600 hover:bg-emerald-50'
+                                        : 'text-gray-400 hover:bg-gray-50'
+                                    }`}
+                                    title={offer.isActive ? 'Désactiver' : 'Activer'}
+                                  >
+                                    {offer.isActive ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (!confirm('Supprimer cette offre ?')) return;
+                                      try {
+                                        const res = await fetch(`${API_URL}/job-offers/${offer._id}`, { method: 'DELETE' });
+                                        if (res.ok) {
+                                          setJobOffers((prev: any[]) => prev.filter((o: any) => o._id !== offer._id));
+                                          addToast('Offre supprimée');
+                                        }
+                                      } catch { addToast('Erreur', 'info'); }
+                                    }}
+                                    className="p-2 text-on-surface-variant hover:text-error hover:bg-red-50 rounded-lg transition-all cursor-pointer"
+                                    title="Supprimer"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Offer Modal */}
+                <AnimatePresence>
+                  {isOfferModalOpen && (
+                    <>
+                      <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setIsOfferModalOpen(false)} />
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+                      >
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto custom-scrollbar pointer-events-auto">
+                          <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                            <h3 className="font-headline font-bold text-lg text-primary">
+                              {editingOffer ? 'Modifier l\'offre' : 'Nouvelle offre d\'emploi'}
+                            </h3>
+                            <button onClick={() => setIsOfferModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">
+                              <X className="w-5 h-5 text-gray-500" />
+                            </button>
+                          </div>
+                          <form onSubmit={async (e) => {
+                            e.preventDefault();
+                            if (!offerTitle || !offerDepartment || !offerLocation || !offerContractType || !offerDescription || !offerSkillsText || !offerDeadline) {
+                              addToast('Veuillez remplir tous les champs.', 'info');
+                              return;
+                            }
+                            const body = {
+                              title: offerTitle,
+                              department: offerDepartment,
+                              location: offerLocation,
+                              contractType: offerContractType,
+                              description: offerDescription,
+                              requiredSkills: offerSkillsText.split('\n').map(s => s.trim()).filter(Boolean),
+                              applicationDeadline: new Date(offerDeadline).toISOString(),
+                            };
+                            try {
+                              const token = localStorage.getItem('rm_admin_token');
+                              const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+                              if (token) headers['Authorization'] = 'Bearer ' + token;
+
+                              if (editingOffer) {
+                                const res = await fetch(`${API_URL}/job-offers/${editingOffer._id}`, {
+                                  method: 'PUT', headers, body: JSON.stringify(body),
+                                });
+                                if (res.ok) {
+                                  const updated = await res.json();
+                                  setJobOffers((prev: any[]) => prev.map((o: any) => o._id === editingOffer._id ? updated : o));
+                                  addToast('Offre modifiée');
+                                }
+                              } else {
+                                const res = await fetch(`${API_URL}/job-offers\`, {
+                                  method: 'POST', headers, body: JSON.stringify(body),
+                                });
+                                if (res.ok) {
+                                  const created = await res.json();
+                                  setJobOffers((prev: any[]) => [created, ...prev]);
+                                  addToast('Offre créée');
+                                }
+                              }
+                              setIsOfferModalOpen(false);
+                            } catch { addToast('Erreur', 'info'); }
+                          }} className="p-6 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-1.5 col-span-2">
+                                <label className="text-xs font-bold text-gray-700">Titre *</label>
+                                <input value={offerTitle} onChange={e => setOfferTitle(e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none" placeholder="Ex: Expert-Comptable" />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-gray-700">Département *</label>
+                                <input value={offerDepartment} onChange={e => setOfferDepartment(e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none" placeholder="Ex: Audit" />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-gray-700">Localisation *</label>
+                                <input value={offerLocation} onChange={e => setOfferLocation(e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none" placeholder="Ex: Tunis" />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-gray-700">Type de contrat *</label>
+                                <input value={offerContractType} onChange={e => setOfferContractType(e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none" placeholder="Ex: CDI, CDD, Stage" />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-gray-700">Date limite *</label>
+                                <input type="date" value={offerDeadline} onChange={e => setOfferDeadline(e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none" />
+                              </div>
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-gray-700">Description *</label>
+                              <textarea value={offerDescription} onChange={e => setOfferDescription(e.target.value)} rows={4} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none" placeholder="Description détaillée du poste..." />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-gray-700">Compétences requises * (une par ligne)</label>
+                              <textarea value={offerSkillsText} onChange={e => setOfferSkillsText(e.target.value)} rows={3} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none" placeholder="Maîtrise des normes IFRS&#10;Excel avancé&#10;Anglais courant" />
+                            </div>
+                            <div className="flex gap-3 pt-2">
+                              <button type="button" onClick={() => setIsOfferModalOpen(false)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold text-on-surface hover:bg-gray-50 transition-all cursor-pointer">Annuler</button>
+                              <button type="submit" className="flex-1 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary-container transition-all cursor-pointer">
+                                {editingOffer ? 'Modifier' : 'Créer'}
+                              </button>
+                            </div>
+                          </form>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            )}
+
             {activeTab === 'settings' && (
               <motion.div
                 key="settings"
