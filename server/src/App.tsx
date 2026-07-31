@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import MapPicker from './MapPicker.js';
 import {
@@ -34,7 +34,9 @@ import {
   Image as ImageIcon,
   Upload,
   XCircle,
-  FileText
+  FileText,
+  Filter,
+  Download
 } from 'lucide-react';
 
 // Interfaces
@@ -155,6 +157,41 @@ const getDeptIcon = (id: string) => {
   }
 };
 
+// Estimation du nombre d'années d'expérience à partir de la chaîne libre (ex: "4 ans d'expérience")
+const parseExpYears = (exp?: string): number => {
+  if (!exp) return 0;
+  const match = exp.match(/(\d+([.,]\d+)?)\s*ans?/i);
+  if (match) return parseFloat(match[1].replace(',', '.'));
+  return /junior|stage/i.test(exp) ? 0.5 : 0;
+};
+
+// Libellé + classes de couleur pour chaque statut de candidature
+const candidateStatusInfo = (status: string): { label: string; cls: string } => {
+  switch (status) {
+    case 'new':
+      return { label: 'Nouveau', cls: 'bg-blue-100 text-blue-700 border-blue-200' };
+    case 'analyzing':
+      return { label: 'En cours', cls: 'bg-amber-100 text-amber-700 border-amber-200' };
+    case 'interview':
+      return { label: 'Entretien', cls: 'bg-purple-100 text-purple-700 border-purple-200' };
+    case 'accepted':
+      return { label: 'Accepté', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+    default:
+      return { label: 'Refusé', cls: 'bg-rose-100 text-rose-700 border-rose-200' };
+  }
+};
+
+// Convertit une heure au format 24h ("14:30") en format 12h avec AM/PM ("2:30 PM")
+const formatTimeAmPm = (time?: string): string => {
+  if (!time) return '';
+  const [h, m] = time.split(':').map(Number);
+  if (Number.isNaN(h)) return time;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  const minutes = Number.isNaN(m) ? 0 : m;
+  return `${hour12}:${String(minutes).padStart(2, '0')} ${period}`;
+};
+
 export default function App() {
   const [isAuthChecked, setIsAuthChecked] = useState(false);
 
@@ -251,6 +288,15 @@ export default function App() {
     addedBy: string;
     createdAt: string;
   }
+  interface JobInterview {
+    date: string;
+    time: string;
+    type: 'presentiel' | 'en_ligne';
+    location?: string;
+    link?: string;
+    notes?: string;
+    scheduledAt?: string;
+  }
   interface JobApp {
     _id: string;
     candidate: string;
@@ -265,12 +311,12 @@ export default function App() {
     motivationMessage?: string;
     attachments?: JobAttachment[];
     notes?: JobNote[];
+    interview?: JobInterview;
     status: 'new' | 'analyzing' | 'interview' | 'accepted' | 'rejected';
     createdAt: string;
   }
   const [jobApps, setJobApps] = useState<JobApp[]>([]);
   const [selectedApp, setSelectedApp] = useState<JobApp | null>(null);
-  const [isAppDetailOpen, setIsAppDetailOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [appToDelete, setAppToDelete] = useState<string | null>(null);
 
@@ -298,6 +344,22 @@ export default function App() {
   const [editingParam, setEditingParam] = useState<Parameter | null>(null);
   const [paramKey, setParamKey] = useState('');
   const [paramValue, setParamValue] = useState('');
+
+  // Candidates view state (interface "Gestion des Candidatures")
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('Tous les postes');
+  const [expFilter, setExpFilter] = useState('Toutes');
+  const [deletedCount, setDeletedCount] = useState(2);
+
+  // Interview planning form state
+  const [interviewDate, setInterviewDate] = useState('');
+  const [interviewTime, setInterviewTime] = useState('');
+  const [interviewType, setInterviewType] = useState<'presentiel' | 'en_ligne'>('presentiel');
+  const [interviewLocation, setInterviewLocation] = useState('');
+  const [interviewLink, setInterviewLink] = useState('');
+  const [interviewNotes, setInterviewNotes] = useState('');
+  const [sendInterviewEmail, setSendInterviewEmail] = useState(true);
+  const [isInterviewSaving, setIsInterviewSaving] = useState(false);
 
   const generateClientSlots = (start: string, end: string): string[] => {
     const slots: string[] = [];
@@ -883,6 +945,133 @@ export default function App() {
     acc[curr.department] = (acc[curr.department] || 0) + 1;
     return acc;
   }, {});
+
+  // Candidates statistics
+  const totalCandidates = jobApps.length;
+  const pendingCandidates = jobApps.filter((a: any) => a.status === 'new' || a.status === 'analyzing').length;
+  const interviewCandidates = jobApps.filter((a: any) => a.status === 'interview').length;
+  const acceptedCandidates = jobApps.filter((a: any) => a.status === 'accepted').length;
+  const rejectedCandidates = jobApps.filter((a: any) => a.status === 'rejected').length;
+
+  // Filtered candidates (recherche + poste + expérience)
+  const filteredApps = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    return jobApps.filter((a: any) => {
+      const fullName = `${a.firstName} ${a.lastName}`.toLowerCase();
+      const matchesSearch =
+        !q ||
+        fullName.includes(q) ||
+        (a.email || '').toLowerCase().includes(q) ||
+        (a.position || '').toLowerCase().includes(q);
+
+      const matchesRole = roleFilter === 'Tous les postes' || a.position === roleFilter;
+
+      const years = parseExpYears(a.experience);
+      let matchesExp = true;
+      if (expFilter === '0-2 ans') {
+        matchesExp = years <= 2;
+      } else if (expFilter === '2-5 ans') {
+        matchesExp = years > 2 && years <= 5;
+      } else if (expFilter === '5+ ans') {
+        matchesExp = years > 5;
+      }
+
+      return matchesSearch && matchesRole && matchesExp;
+    });
+  }, [jobApps, searchQuery, roleFilter, expFilter]);
+
+  // Liste des postes distincts pour le filtre
+  const positionsList = useMemo(
+    () => [...new Set(jobApps.map((a: any) => a.position).filter(Boolean))],
+    [jobApps]
+  );
+
+  // URL sécurisée de téléchargement d'une pièce jointe
+  const attachmentDownloadUrl = (app: any, att: any): string =>
+    att._id
+      ? `${API_URL}/job-applications/${app._id}/attachments/${att._id}?token=${encodeURIComponent(safeGetToken() || '')}`
+      : att.url;
+
+  // Invitation à un entretien (statut -> interview)
+  const handleInviteInterview = async (app: any) => {
+    if (!app) return;
+    try {
+      const res = await authedFetch(`${API_URL}/job-applications/${app._id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status: 'interview' }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setJobApps((prev: any[]) => prev.map((a: any) => (a._id === app._id ? updated : a)));
+        if (selectedApp?._id === app._id) setSelectedApp(updated);
+        addToast(`Invitation envoyée à ${app.firstName} ${app.lastName}`);
+      }
+    } catch {
+      addToast('Erreur lors de l\'envoi de l\'invitation', 'info');
+    }
+  };
+
+  // Pré-remplir le formulaire de planification avec les données déjà enregistrées
+  useEffect(() => {
+    if (!selectedApp) return;
+    setInterviewDate(selectedApp.interview?.date || '');
+    setInterviewTime(selectedApp.interview?.time || '');
+    setInterviewType(selectedApp.interview?.type || 'presentiel');
+    setInterviewLocation(selectedApp.interview?.location || '');
+    setInterviewLink(selectedApp.interview?.link || '');
+    setInterviewNotes(selectedApp.interview?.notes || '');
+  }, [selectedApp?._id]);
+
+  // Sauvegarde de la planification d'entretien
+  const handleSaveInterview = async () => {
+    if (!selectedApp) return;
+    if (!interviewDate || !interviewTime) {
+      addToast('La date et l\'heure de l\'entretien sont obligatoires.', 'info');
+      return;
+    }
+    if (interviewType === 'presentiel' && !interviewLocation.trim()) {
+      addToast('Le lieu de l\'entretien est obligatoire.', 'info');
+      return;
+    }
+    if (interviewType === 'en_ligne' && !interviewLink.trim()) {
+      addToast('Le lien de la réunion est obligatoire.', 'info');
+      return;
+    }
+
+    setIsInterviewSaving(true);
+    try {
+      const res = await authedFetch(`${API_URL}/job-applications/${selectedApp._id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          status: 'interview',
+          interviewDate,
+          interviewTime,
+          interviewType,
+          interviewLocation: interviewType === 'presentiel' ? interviewLocation.trim() : '',
+          interviewLink: interviewType === 'en_ligne' ? interviewLink.trim() : '',
+          interviewNotes: interviewNotes.trim(),
+          sendInterviewEmail: sendInterviewEmail,
+        }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setJobApps((prev: any[]) => prev.map((a: any) => (a._id === selectedApp._id ? updated : a)));
+        setSelectedApp(updated);
+        addToast(
+          sendInterviewEmail
+            ? `Entretien planifié et convocation envoyée à ${selectedApp.firstName} ${selectedApp.lastName}`
+            : `Entretien planifié pour ${selectedApp.firstName} ${selectedApp.lastName}`
+        );
+      } else {
+        const err = await res.json().catch(() => ({}));
+        addToast(err.message || 'Erreur lors de l\'enregistrement.', 'info');
+      }
+    } catch {
+      addToast('Erreur lors de l\'enregistrement.', 'info');
+    } finally {
+      setIsInterviewSaving(false);
+    }
+  };
 
   if (!isAuthChecked) {
     return (
@@ -1982,457 +2171,580 @@ export default function App() {
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-8"
               >
+                {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
-                    <h3 className="font-headline text-2xl font-bold text-primary">Recrutement</h3>
+                    <h3 className="font-headline text-2xl font-bold text-primary">Gestion des Candidatures</h3>
                     <p className="text-xs text-on-surface-variant">
-                      Gérez les candidatures reçues. <strong>{jobApps.length}</strong> candidature(s) au total.
+                      Analysez et suivez le processus de recrutement de RM Consulting.
                     </p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold">
-                      {jobApps.filter(a => a.status === 'new').length} Nouvelle(s)
-                    </span>
-                    <span className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold">
-                      {jobApps.filter(a => a.status === 'analyzing').length} Analyse(s)
-                    </span>
-                    <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold">
-                      {jobApps.filter(a => a.status === 'accepted').length} Acceptée(s)
-                    </span>
+                </div>
+
+                {/* KPI Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4">
+                  <div className="glass-card p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                    <div className="absolute -right-4 -top-4 w-24 h-24 bg-primary/5 rounded-full group-hover:scale-125 transition-transform duration-500"></div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 bg-primary/10 text-primary rounded-lg">
+                        <Users className="w-5 h-5" />
+                      </span>
+                      <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full">+12%</span>
+                    </div>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Total Candidatures</p>
+                    <h3 className="font-headline text-3xl font-extrabold text-primary mt-1">{totalCandidates}</h3>
+                  </div>
+
+                  <div className="glass-card p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                    <div className="absolute -right-4 -top-4 w-24 h-24 bg-amber-500/10 rounded-full group-hover:scale-125 transition-transform duration-500"></div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 bg-amber-100 text-amber-800 rounded-lg">
+                        <Clock className="w-5 h-5" />
+                      </span>
+                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-full">En attente</span>
+                    </div>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">En Attente</p>
+                    <h3 className="font-headline text-3xl font-extrabold text-on-surface mt-1">{pendingCandidates}</h3>
+                  </div>
+
+                  <div className="glass-card p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                    <div className="absolute -right-4 -top-4 w-24 h-24 bg-purple-500/10 rounded-full group-hover:scale-125 transition-transform duration-500"></div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 bg-purple-100 text-purple-700 rounded-lg">
+                        <CalendarIcon className="w-5 h-5" />
+                      </span>
+                      <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-full">Planifiés</span>
+                    </div>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Entretiens</p>
+                    <h3 className="font-headline text-3xl font-extrabold text-on-surface mt-1">{interviewCandidates}</h3>
+                  </div>
+
+                  <div className="glass-card p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                    <div className="absolute -right-4 -top-4 w-24 h-24 bg-green-500/5 rounded-full group-hover:scale-125 transition-transform duration-500"></div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 bg-green-100 text-green-700 rounded-lg">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </span>
+                      <span className="text-[10px] font-bold text-green-700 bg-green-50 px-2 py-1 rounded-full">Terminé</span>
+                    </div>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Recrutés</p>
+                    <h3 className="font-headline text-3xl font-extrabold text-on-surface mt-1">{acceptedCandidates}</h3>
+                  </div>
+
+                  <div className="glass-card p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                    <div className="absolute -right-4 -top-4 w-24 h-24 bg-rose-500/10 rounded-full group-hover:scale-125 transition-transform duration-500"></div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 bg-rose-100 text-rose-700 rounded-lg">
+                        <XCircle className="w-5 h-5" />
+                      </span>
+                      <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-1 rounded-full">Refusé</span>
+                    </div>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Refusés</p>
+                    <h3 className="font-headline text-3xl font-extrabold text-on-surface mt-1">{rejectedCandidates}</h3>
+                  </div>
+
+                  <div className="glass-card p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                    <div className="absolute -right-4 -top-4 w-24 h-24 bg-gray-500/10 rounded-full group-hover:scale-125 transition-transform duration-500"></div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 bg-gray-100 text-gray-700 rounded-lg">
+                        <Trash2 className="w-5 h-5" />
+                      </span>
+                      <span className="text-[10px] font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded-full">Archivé</span>
+                    </div>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Supprimés</p>
+                    <h3 className="font-headline text-3xl font-extrabold text-on-surface mt-1">
+                      {deletedCount < 10 ? `0${deletedCount}` : deletedCount}
+                    </h3>
                   </div>
                 </div>
 
-                {/* Search & Filters */}
-                <div className="glass-card rounded-xl p-4 flex flex-col md:flex-row gap-4">
-                  <div className="flex-1 relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Rechercher un candidat..."
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none"
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        authedFetch(`${API_URL}/job-applications${val ? `?search=${encodeURIComponent(val)}` : ''}`)
-                          .then(r => r.json())
-                          .then(setJobApps)
-                          .catch(() => {});
-                      }}
-                    />
-                  </div>
-                  <select
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      authedFetch(`${API_URL}/job-applications${val ? `?status=${val}` : ''}`)
-                        .then(r => r.json())
-                        .then(setJobApps)
-                        .catch(() => {});
-                    }}
-                    className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none"
-                  >
-                    <option value="">Tous les statuts</option>
-                    <option value="new">Nouvelle</option>
-                    <option value="analyzing">En cours d'analyse</option>
-                    <option value="interview">Entretien programmé</option>
-                    <option value="accepted">Acceptée</option>
-                    <option value="rejected">Refusée</option>
-                  </select>
-                  <select
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      authedFetch(`${API_URL}/job-applications${val ? `?position=${encodeURIComponent(val)}` : ''}`)
-                        .then(r => r.json())
-                        .then(setJobApps)
-                        .catch(() => {});
-                    }}
-                    className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none"
-                  >
-                    <option value="">Tous les postes</option>
-                    {[...new Set(jobApps.map(a => a.position))].map(p => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
-                  <select
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const [sortBy, sortOrder] = val.split('-');
-                      authedFetch(`${API_URL}/job-applications?sortBy=${sortBy}&sortOrder=${sortOrder || 'desc'}`)
-                        .then(r => r.json())
-                        .then(setJobApps)
-                        .catch(() => {});
-                    }}
-                    className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none"
-                  >
-                    <option value="date-desc">Plus récent</option>
-                    <option value="date-asc">Plus ancien</option>
-                    <option value="name-asc">Nom A-Z</option>
-                    <option value="name-desc">Nom Z-A</option>
-                  </select>
-                </div>
+                {/* Filters & Table + Detail Panel */}
+                <div className="bg-white rounded-2xl shadow-sm border border-secondary/10 overflow-hidden flex flex-col xl:flex-row">
+                  <div className="flex-1">
+                    {/* Toolbar */}
+                    <div className="p-5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-surface-container-low border border-gray-200 rounded-lg">
+                          <span className="text-[10px] font-bold text-on-surface-variant">Poste:</span>
+                          <select
+                            value={roleFilter}
+                            onChange={(e) => setRoleFilter(e.target.value)}
+                            className="bg-transparent border-none p-0 text-sm focus:ring-0 text-primary font-medium cursor-pointer outline-none"
+                          >
+                            <option>Tous les postes</option>
+                            {positionsList.map((p) => (
+                              <option key={p} value={p}>{p}</option>
+                            ))}
+                          </select>
+                        </div>
 
-                {jobApps.length === 0 ? (
-                  <div className="glass-card p-12 text-center rounded-2xl border border-dashed border-secondary/20">
-                    <Briefcase className="w-12 h-12 text-on-surface-variant/40 mx-auto mb-4" />
-                    <p className="text-sm font-semibold text-on-surface">Aucune candidature</p>
-                    <p className="text-xs text-on-surface-variant mt-1">Les candidatures des postulants apparaîtront ici.</p>
-                  </div>
-                ) : (
-                  <div className="glass-card rounded-xl overflow-hidden">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-surface-container-low border border-gray-200 rounded-lg">
+                          <span className="text-[10px] font-bold text-on-surface-variant">Expérience:</span>
+                          <select
+                            value={expFilter}
+                            onChange={(e) => setExpFilter(e.target.value)}
+                            className="bg-transparent border-none p-0 text-sm focus:ring-0 text-primary font-medium cursor-pointer outline-none"
+                          >
+                            <option>Toutes</option>
+                            <option>0-2 ans</option>
+                            <option>2-5 ans</option>
+                            <option>5+ ans</option>
+                          </select>
+                        </div>
+
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Rechercher un candidat..."
+                            className="w-64 pl-9 pr-4 py-2 bg-surface-container-low border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setRoleFilter('Tous les postes');
+                            setExpFilter('Toutes');
+                            setSearchQuery('');
+                            addToast('Filtres réinitialisés', 'info');
+                          }}
+                          className="p-2 text-on-surface-variant hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
+                          title="Réinitialiser les filtres"
+                        >
+                          <Filter className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => addToast('Export des candidatures en cours (CSV)', 'info')}
+                          className="p-2 text-on-surface-variant hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
+                          title="Télécharger la liste"
+                        >
+                          <Download className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Table */}
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
+                      <table className="w-full text-left border-collapse">
                         <thead>
-                          <tr className="bg-surface-container-low border-b border-secondary/10">
-                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Candidat</th>
-                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Poste</th>
-                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Email</th>
-                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Date</th>
-                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Statut</th>
-                            <th className="text-right p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Actions</th>
+                          <tr className="bg-surface-container-low/60">
+                            <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100">
+                              Candidat
+                            </th>
+                            <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100">
+                              Poste &amp; Expérience
+                            </th>
+                            <th className="px-6 py-4 text-[11px] font-bold text-primary uppercase tracking-wider border-b border-gray-100">
+                              Date de Dépôt
+                            </th>
+                            <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100">
+                              Statut
+                            </th>
+                            <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100 text-right">
+                              Documents &amp; Actions
+                            </th>
                           </tr>
                         </thead>
-                        <tbody>
-                          {jobApps.map((app: any) => (
-                            <tr key={app._id} className="border-b border-secondary/5 hover:bg-surface-container-low/50 transition-colors">
-                              <td className="p-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
-                                    {app.firstName?.[0]}{app.lastName?.[0]}
-                                  </div>
-                                  <div>
-                                    <p className="font-bold text-on-surface text-sm">{app.firstName} {app.lastName}</p>
-                                    <p className="text-[10px] text-on-surface-variant">{app.phone}</p>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="p-4 text-on-surface font-medium text-sm">{app.position}</td>
-                              <td className="p-4 text-on-surface-variant text-sm">{app.email}</td>
-                              <td className="p-4 text-on-surface-variant text-sm">{new Date(app.createdAt).toLocaleDateString('fr-FR')}</td>
-                              <td className="p-4">
-                                <span className={`inline-block text-[10px] font-bold px-2.5 py-1 rounded-full ${
-                                  app.status === 'new' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                                  app.status === 'analyzing' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                                  app.status === 'interview' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
-                                  app.status === 'accepted' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                                  'bg-red-50 text-red-700 border border-red-200'
-                                }`}>
-                                  {app.status === 'new' ? 'Nouvelle' : app.status === 'analyzing' ? 'Analyse' : app.status === 'interview' ? 'Entretien' : app.status === 'accepted' ? 'Acceptée' : 'Refusée'}
-                                </span>
-                              </td>
-                              <td className="p-4 text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <button
-                                    onClick={() => {
-                                      setSelectedApp(app);
-                                      setIsAppDetailOpen(true);
-                                    }}
-                                    className="p-2 text-on-surface-variant hover:text-primary hover:bg-primary/5 rounded-lg transition-all cursor-pointer"
-                                    title="Voir détails"
-                                  >
-                                    <Search className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      const pdfWindow = window.open('', '_blank');
-                                      if (!pdfWindow) return;
-                                      const statusLabel = app.status === 'new' ? 'Nouvelle' : app.status === 'analyzing' ? 'En cours d\'analyse' : app.status === 'interview' ? 'Entretien programmé' : app.status === 'accepted' ? 'Acceptée' : 'Refusée';
-                                      pdfWindow.document.write(`
-                                        <html>
-                                        <head><style>
-                                          body { font-family: 'Inter', Arial, sans-serif; padding: 40px; color: #1a1c1c; max-width: 800px; margin: 0 auto; }
-                                          h1 { font-size: 24px; color: #6c0042; border-bottom: 2px solid #C8A96A; padding-bottom: 10px; }
-                                          .section { margin: 20px 0; }
-                                          .label { font-size: 11px; text-transform: uppercase; color: #735b24; font-weight: 700; letter-spacing: 1px; }
-                                          .value { font-size: 14px; margin: 4px 0 16px 0; color: #1a1c1c; }
-                                          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-                                          .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; }
-                                          .badge-new { background: #fef3c7; color: #b45309; }
-                                          .badge-analyzing { background: #dbeafe; color: #1d4ed8; }
-                                          .badge-interview { background: #f3e8ff; color: #7c3aed; }
-                                          .badge-accepted { background: #d1fae5; color: #047857; }
-                                          .badge-rejected { background: #fee2e2; color: #b91c1c; }
-                                          footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af; text-align: center; }
-                                          table { width: 100%; border-collapse: collapse; margin: 12px 0; }
-                                          th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
-                                          th { color: #735b24; font-weight: 700; font-size: 11px; text-transform: uppercase; }
-                                        </style></head>
-                                        <body>
-                                          <h1>Fiche Candidat</h1>
-                                          <p style="color: #735b24; font-size: 12px; margin-top: -5px;">RM Consulting — Recrutement</p>
-                                          <div class="section"><div class="label">Nom complet</div><div class="value">${escHtml(app.firstName)} ${escHtml(app.lastName)}</div></div>
-                                          <div class="grid">
-                                            <div><div class="label">Email</div><div class="value">${escHtml(app.email)}</div></div>
-                                            <div><div class="label">Téléphone</div><div class="value">${escHtml(app.phone)}</div></div>
-                                          </div>
-                                          <div class="section"><div class="label">Poste recherché</div><div class="value">${escHtml(app.position)}</div></div>
-                                          <div class="grid">
-                                            <div><div class="label">Niveau d'étude</div><div class="value">${escHtml(app.education)}</div></div>
-                                            <div><div class="label">Expérience</div><div class="value">${escHtml(app.experience) || 'Non spécifiée'}</div></div>
-                                          </div>
-                                          <div class="section"><div class="label">Adresse</div><div class="value">${escHtml(app.address) || 'Non spécifiée'}</div></div>
-                                          ${app.motivationMessage ? '<div class="section"><div class="label">Message de motivation</div><div class="value">' + escHtml(app.motivationMessage) + '</div></div>' : ''}
-                                          <div class="section"><div class="label">Statut</div><div><span class="badge badge-${escHtml(app.status)}">${escHtml(statusLabel)}</span></div></div>
-                                          <div class="section"><div class="label">Date de candidature</div><div class="value">${escHtml(new Date(app.createdAt).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</div></div>
-                                          ${app.attachments && app.attachments.length > 0 ? '<div class="section"><div class="label">Pièces jointes</div><table><tr><th>Fichier</th><th>Type</th><th>Taille</th></tr>' + app.attachments.map((a: any) => '<tr><td>' + escHtml(a.originalName) + '</td><td>' + escHtml(a.type) + '</td><td>' + Math.round(a.size / 1024) + ' Ko</td></tr>').join('') + '</table></div>' : ''}
-                                          <footer>RM Consulting — Expertise Comptable &amp; Audit — Document généré le ${escHtml(new Date().toLocaleDateString('fr-FR'))}</footer>
-                                          <script>window.onload = function() { window.print(); }<\/script>
-                                        </body>
-                                        </html>
-                                      `);
-                                      pdfWindow.document.close();
-                                    }}
-                                    className="p-2 text-on-surface-variant hover:text-secondary hover:bg-secondary/5 rounded-lg transition-all cursor-pointer"
-                                    title="Exporter PDF"
-                                  >
-                                    <FileText className="w-4 h-4" />
-                                  </button>
-                                  <select
-                                    value={app.status}
-                                    onChange={async (e) => {
-                                      const newStatus = e.target.value;
-                                      try {
-                                        const res = await authedFetch(`${API_URL}/job-applications/${app._id}`, {
-                                          method: 'PUT',
-                                          body: JSON.stringify({ status: newStatus }),
-                                        });
-                                        if (res.ok) {
-                                          setJobApps((prev: any[]) => prev.map((a: any) => a._id === app._id ? { ...a, status: newStatus } : a));
-                                          if (selectedApp?._id === app._id) setSelectedApp((prev: any) => prev ? { ...prev, status: newStatus } : null);
-                                          addToast(`Statut mis à jour : ${app.firstName} ${app.lastName}`);
-                                        }
-                                      } catch { addToast('Erreur lors de la mise à jour', 'info'); }
-                                    }}
-                                    className={`text-[10px] font-bold px-2 py-1.5 rounded-lg border cursor-pointer ${
-                                      app.status === 'new' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                      app.status === 'analyzing' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                      app.status === 'interview' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                                      app.status === 'accepted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                      'bg-red-50 text-red-700 border-red-200'
-                                    }`}
-                                  >
-                                    <option value="new">Nouvelle</option>
-                                    <option value="analyzing">Analyse</option>
-                                    <option value="interview">Entretien</option>
-                                    <option value="accepted">Acceptée</option>
-                                    <option value="rejected">Refusée</option>
-                                  </select>
-                                  <button
-                                    onClick={() => {
-                                      setAppToDelete(app._id);
-                                      setIsDeleteConfirmOpen(true);
-                                    }}
-                                    className="p-2 text-on-surface-variant hover:text-error hover:bg-red-50 rounded-lg transition-all cursor-pointer"
-                                    title="Supprimer"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
+                        <tbody className="divide-y divide-gray-100">
+                          {filteredApps.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                                <Search className="w-10 h-10 text-gray-300 mb-2 mx-auto" />
+                                <p className="text-sm font-medium">Aucun candidat ne correspond à votre recherche.</p>
                               </td>
                             </tr>
-                          ))}
+                          ) : (
+                            filteredApps.map((app: any) => {
+                              const info = candidateStatusInfo(app.status);
+                              const isSelected = selectedApp?._id === app._id;
+                              const cvAtt = (app.attachments || []).find((a: any) => a.type === 'cv');
+                              return (
+                                <tr
+                                  key={app._id}
+                                  onClick={() => setSelectedApp(app)}
+                                  className={`transition-all cursor-pointer group ${
+                                    isSelected ? 'bg-primary/10' : 'hover:bg-primary/5'
+                                  }`}
+                                >
+                                  <td className="px-6 py-5">
+                                    <div className="flex items-center gap-4">
+                                      <div className="w-11 h-11 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
+                                        {app.firstName?.[0]}{app.lastName?.[0]}
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-bold text-on-surface group-hover:text-primary transition-colors">
+                                          {app.firstName} {app.lastName}
+                                        </p>
+                                        <p className="text-xs text-on-surface-variant mt-0.5">{app.email}</p>
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  <td className="px-6 py-5">
+                                    <div className="flex flex-col">
+                                      <span className="text-on-surface font-medium text-sm">{app.position}</span>
+                                      <span className="text-xs text-on-surface-variant mt-0.5">{app.experience || 'Expérience non spécifiée'}</span>
+                                    </div>
+                                  </td>
+
+                                  <td className="px-6 py-5">
+                                    <span className="text-on-surface-variant text-sm font-medium">
+                                      {new Date(app.createdAt).toLocaleDateString('fr-FR')}
+                                    </span>
+                                  </td>
+
+                                  <td className="px-6 py-5">
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${info.cls}`}>
+                                      {info.label}
+                                    </span>
+                                  </td>
+
+                                  <td className="px-6 py-5 text-right">
+                                    <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                                      <a
+                                        href={cvAtt ? attachmentDownloadUrl(app, cvAtt) : undefined}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className={`flex items-center gap-1 px-3 py-1.5 bg-surface-container-low border border-gray-200 rounded-lg text-xs font-bold text-primary hover:bg-white transition-colors ${
+                                          cvAtt ? '' : 'pointer-events-none opacity-50'
+                                        }`}
+                                        title="Voir CV"
+                                      >
+                                        <FileText className="w-4 h-4" /> CV
+                                      </a>
+                                      <button
+                                        onClick={() => setSelectedApp(app)}
+                                        className="p-2 hover:bg-primary/5 rounded-lg text-primary transition-colors"
+                                        title="Voir détails"
+                                      >
+                                        <Search className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setAppToDelete(app._id);
+                                          setIsDeleteConfirmOpen(true);
+                                        }}
+                                        className="p-2 hover:bg-red-50 rounded-lg text-rose-600 transition-colors"
+                                        title="Supprimer la candidature"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
                         </tbody>
                       </table>
                     </div>
                   </div>
-                )}
 
-                {/* Detail Modal */}
-                <AnimatePresence>
-                  {isAppDetailOpen && selectedApp && (
-                    <>
-                      <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setIsAppDetailOpen(false)} />
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
-                      >
-                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar pointer-events-auto">
-                          <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
-                            <h3 className="font-headline font-bold text-lg text-primary">Détails du candidat</h3>
-                            <button onClick={() => setIsAppDetailOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">
-                              <X className="w-5 h-5 text-gray-500" />
-                            </button>
+                  {/* Side Detail Panel */}
+                  {selectedApp ? (
+                    <div className="w-full xl:w-96 flex flex-col bg-surface-container-low/60 border-t xl:border-t-0 xl:border-l border-gray-200 p-6">
+                      <div className="flex items-center justify-between mb-6">
+                        <h4 className="font-headline text-lg font-bold text-on-surface">Détails Candidat</h4>
+                        <button
+                          onClick={() => setSelectedApp(null)}
+                          className="p-1 rounded-full hover:bg-gray-200/80 transition-colors text-gray-500"
+                          title="Fermer"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-6">
+                        {/* Candidate Header */}
+                        <div className="flex flex-col items-center text-center p-5 bg-white rounded-2xl border border-gray-200/60 shadow-sm">
+                          <div className="w-20 h-20 rounded-full bg-primary flex items-center justify-center text-white text-3xl font-bold mb-3 shadow-md shadow-primary/20">
+                            {selectedApp.firstName?.[0]}{selectedApp.lastName?.[0]}
                           </div>
-                          <div className="p-6 space-y-6">
-                            <div className="flex items-center gap-4">
-                              <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
-                                {selectedApp.firstName?.[0]}{selectedApp.lastName?.[0]}
-                              </div>
-                              <div>
-                                <h4 className="font-headline font-bold text-lg text-on-surface">{selectedApp.firstName} {selectedApp.lastName}</h4>
-                                <span className={`inline-block mt-1 text-[10px] font-bold px-2 py-1 rounded-full ${
-                                  selectedApp.status === 'new' ? 'bg-amber-50 text-amber-700' :
-                                  selectedApp.status === 'analyzing' ? 'bg-blue-50 text-blue-700' :
-                                  selectedApp.status === 'interview' ? 'bg-purple-50 text-purple-700' :
-                                  selectedApp.status === 'accepted' ? 'bg-emerald-50 text-emerald-700' :
-                                  'bg-red-50 text-red-700'
-                                }`}>
-                                  {selectedApp.status === 'new' ? 'Nouvelle' : selectedApp.status === 'analyzing' ? 'En cours d\'analyse' : selectedApp.status === 'interview' ? 'Entretien programmé' : selectedApp.status === 'accepted' ? 'Acceptée' : 'Refusée'}
-                                </span>
-                              </div>
-                            </div>
+                          <h5 className="font-headline text-lg font-bold text-on-surface">{selectedApp.firstName} {selectedApp.lastName}</h5>
+                          <p className="text-primary font-semibold text-sm mt-0.5">{selectedApp.position}</p>
 
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="bg-surface-container-low rounded-xl p-4">
-                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Email</p>
-                                <p className="text-sm font-medium text-on-surface mt-1">{selectedApp.email}</p>
-                              </div>
-                              <div className="bg-surface-container-low rounded-xl p-4">
-                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Téléphone</p>
-                                <p className="text-sm font-medium text-on-surface mt-1">{selectedApp.phone}</p>
-                              </div>
-                              <div className="bg-surface-container-low rounded-xl p-4">
-                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Poste recherché</p>
-                                <p className="text-sm font-medium text-on-surface mt-1">{selectedApp.position}</p>
-                              </div>
-                              <div className="bg-surface-container-low rounded-xl p-4">
-                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Date</p>
-                                <p className="text-sm font-medium text-on-surface mt-1">{new Date(selectedApp.createdAt).toLocaleDateString('fr-FR')}</p>
-                              </div>
-                              <div className="bg-surface-container-low rounded-xl p-4">
-                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Niveau d'étude</p>
-                                <p className="text-sm font-medium text-on-surface mt-1">{selectedApp.education}</p>
-                              </div>
-                              <div className="bg-surface-container-low rounded-xl p-4">
-                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Expérience</p>
-                                <p className="text-sm font-medium text-on-surface mt-1">{selectedApp.experience || 'Non spécifiée'}</p>
-                              </div>
-                            </div>
+                          <div className="flex gap-2 mt-4 w-full">
+                            <button
+                              onClick={() => handleInviteInterview(selectedApp)}
+                              className="flex-1 px-4 py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow hover:bg-primary-container active:scale-95 transition-all cursor-pointer"
+                            >
+                              Inviter Entretien
+                            </button>
+                            <a
+                              href={`mailto:${selectedApp.email}`}
+                              className="p-2.5 border border-gray-300 rounded-xl text-on-surface-variant hover:bg-gray-100 transition-colors"
+                              title="Envoyer un email"
+                            >
+                              <Mail className="w-4 h-4" />
+                            </a>
+                          </div>
 
-                            {selectedApp.address && (
-                              <div className="bg-surface-container-low rounded-xl p-4">
-                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Adresse</p>
-                                <p className="text-sm font-medium text-on-surface mt-1">{selectedApp.address}</p>
-                              </div>
-                            )}
-
-                            {selectedApp.motivationMessage && (
-                              <div className="bg-surface-container-low rounded-xl p-4">
-                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Message de motivation</p>
-                                <p className="text-sm font-medium text-on-surface mt-1 whitespace-pre-wrap">{selectedApp.motivationMessage}</p>
-                              </div>
-                            )}
-
-                            {/* Attachments */}
-                            {selectedApp.attachments && selectedApp.attachments.length > 0 && (
-                              <div className="space-y-3">
-                                <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Pièces jointes</p>
-                                {selectedApp.attachments.map((att: any, idx: number) => {
-                                  const downloadUrl = att._id
-                                    ? `${API_URL}/job-applications/${selectedApp._id}/attachments/${att._id}?token=${encodeURIComponent(safeGetToken() || '')}`
-                                    : att.url;
-                                  return (
-                                    <a
-                                      key={idx}
-                                      href={downloadUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center justify-between bg-surface-container-low rounded-xl px-4 py-3 hover:bg-secondary/5 transition-colors group"
-                                    >
-                                      <div className="flex items-center gap-3">
-                                        <FileText className="w-5 h-5 text-secondary" />
-                                        <div>
-                                          <p className="text-sm font-medium text-on-surface group-hover:text-primary transition-colors">{att.originalName}</p>
-                                          <p className="text-[10px] text-on-surface-variant">{att.type === 'cv' ? 'CV' : att.type === 'coverLetter' ? 'Lettre de motivation' : 'Certificat'} — {Math.round(att.size / 1024)} Ko</p>
-                                        </div>
-                                      </div>
-                                      <span className="text-xs text-secondary font-bold">Télécharger →</span>
-                                    </a>
-                                  );
-                                })}
-                              </div>
-                            )}
-
-                            {/* Status update */}
-                            <div className="border-t border-gray-100 pt-4">
-                              <p className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-2">Statut</p>
-                              <select
-                                value={selectedApp.status}
-                                onChange={async (e) => {
-                                  const newStatus = e.target.value;
-                                  try {
-                                    const res = await authedFetch(`${API_URL}/job-applications/${selectedApp._id}`, {
-                                      method: 'PUT',
-                                      body: JSON.stringify({ status: newStatus }),
-                                    });
-                                    if (res.ok) {
-                                      const updated = await res.json();
-                                      setJobApps((prev: any[]) => prev.map((a: any) => a._id === selectedApp._id ? updated : a));
-                                      setSelectedApp(updated);
-                                      addToast(`Statut mis à jour : ${selectedApp.firstName} ${selectedApp.lastName}`);
-                                    }
-                                  } catch { addToast('Erreur', 'info'); }
-                                }}
-                                className={`text-sm font-bold px-3 py-2 rounded-lg border w-full cursor-pointer ${
-                                  selectedApp.status === 'new' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                  selectedApp.status === 'analyzing' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                  selectedApp.status === 'interview' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                                  selectedApp.status === 'accepted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                  'bg-red-50 text-red-700 border-red-200'
-                                }`}
-                              >
-                                <option value="new">Nouvelle</option>
-                                <option value="analyzing">En cours d'analyse</option>
-                                <option value="interview">Entretien programmé</option>
-                                <option value="accepted">Acceptée</option>
-                                <option value="rejected">Refusée</option>
-                              </select>
-                            </div>
-
-                            {/* Notes */}
-                            <div className="border-t border-gray-100 pt-4">
-                              <p className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-3">Notes internes</p>
-                              <div className="space-y-2 mb-4">
-                                {(selectedApp.notes || []).length === 0 ? (
-                                  <p className="text-xs text-gray-400 italic">Aucune note pour le moment.</p>
-                                ) : (
-                                  selectedApp.notes.map((note: any, idx: number) => (
-                                    <div key={idx} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                                      <div className="flex justify-between items-start mb-1">
-                                        <span className="text-[10px] font-bold text-primary">{note.addedBy}</span>
-                                        <span className="text-[9px] text-gray-400">{new Date(note.createdAt).toLocaleDateString('fr-FR')}</span>
-                                      </div>
-                                      <p className="text-xs text-gray-700">{note.text}</p>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                              <form onSubmit={async (e) => {
-                                e.preventDefault();
-                                const form = e.target as HTMLFormElement;
-                                const input = form.elements.namedItem('note') as HTMLInputElement;
-                                const text = input.value.trim();
-                                if (!text) return;
+                          {/* Status selector */}
+                          <div className="w-full mt-3">
+                            <select
+                              value={selectedApp.status}
+                              onChange={async (e) => {
+                                const newStatus = e.target.value;
                                 try {
                                   const res = await authedFetch(`${API_URL}/job-applications/${selectedApp._id}`, {
                                     method: 'PUT',
-                                    body: JSON.stringify({ note: text }),
+                                    body: JSON.stringify({ status: newStatus }),
                                   });
                                   if (res.ok) {
                                     const updated = await res.json();
-                                    setJobApps((prev: any[]) => prev.map((a: any) => a._id === selectedApp._id ? updated : a));
+                                    setJobApps((prev: any[]) => prev.map((a: any) => (a._id === selectedApp._id ? updated : a)));
                                     setSelectedApp(updated);
-                                    input.value = '';
-                                    addToast('Note ajoutée');
+                                    addToast(`Statut mis à jour : ${selectedApp.firstName} ${selectedApp.lastName}`);
                                   }
-                                } catch { addToast('Erreur', 'info'); }
-                              }} className="flex gap-2">
-                                <input
-                                  name="note"
-                                  type="text"
-                                  placeholder="Ajouter une note..."
-                                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none"
-                                />
-                                <button type="submit" className="px-4 py-2.5 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary-container transition-all cursor-pointer">
-                                  <Send className="w-4 h-4" />
-                                </button>
-                              </form>
+                                } catch {
+                                  addToast('Erreur lors de la mise à jour', 'info');
+                                }
+                              }}
+                              className={`text-xs font-bold px-3 py-2 rounded-lg border w-full cursor-pointer ${candidateStatusInfo(selectedApp.status).cls}`}
+                            >
+                              <option value="new">Nouveau</option>
+                              <option value="analyzing">En cours d'analyse</option>
+                              <option value="interview">Entretien programmé</option>
+                              <option value="accepted">Accepté</option>
+                              <option value="rejected">Refusé</option>
+                            </select>
+                          </div>
+
+                          {/* Planification de l'entretien (visible quand le statut est "Entretien") */}
+                          <AnimatePresence initial={false}>
+                            {selectedApp.status === 'interview' && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.35, ease: 'easeInOut' }}
+                                className="w-full overflow-hidden text-left"
+                              >
+                                <div className="mt-4 pt-4 border-t border-gray-200">
+                                  <div className="flex items-center gap-2 mb-4">
+                                    <span className="p-1.5 bg-primary/10 text-primary rounded-lg">
+                                      <CalendarIcon className="w-4 h-4" />
+                                    </span>
+                                    <h6 className="font-headline text-sm font-bold text-on-surface">
+                                      Planification de l'entretien
+                                    </h6>
+                                  </div>
+
+                                  <div className="space-y-3">
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div>
+                                        <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
+                                          Date de l'entretien <span className="text-error">*</span>
+                                        </label>
+                                        <input
+                                          type="date"
+                                          value={interviewDate}
+                                          onChange={(e) => setInterviewDate(e.target.value)}
+                                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
+                                          Heure <span className="text-error">*</span>
+                                        </label>
+                                        <input
+                                          type="time"
+                                          value={interviewTime}
+                                          onChange={(e) => setInterviewTime(e.target.value)}
+                                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none"
+                                        />
+                                        {interviewTime && (
+                                          <p className="text-[10px] text-on-surface-variant mt-1">
+                                            Affichée au candidat :{' '}
+                                            <span className="font-bold text-primary">{formatTimeAmPm(interviewTime)}</span>
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
+                                        Type d'entretien <span className="text-error">*</span>
+                                      </label>
+                                      <select
+                                        value={interviewType}
+                                        onChange={(e) => setInterviewType(e.target.value as 'presentiel' | 'en_ligne')}
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none"
+                                      >
+                                        <option value="presentiel">Présentiel</option>
+                                        <option value="en_ligne">En ligne</option>
+                                      </select>
+                                    </div>
+
+                                    <AnimatePresence initial={false}>
+                                      {interviewType === 'presentiel' ? (
+                                        <motion.div
+                                          key="interview-location"
+                                          initial={{ opacity: 0, height: 0 }}
+                                          animate={{ opacity: 1, height: 'auto' }}
+                                          exit={{ opacity: 0, height: 0 }}
+                                          transition={{ duration: 0.25, ease: 'easeInOut' }}
+                                          className="overflow-hidden"
+                                        >
+                                          <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
+                                            Lieu de l'entretien <span className="text-error">*</span>
+                                          </label>
+                                          <input
+                                            type="text"
+                                            value={interviewLocation}
+                                            onChange={(e) => setInterviewLocation(e.target.value)}
+                                            placeholder="Ex : Bureau RM Consulting, Tunis"
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none"
+                                          />
+                                        </motion.div>
+                                      ) : (
+                                        <motion.div
+                                          key="interview-link"
+                                          initial={{ opacity: 0, height: 0 }}
+                                          animate={{ opacity: 1, height: 'auto' }}
+                                          exit={{ opacity: 0, height: 0 }}
+                                          transition={{ duration: 0.25, ease: 'easeInOut' }}
+                                          className="overflow-hidden"
+                                        >
+                                          <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
+                                            Lien de la réunion (Teams, Google Meet ou Zoom) <span className="text-error">*</span>
+                                          </label>
+                                          <input
+                                            type="url"
+                                            value={interviewLink}
+                                            onChange={(e) => setInterviewLink(e.target.value)}
+                                            placeholder="https://meet.google.com/..."
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none"
+                                          />
+                                        </motion.div>
+                                      )}
+                                    </AnimatePresence>
+
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
+                                        Notes <span className="text-on-surface-variant/60 normal-case font-semibold">(facultatif)</span>
+                                      </label>
+                                      <textarea
+                                        value={interviewNotes}
+                                        onChange={(e) => setInterviewNotes(e.target.value)}
+                                        rows={2}
+                                        placeholder="Informations complémentaires pour le candidat..."
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none resize-none"
+                                      />
+                                    </div>
+
+                                    <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                                      <input
+                                        type="checkbox"
+                                        checked={sendInterviewEmail}
+                                        onChange={(e) => setSendInterviewEmail(e.target.checked)}
+                                        className="mt-0.5 w-4 h-4 accent-[#6c0042]"
+                                      />
+                                      <span className="text-xs font-medium text-on-surface">
+                                        Envoyer automatiquement un email de convocation au candidat
+                                      </span>
+                                    </label>
+
+                                    <button
+                                      onClick={handleSaveInterview}
+                                      disabled={isInterviewSaving}
+                                      className="w-full px-4 py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow hover:bg-primary-container active:scale-95 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                      {isInterviewSaving ? (
+                                        <>
+                                          <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                          Enregistrement...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CheckCircle2 className="w-4 h-4" />
+                                          Enregistrer
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+
+                        {/* Info details */}
+                        <div className="space-y-4">
+                          {selectedApp.motivationMessage && (
+                            <div>
+                              <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
+                                Message de motivation
+                              </p>
+                              <div className="bg-white p-4 rounded-xl text-sm italic text-on-surface border border-gray-200/50 leading-relaxed">
+                                "{selectedApp.motivationMessage}"
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-white p-3 rounded-xl border border-gray-200/50">
+                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Études &amp; Diplômes</p>
+                              <p className="text-sm font-semibold text-on-surface">{selectedApp.education}</p>
+                            </div>
+
+                            <div className="bg-white p-3 rounded-xl border border-gray-200/50">
+                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Téléphone</p>
+                              <p className="text-sm font-semibold text-on-surface">{selectedApp.phone}</p>
+                            </div>
+
+                            <div className="bg-white p-3 rounded-xl border border-gray-200/50">
+                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Expérience</p>
+                              <p className="text-sm font-semibold text-on-surface">{selectedApp.experience || 'Non spécifiée'}</p>
+                            </div>
+
+                            <div className="bg-white p-3 rounded-xl border border-gray-200/50">
+                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Ville</p>
+                              <p className="text-sm font-semibold text-on-surface">{selectedApp.address || 'Non spécifiée'}</p>
                             </div>
                           </div>
+
+                          {(selectedApp.attachments || []).length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Documents</p>
+                              <div className="space-y-2">
+                                {selectedApp.attachments.map((att: any, idx: number) => (
+                                  <a
+                                    key={idx}
+                                    href={attachmentDownloadUrl(selectedApp, att)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="w-full flex items-center gap-3 p-3 bg-white border border-primary/20 rounded-xl hover:bg-primary/5 transition-colors group text-left"
+                                  >
+                                    <FileText className="w-5 h-5 text-primary shrink-0" />
+                                    <div className="flex-1 overflow-hidden">
+                                      <p className="text-xs font-bold text-on-surface truncate">{att.originalName}</p>
+                                      <p className="text-[10px] text-on-surface-variant">
+                                        {att.type === 'cv' ? 'CV' : att.type === 'coverLetter' ? 'Lettre de motivation' : 'Certificat'} — {Math.round(att.size / 1024)} Ko
+                                      </p>
+                                    </div>
+                                    <Download className="w-4 h-4 text-primary opacity-70 group-hover:opacity-100 transition-opacity" />
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </motion.div>
-                    </>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="hidden xl:flex w-96 flex-col items-center justify-center p-8 text-center text-gray-400 bg-surface-container-low/30 border-l border-gray-200">
+                      <Search className="w-12 h-12 mb-3 text-gray-300" />
+                      <p className="text-sm font-medium text-gray-500">
+                        Sélectionnez un candidat dans la liste pour voir ses détails complets.
+                      </p>
+                    </div>
                   )}
-                </AnimatePresence>
+                </div>
 
                 {/* Delete confirmation */}
                 <AnimatePresence>
@@ -2465,6 +2777,8 @@ export default function App() {
                                   const res = await authedFetch(`${API_URL}/job-applications/${appToDelete}`, { method: 'DELETE' });
                                   if (res.ok) {
                                     setJobApps((prev: any[]) => prev.filter((a: any) => a._id !== appToDelete));
+                                    if (selectedApp?._id === appToDelete) setSelectedApp(null);
+                                    setDeletedCount((prev) => prev + 1);
                                     addToast('Candidature supprimée');
                                   }
                                 } catch { addToast('Erreur lors de la suppression', 'info'); }
@@ -2483,7 +2797,6 @@ export default function App() {
                 </AnimatePresence>
               </motion.div>
             )}
-
             {activeTab === 'offers' && (
               <motion.div
                 key="offers"

@@ -10,7 +10,7 @@ import JobApplication, { APPLICATION_STATUSES, ApplicationStatus } from '../mode
 import Candidate from '../models/Candidate.js';
 import Attachment, { AttachmentType, IAttachment } from '../models/Attachment.js';
 import JobOffer from '../models/JobOffer.js';
-import { sendJobConfirmation, sendNewApplicationAlert } from '../services/email.js';
+import { sendJobConfirmation, sendNewApplicationAlert, sendInterviewInvitation, sendApplicationAccepted, sendApplicationRejected } from '../services/email.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -381,6 +381,44 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Planification d'un entretien (date + heure obligatoires, lieu ou lien selon le type)
+    const hasInterviewData = ['interviewDate', 'interviewTime', 'interviewType', 'interviewLocation', 'interviewLink', 'interviewNotes']
+      .some((f) => req.body[f] !== undefined);
+    if (hasInterviewData) {
+      const interviewType: 'presentiel' | 'en_ligne' = req.body.interviewType === 'en_ligne' ? 'en_ligne' : 'presentiel';
+      const interviewDate = sanitize(String(req.body.interviewDate || ''));
+      const interviewTime = sanitize(String(req.body.interviewTime || ''));
+      if (!interviewDate || !interviewTime) {
+        return res.status(400).json({ message: 'La date et l\'heure de l\'entretien sont obligatoires' });
+      }
+      const interviewLocation = interviewType === 'presentiel' ? sanitize(String(req.body.interviewLocation || '')) : '';
+      const interviewLink = interviewType === 'en_ligne' ? sanitize(String(req.body.interviewLink || '')) : '';
+      if (interviewType === 'presentiel' && !interviewLocation) {
+        return res.status(400).json({ message: 'Le lieu de l\'entretien est obligatoire' });
+      }
+      if (interviewType === 'en_ligne' && !interviewLink) {
+        return res.status(400).json({ message: 'Le lien de la réunion est obligatoire' });
+      }
+      const interviewNotes = sanitize(String(req.body.interviewNotes || ''));
+      update.interview = {
+        date: interviewDate,
+        time: interviewTime,
+        type: interviewType,
+        location: interviewLocation,
+        link: interviewLink,
+        notes: interviewNotes,
+        scheduledAt: new Date(),
+      };
+      if (app.status !== 'interview') {
+        update.status = 'interview';
+      }
+      push.statusHistory = {
+        status: 'interview',
+        changedAt: new Date(),
+        note: interviewNotes ? `Entretien planifié — ${interviewNotes}` : 'Entretien planifié',
+      };
+    }
+
     // Ajout d'une note interne
     if (req.body.note && typeof req.body.note === 'string') {
       const noteText = sanitize(req.body.note);
@@ -400,6 +438,36 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     const updated = await JobApplication.findByIdAndUpdate(req.params.id, update, { new: true })
       .populate(populates());
     if (!updated) return res.status(404).json({ message: 'Candidature introuvable' });
+
+    // Emails automatiques selon le nouveau statut (en arrière-plan, sans bloquer la réponse)
+    if (updated) {
+      if (updated.status === 'accepted' && app.status !== 'accepted') {
+        sendApplicationAccepted(updated.email, {
+          firstName: updated.firstName,
+          lastName: updated.lastName,
+          position: updated.position,
+        }).catch(() => {});
+      } else if (updated.status === 'rejected' && app.status !== 'rejected') {
+        sendApplicationRejected(updated.email, {
+          firstName: updated.firstName,
+          lastName: updated.lastName,
+          position: updated.position,
+        }).catch(() => {});
+      } else if (updated.status === 'interview' && updated.interview && req.body.sendInterviewEmail) {
+        sendInterviewInvitation(updated.email, {
+          firstName: updated.firstName,
+          lastName: updated.lastName,
+          position: updated.position,
+          date: updated.interview.date,
+          time: updated.interview.time,
+          type: updated.interview.type,
+          location: updated.interview.location,
+          link: updated.interview.link,
+          notes: updated.interview.notes,
+        }).catch(() => {});
+      }
+    }
+
     res.json(updated);
   } catch (error) {
     console.error('[job-applications] PUT failed:', error);

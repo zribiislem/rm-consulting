@@ -31,6 +31,18 @@ export interface INote {
   createdAt: Date;
 }
 
+export type InterviewType = 'presentiel' | 'en_ligne';
+
+export interface IInterview {
+  date: string;
+  time: string;
+  type: InterviewType;
+  location: string;
+  link: string;
+  notes: string;
+  scheduledAt: Date;
+}
+
 export interface IJobApplication extends Document {
   candidate: Types.ObjectId;
   lastName: string;
@@ -46,6 +58,7 @@ export interface IJobApplication extends Document {
   status: ApplicationStatus;
   statusHistory: IStatusHistoryEntry[];
   notes: INote[];
+  interview?: IInterview;
   jobOffer?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -61,6 +74,16 @@ const NoteSchema = new Schema<INote>({
   text: { type: String, required: true, maxlength: 2000 },
   addedBy: { type: String, default: 'Administrateur' },
   createdAt: { type: Date, default: Date.now },
+}, { _id: false });
+
+const InterviewSchema = new Schema<IInterview>({
+  date: { type: String, required: true },
+  time: { type: String, required: true },
+  type: { type: String, enum: ['presentiel', 'en_ligne'], required: true },
+  location: { type: String, default: '' },
+  link: { type: String, default: '' },
+  notes: { type: String, default: '', maxlength: 2000 },
+  scheduledAt: { type: Date, default: Date.now },
 }, { _id: false });
 
 const JobApplicationSchema = new Schema<IJobApplication>({
@@ -92,6 +115,7 @@ const JobApplicationSchema = new Schema<IJobApplication>({
   },
   statusHistory: { type: [StatusHistoryEntrySchema], default: [] },
   notes: { type: [NoteSchema], default: [] },
+  interview: { type: InterviewSchema },
   jobOffer: { type: Schema.Types.ObjectId, ref: 'JobOffer' },
 }, { timestamps: true });
 
