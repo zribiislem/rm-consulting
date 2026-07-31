@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import * as XLSX from 'xlsx';
 import MapPicker from './MapPicker.js';
 import {
   LayoutDashboard,
@@ -36,7 +37,9 @@ import {
   XCircle,
   FileText,
   Filter,
-  Download
+  Download,
+  Archive,
+  ArchiveRestore
 } from 'lucide-react';
 
 // Interfaces
@@ -196,7 +199,7 @@ export default function App() {
   const [isAuthChecked, setIsAuthChecked] = useState(false);
 
   // Navigation active tab
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'references' | 'recruitment' | 'offers'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'references' | 'recruitment'>('dashboard');
 
   // Departments dynamic state
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -316,21 +319,12 @@ export default function App() {
     createdAt: string;
   }
   const [jobApps, setJobApps] = useState<JobApp[]>([]);
+  const [archivedApps, setArchivedApps] = useState<JobApp[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
   const [selectedApp, setSelectedApp] = useState<JobApp | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [appToDelete, setAppToDelete] = useState<string | null>(null);
-
-  // Job offers state
-  const [jobOffers, setJobOffers] = useState<any[]>([]);
-  const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
-  const [editingOffer, setEditingOffer] = useState<any>(null);
-  const [offerTitle, setOfferTitle] = useState('');
-  const [offerDepartment, setOfferDepartment] = useState('');
-  const [offerLocation, setOfferLocation] = useState('');
-  const [offerContractType, setOfferContractType] = useState('');
-  const [offerDescription, setOfferDescription] = useState('');
-  const [offerSkillsText, setOfferSkillsText] = useState('');
-  const [offerDeadline, setOfferDeadline] = useState('');
+  const [deleteMode, setDeleteMode] = useState<'archive' | 'permanent'>('archive');
 
   // Parameters state
   interface Parameter {
@@ -349,7 +343,6 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('Tous les postes');
   const [expFilter, setExpFilter] = useState('Toutes');
-  const [deletedCount, setDeletedCount] = useState(2);
 
   // Interview planning form state
   const [interviewDate, setInterviewDate] = useState('');
@@ -359,6 +352,8 @@ export default function App() {
   const [interviewLink, setInterviewLink] = useState('');
   const [interviewNotes, setInterviewNotes] = useState('');
   const [sendInterviewEmail, setSendInterviewEmail] = useState(true);
+  const [startDate, setStartDate] = useState('');
+  const [startTime, setStartTime] = useState('');
   const [isInterviewSaving, setIsInterviewSaving] = useState(false);
 
   const generateClientSlots = (start: string, end: string): string[] => {
@@ -380,7 +375,7 @@ export default function App() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [deptRes, missionRes, msgRes, apptRes, availRes, refRes, paramRes, jobRes, offerRes] = await Promise.all([
+        const [deptRes, missionRes, msgRes, apptRes, availRes, refRes, paramRes, jobRes, archivedRes] = await Promise.all([
           fetch(`${API_URL}/departments`),
           fetch(`${API_URL}/missions`),
           fetch(`${API_URL}/messages`),
@@ -389,7 +384,7 @@ export default function App() {
           fetch(`${API_URL}/references`),
           fetch(`${API_URL}/parameters`),
           authedFetch(`${API_URL}/job-applications`),
-          authedFetch(`${API_URL}/job-offers`)
+          authedFetch(`${API_URL}/job-applications?archived=true`)
         ]);
         const depts = await deptRes.json();
         const missionsData = await missionRes.json();
@@ -399,7 +394,7 @@ export default function App() {
         const refs = await refRes.json();
         const params = await paramRes.json();
         const jobs = await jobRes.json();
-        const offersData = await offerRes.json();
+        const archived = await archivedRes.json();
         setDepartments(depts.map((d: any) => ({ ...d, id: d._id })));
         setMissions(missionsData.map((m: any) => ({ ...m, id: m._id })));
         setMessages(msgs.map((m: any) => ({ ...m, id: m._id })));
@@ -408,7 +403,7 @@ export default function App() {
         setReferences(refs);
         setParameters(params);
         setJobApps(jobs);
-        setJobOffers(offersData);
+        setArchivedApps(archived);
       } catch (err) {
         console.error('Failed to fetch data from API:', err);
       }
@@ -986,11 +981,68 @@ export default function App() {
     [jobApps]
   );
 
+  // Export Excel (.xlsx) de la liste des candidats filtrés (respecte recherche + filtres actifs)
+  const exportCandidatesXLSX = () => {
+    if (filteredApps.length === 0) {
+      addToast('Aucun candidat à exporter', 'info');
+      return;
+    }
+
+    const rows = filteredApps.map((app: any) => ({
+      'Nom complet': `${app.firstName || ''} ${app.lastName || ''}`,
+      'Email': app.email || '',
+      'Téléphone': app.phone || '',
+      'Poste': app.position || '',
+      'Expérience': app.experience || '',
+      'Études & Diplômes': app.education || '',
+      'Ville': app.address || '',
+      'Date de dépôt': new Date(app.createdAt).toLocaleDateString('fr-FR'),
+      'Statut': candidateStatusInfo(app.status).label,
+      'Date de prise de poste': app.startDate
+        ? `${new Date(`${app.startDate}T00:00:00`).toLocaleDateString('fr-FR')}${app.startTime ? ` ${formatTimeAmPm(app.startTime)}` : ''}`
+        : '',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 22 }, { wch: 30 }, { wch: 16 }, { wch: 30 }, { wch: 22 },
+      { wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 22 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Candidats');
+    XLSX.writeFile(wb, `candidatures_${new Date().toISOString().split('T')[0]}.xlsx`);
+    addToast(`${filteredApps.length} candidat${filteredApps.length > 1 ? 's' : ''} exporté${filteredApps.length > 1 ? 's' : ''} (Excel)`);
+  };
+
   // URL sécurisée de téléchargement d'une pièce jointe
   const attachmentDownloadUrl = (app: any, att: any): string =>
     att._id
       ? `${API_URL}/job-applications/${app._id}/attachments/${att._id}?token=${encodeURIComponent(safeGetToken() || '')}`
       : att.url;
+
+  // Restauration d'une candidature depuis la corbeille
+  const handleRestoreApp = async (appId: string) => {
+    try {
+      const res = await authedFetch(`${API_URL}/job-applications/${appId}/restore`, { method: 'POST' });
+      if (res.ok) {
+        const restored = archivedApps.find((a: any) => a._id === appId);
+        setArchivedApps((prev: any[]) => prev.filter((a: any) => a._id !== appId));
+        if (restored) setJobApps((prev: any[]) => [restored, ...prev]);
+        addToast('Candidature restaurée');
+      } else {
+        addToast('Erreur lors de la restauration', 'info');
+      }
+    } catch {
+      addToast('Erreur lors de la restauration', 'info');
+    }
+  };
+
+  // Ouverture de la confirmation : archivage (actifs) ou suppression définitive (corbeille)
+  const openDeleteConfirm = (appId: string, mode: 'archive' | 'permanent') => {
+    setAppToDelete(appId);
+    setDeleteMode(mode);
+    setIsDeleteConfirmOpen(true);
+  };
 
   // Invitation à un entretien (statut -> interview)
   const handleInviteInterview = async (app: any) => {
@@ -1020,6 +1072,8 @@ export default function App() {
     setInterviewLocation(selectedApp.interview?.location || '');
     setInterviewLink(selectedApp.interview?.link || '');
     setInterviewNotes(selectedApp.interview?.notes || '');
+    setStartDate(selectedApp.startDate || '');
+    setStartTime(selectedApp.startTime || '');
   }, [selectedApp?._id]);
 
   // Sauvegarde de la planification d'entretien
@@ -1175,18 +1229,6 @@ export default function App() {
           >
             <Briefcase className="w-5 h-5" />
             <span className="text-sm">Recrutement</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('offers')}
-            className={`w-full flex items-center gap-3 p-3 rounded-lg font-medium transition-all duration-150 ${
-              activeTab === 'offers'
-                ? 'sidebar-active text-white'
-                : 'text-on-surface-variant hover:bg-secondary-container/20 hover:text-secondary'
-            }`}
-          >
-            <ClipboardList className="w-5 h-5" />
-            <span className="text-sm">Offres d'emploi</span>
           </button>
 
           <button
@@ -2251,9 +2293,9 @@ export default function App() {
                       </span>
                       <span className="text-[10px] font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded-full">Archivé</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Supprimés</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Archivés</p>
                     <h3 className="font-headline text-3xl font-extrabold text-on-surface mt-1">
-                      {deletedCount < 10 ? `0${deletedCount}` : deletedCount}
+                      {archivedApps.length < 10 ? `0${archivedApps.length}` : archivedApps.length}
                     </h3>
                   </div>
                 </div>
@@ -2305,6 +2347,33 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {/* Bascule Actifs / Archivés */}
+                        <div className="flex items-center gap-1 p-1 bg-surface-container-low border border-gray-200 rounded-lg">
+                          <button
+                            onClick={() => setShowArchived(false)}
+                            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                              !showArchived ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:bg-gray-100'
+                            }`}
+                          >
+                            <Users className="w-3.5 h-3.5" />
+                            Candidats
+                          </button>
+                          <button
+                            onClick={() => setShowArchived(true)}
+                            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                              showArchived ? 'bg-gray-700 text-white shadow-sm' : 'text-on-surface-variant hover:bg-gray-100'
+                            }`}
+                          >
+                            <Archive className="w-3.5 h-3.5" />
+                            Archivés
+                            <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${
+                              showArchived ? 'bg-white/20' : 'bg-gray-200 text-gray-700'
+                            }`}>
+                              {archivedApps.length}
+                            </span>
+                          </button>
+                        </div>
+
                         <button
                           onClick={() => {
                             setRoleFilter('Tous les postes');
@@ -2318,7 +2387,7 @@ export default function App() {
                           <Filter className="w-5 h-5" />
                         </button>
                         <button
-                          onClick={() => addToast('Export des candidatures en cours (CSV)', 'info')}
+                          onClick={exportCandidatesXLSX}
                           className="p-2 text-on-surface-variant hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
                           title="Télécharger la liste"
                         >
@@ -2350,7 +2419,87 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {filteredApps.length === 0 ? (
+                          {showArchived ? (
+                            archivedApps.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                                  <Archive className="w-10 h-10 text-gray-300 mb-2 mx-auto" />
+                                  <p className="text-sm font-medium">Aucune candidature archivée.</p>
+                                </td>
+                              </tr>
+                            ) : (
+                              archivedApps.map((app: any) => {
+                                const cvAtt = (app.attachments || []).find((a: any) => a.type === 'cv');
+                                return (
+                                  <tr key={app._id} className="transition-all group hover:bg-gray-50/70">
+                                    <td className="px-6 py-5">
+                                      <div className="flex items-center gap-4">
+                                        <div className="w-11 h-11 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
+                                          {app.firstName?.[0]}{app.lastName?.[0]}
+                                        </div>
+                                        <div>
+                                          <p className="text-sm font-bold text-on-surface group-hover:text-primary transition-colors">
+                                            {app.firstName} {app.lastName}
+                                          </p>
+                                          <p className="text-xs text-on-surface-variant mt-0.5">{app.email}</p>
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    <td className="px-6 py-5">
+                                      <div className="flex flex-col">
+                                        <span className="text-on-surface font-medium text-sm">{app.position}</span>
+                                        <span className="text-xs text-on-surface-variant mt-0.5">{app.experience || 'Expérience non spécifiée'}</span>
+                                      </div>
+                                    </td>
+
+                                    <td className="px-6 py-5">
+                                      <span className="text-on-surface-variant text-sm font-medium">
+                                        {new Date(app.createdAt).toLocaleDateString('fr-FR')}
+                                      </span>
+                                    </td>
+
+                                    <td className="px-6 py-5">
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border bg-gray-100 text-gray-600 border-gray-200">
+                                        Archivé
+                                        {app.deletedAt ? ` le ${new Date(app.deletedAt).toLocaleDateString('fr-FR')}` : ''}
+                                      </span>
+                                    </td>
+
+                                    <td className="px-6 py-5 text-right">
+                                      <div className="flex items-center justify-end gap-2">
+                                        <a
+                                          href={cvAtt ? attachmentDownloadUrl(app, cvAtt) : undefined}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className={`flex items-center gap-1 px-3 py-1.5 bg-surface-container-low border border-gray-200 rounded-lg text-xs font-bold text-primary hover:bg-white transition-colors ${
+                                            cvAtt ? '' : 'pointer-events-none opacity-50'
+                                          }`}
+                                          title="Voir CV"
+                                        >
+                                          <FileText className="w-4 h-4" /> CV
+                                        </a>
+                                        <button
+                                          onClick={() => handleRestoreApp(app._id)}
+                                          className="p-2 hover:bg-green-50 rounded-lg text-green-600 transition-colors"
+                                          title="Restaurer la candidature"
+                                        >
+                                          <ArchiveRestore className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                          onClick={() => openDeleteConfirm(app._id, 'permanent')}
+                                          className="p-2 hover:bg-red-50 rounded-lg text-rose-600 transition-colors"
+                                          title="Supprimer définitivement"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )
+                          ) : filteredApps.length === 0 ? (
                             <tr>
                               <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                                 <Search className="w-10 h-10 text-gray-300 mb-2 mx-auto" />
@@ -2424,14 +2573,11 @@ export default function App() {
                                         <Search className="w-4 h-4" />
                                       </button>
                                       <button
-                                        onClick={() => {
-                                          setAppToDelete(app._id);
-                                          setIsDeleteConfirmOpen(true);
-                                        }}
+                                        onClick={() => openDeleteConfirm(app._id, 'archive')}
                                         className="p-2 hover:bg-red-50 rounded-lg text-rose-600 transition-colors"
-                                        title="Supprimer la candidature"
+                                        title="Archiver la candidature"
                                       >
-                                        <Trash2 className="w-4 h-4" />
+                                        <Archive className="w-4 h-4" />
                                       </button>
                                     </div>
                                   </td>
@@ -2445,7 +2591,7 @@ export default function App() {
                   </div>
 
                   {/* Side Detail Panel */}
-                  {selectedApp ? (
+                  {!showArchived && selectedApp ? (
                     <div className="w-full xl:w-96 flex flex-col bg-surface-container-low/60 border-t xl:border-t-0 xl:border-l border-gray-200 p-6">
                       <div className="flex items-center justify-between mb-6">
                         <h4 className="font-headline text-lg font-bold text-on-surface">Détails Candidat</h4>
@@ -2492,7 +2638,10 @@ export default function App() {
                                 try {
                                   const res = await authedFetch(`${API_URL}/job-applications/${selectedApp._id}`, {
                                     method: 'PUT',
-                                    body: JSON.stringify({ status: newStatus }),
+                                    body: JSON.stringify({
+                                      status: newStatus,
+                                      ...(newStatus === 'accepted' ? { startDate, startTime } : {}),
+                                    }),
                                   });
                                   if (res.ok) {
                                     const updated = await res.json();
@@ -2671,6 +2820,93 @@ export default function App() {
                               </motion.div>
                             )}
                           </AnimatePresence>
+
+                          {/* Date de prise de poste (visible quand le candidat est accepté) */}
+                          <AnimatePresence initial={false}>
+                            {selectedApp.status === 'accepted' && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.35, ease: 'easeInOut' }}
+                                className="w-full overflow-hidden text-left"
+                              >
+                                <div className="mt-4 pt-4 border-t border-gray-200">
+                                  <div className="flex items-center gap-2 mb-4">
+                                    <span className="p-1.5 bg-primary/10 text-primary rounded-lg">
+                                      <CalendarIcon className="w-4 h-4" />
+                                    </span>
+                                    <h6 className="font-headline text-sm font-bold text-on-surface">
+                                      Date de prise de poste
+                                    </h6>
+                                  </div>
+
+                                  <div className="space-y-3">
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div>
+                                        <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
+                                          Date de début <span className="text-error">*</span>
+                                        </label>
+                                        <input
+                                          type="date"
+                                          value={startDate}
+                                          min={new Date().toISOString().split('T')[0]}
+                                          onChange={(e) => setStartDate(e.target.value)}
+                                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
+                                          Heure d'arrivée <span className="text-error">*</span>
+                                        </label>
+                                        <input
+                                          type="time"
+                                          value={startTime}
+                                          onChange={(e) => setStartTime(e.target.value)}
+                                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none"
+                                        />
+                                        {startTime && (
+                                          <p className="text-[10px] text-on-surface-variant mt-1">
+                                            Affichée au candidat :{' '}
+                                            <span className="font-bold text-primary">{formatTimeAmPm(startTime)}</span>
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={async () => {
+                                        if (!startDate || !startTime) {
+                                          addToast('La date et l\'heure de prise de poste sont obligatoires', 'info');
+                                          return;
+                                        }
+                                        try {
+                                          const res = await authedFetch(`${API_URL}/job-applications/${selectedApp._id}`, {
+                                            method: 'PUT',
+                                            body: JSON.stringify({ startDate, startTime }),
+                                          });
+                                          if (res.ok) {
+                                            const updated = await res.json();
+                                            setJobApps((prev: any[]) => prev.map((a: any) => (a._id === selectedApp._id ? updated : a)));
+                                            setSelectedApp(updated);
+                                            addToast('Date de prise de poste enregistrée et envoyée au candidat par email');
+                                          }
+                                        } catch {
+                                          addToast('Erreur lors de l\'enregistrement', 'info');
+                                        }
+                                      }}
+                                      className="w-full px-4 py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow hover:bg-primary-container active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
+                                    >
+                                      <CheckCircle2 className="w-4 h-4" />
+                                      Enregistrer et envoyer au candidat
+                                    </button>
+                                    <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                                      Un seul email d'acceptation sera envoyé au candidat, avec la date et l'heure de prise de poste. Il n'est renvoyé qu'en cas de modification de la date ou de l'heure.
+                                    </p>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
 
                         {/* Info details */}
@@ -2758,11 +2994,19 @@ export default function App() {
                         className="fixed inset-0 z-50 flex items-center justify-center p-4"
                       >
                         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 text-center">
-                          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Trash2 className="w-6 h-6 text-red-500" />
+                          <div className={`w-12 h-12 ${deleteMode === 'permanent' ? 'bg-red-100' : 'bg-gray-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+                            {deleteMode === 'permanent'
+                              ? <Trash2 className="w-6 h-6 text-red-500" />
+                              : <Archive className="w-6 h-6 text-gray-600" />}
                           </div>
-                          <h3 className="font-headline font-bold text-lg text-on-surface mb-2">Confirmer la suppression</h3>
-                          <p className="text-sm text-on-surface-variant mb-6">Cette action est irréversible. Tous les fichiers seront également supprimés.</p>
+                          <h3 className="font-headline font-bold text-lg text-on-surface mb-2">
+                            {deleteMode === 'permanent' ? 'Supprimer définitivement' : 'Archiver la candidature'}
+                          </h3>
+                          <p className="text-sm text-on-surface-variant mb-6">
+                            {deleteMode === 'permanent'
+                              ? 'Cette action est irréversible. Tous les fichiers seront également supprimés.'
+                              : 'La candidature sera déplacée dans la corbeille. Vous pourrez la restaurer ou la supprimer définitivement à tout moment.'}
+                          </p>
                           <div className="flex gap-3">
                             <button
                               onClick={() => { setIsDeleteConfirmOpen(false); setAppToDelete(null); }}
@@ -2774,20 +3018,32 @@ export default function App() {
                               onClick={async () => {
                                 if (!appToDelete) return;
                                 try {
-                                  const res = await authedFetch(`${API_URL}/job-applications/${appToDelete}`, { method: 'DELETE' });
+                                  const url = deleteMode === 'permanent'
+                                    ? `${API_URL}/job-applications/${appToDelete}/permanent`
+                                    : `${API_URL}/job-applications/${appToDelete}`;
+                                  const res = await authedFetch(url, { method: 'DELETE' });
                                   if (res.ok) {
-                                    setJobApps((prev: any[]) => prev.filter((a: any) => a._id !== appToDelete));
-                                    if (selectedApp?._id === appToDelete) setSelectedApp(null);
-                                    setDeletedCount((prev) => prev + 1);
-                                    addToast('Candidature supprimée');
+                                    if (deleteMode === 'permanent') {
+                                      setArchivedApps((prev: any[]) => prev.filter((a: any) => a._id !== appToDelete));
+                                      if (selectedApp?._id === appToDelete) setSelectedApp(null);
+                                      addToast('Candidature supprimée définitivement');
+                                    } else {
+                                      const archived = jobApps.find((a: any) => a._id === appToDelete);
+                                      setJobApps((prev: any[]) => prev.filter((a: any) => a._id !== appToDelete));
+                                      if (selectedApp?._id === appToDelete) setSelectedApp(null);
+                                      if (archived) setArchivedApps((prev: any[]) => [archived, ...prev]);
+                                      addToast('Candidature archivée');
+                                    }
                                   }
                                 } catch { addToast('Erreur lors de la suppression', 'info'); }
                                 setIsDeleteConfirmOpen(false);
                                 setAppToDelete(null);
                               }}
-                              className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-all cursor-pointer"
+                              className={`flex-1 px-4 py-2.5 text-white rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                                deleteMode === 'permanent' ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-800'
+                              }`}
                             >
-                              Supprimer
+                              {deleteMode === 'permanent' ? 'Supprimer définitivement' : 'Archiver'}
                             </button>
                           </div>
                         </div>
@@ -2797,258 +3053,6 @@ export default function App() {
                 </AnimatePresence>
               </motion.div>
             )}
-            {activeTab === 'offers' && (
-              <motion.div
-                key="offers"
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                className="space-y-8"
-              >
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <h3 className="font-headline text-2xl font-bold text-primary">Offres d'emploi</h3>
-                    <p className="text-xs text-on-surface-variant">
-                      Gérez les offres publiées. <strong>{jobOffers.length}</strong> offre(s) au total.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setEditingOffer(null);
-                      setOfferTitle('');
-                      setOfferDepartment('');
-                      setOfferLocation('');
-                      setOfferContractType('');
-                      setOfferDescription('');
-                      setOfferSkillsText('');
-                      setOfferDeadline('');
-                      setIsOfferModalOpen(true);
-                    }}
-                    className="px-4 py-2.5 bg-primary text-white hover:bg-primary-container rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md active:scale-95"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Nouvelle offre
-                  </button>
-                </div>
-
-                {jobOffers.length === 0 ? (
-                  <div className="glass-card p-12 text-center rounded-2xl border border-dashed border-secondary/20">
-                    <Briefcase className="w-12 h-12 text-on-surface-variant/40 mx-auto mb-4" />
-                    <p className="text-sm font-semibold text-on-surface">Aucune offre d'emploi</p>
-                    <p className="text-xs text-on-surface-variant mt-1">Créez votre première offre pour commencer à recruter.</p>
-                  </div>
-                ) : (
-                  <div className="glass-card rounded-xl overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="bg-surface-container-low border-b border-secondary/10">
-                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Titre</th>
-                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Département</th>
-                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Localisation</th>
-                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Contrat</th>
-                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Deadline</th>
-                            <th className="text-left p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Statut</th>
-                            <th className="text-right p-4 font-bold text-on-surface text-xs uppercase tracking-wider">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {jobOffers.map((offer: any) => (
-                            <tr key={offer._id} className="border-b border-secondary/5 hover:bg-surface-container-low/50 transition-colors">
-                              <td className="p-4">
-                                <p className="font-bold text-on-surface text-sm">{offer.title}</p>
-                              </td>
-                              <td className="p-4 text-on-surface-variant text-sm">{offer.department}</td>
-                              <td className="p-4 text-on-surface-variant text-sm">{offer.location}</td>
-                              <td className="p-4 text-on-surface-variant text-sm">{offer.contractType}</td>
-                              <td className="p-4 text-on-surface-variant text-sm">{new Date(offer.applicationDeadline).toLocaleDateString('fr-FR')}</td>
-                              <td className="p-4">
-                                <span className={`inline-block text-[10px] font-bold px-2.5 py-1 rounded-full ${
-                                  offer.isActive
-                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                    : 'bg-gray-50 text-gray-500 border border-gray-200'
-                                }`}>
-                                  {offer.isActive ? 'Active' : 'Inactive'}
-                                </span>
-                              </td>
-                              <td className="p-4 text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <button
-                                    onClick={() => {
-                                      setEditingOffer(offer);
-                                      setOfferTitle(offer.title);
-                                      setOfferDepartment(offer.department);
-                                      setOfferLocation(offer.location);
-                                      setOfferContractType(offer.contractType);
-                                      setOfferDescription(offer.description);
-                                      setOfferSkillsText(offer.requiredSkills?.join('\n') || '');
-                                      setOfferDeadline(new Date(offer.applicationDeadline).toISOString().split('T')[0]);
-                                      setIsOfferModalOpen(true);
-                                    }}
-                                    className="p-2 text-on-surface-variant hover:text-primary hover:bg-primary/5 rounded-lg transition-all cursor-pointer"
-                                    title="Modifier"
-                                  >
-                                    <Pencil className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={async () => {
-                                      try {
-                                        const res = await authedFetch(`${API_URL}/job-offers/${offer._id}/toggle`, { method: 'PATCH' });
-                                        if (res.ok) {
-                                          const updated = await res.json();
-                                          setJobOffers((prev: any[]) => prev.map((o: any) => o._id === offer._id ? updated : o));
-                                          addToast(`Offre ${updated.isActive ? 'activée' : 'désactivée'}`);
-                                        } else {
-                                          addToast('Erreur lors de la mise à jour', 'info');
-                                        }
-                                      } catch { addToast('Erreur', 'info'); }
-                                    }}
-                                    className={`p-2 rounded-lg transition-all cursor-pointer ${
-                                      offer.isActive
-                                        ? 'text-emerald-600 hover:bg-emerald-50'
-                                        : 'text-gray-400 hover:bg-gray-50'
-                                    }`}
-                                    title={offer.isActive ? 'Désactiver' : 'Activer'}
-                                  >
-                                    {offer.isActive ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-                                  </button>
-                                  <button
-                                    onClick={async () => {
-                                      if (!confirm('Supprimer cette offre ?')) return;
-                                      try {
-                                        const res = await authedFetch(`${API_URL}/job-offers/${offer._id}`, { method: 'DELETE' });
-                                        if (res.ok) {
-                                          setJobOffers((prev: any[]) => prev.filter((o: any) => o._id !== offer._id));
-                                          addToast('Offre supprimée');
-                                        } else {
-                                          addToast('Erreur lors de la suppression', 'info');
-                                        }
-                                      } catch { addToast('Erreur', 'info'); }
-                                    }}
-                                    className="p-2 text-on-surface-variant hover:text-error hover:bg-red-50 rounded-lg transition-all cursor-pointer"
-                                    title="Supprimer"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Offer Modal */}
-                <AnimatePresence>
-                  {isOfferModalOpen && (
-                    <>
-                      <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setIsOfferModalOpen(false)} />
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
-                      >
-                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto custom-scrollbar pointer-events-auto">
-                          <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-2xl">
-                            <h3 className="font-headline font-bold text-lg text-primary">
-                              {editingOffer ? 'Modifier l\'offre' : 'Nouvelle offre d\'emploi'}
-                            </h3>
-                            <button onClick={() => setIsOfferModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">
-                              <X className="w-5 h-5 text-gray-500" />
-                            </button>
-                          </div>
-                          <form onSubmit={async (e) => {
-                            e.preventDefault();
-                            if (!offerTitle || !offerDepartment || !offerLocation || !offerContractType || !offerDescription || !offerSkillsText || !offerDeadline) {
-                              addToast('Veuillez remplir tous les champs.', 'info');
-                              return;
-                            }
-                            const body = {
-                              title: offerTitle,
-                              department: offerDepartment,
-                              location: offerLocation,
-                              contractType: offerContractType,
-                              description: offerDescription,
-                              requiredSkills: offerSkillsText.split('\n').map(s => s.trim()).filter(Boolean),
-                              applicationDeadline: new Date(offerDeadline).toISOString(),
-                            };
-                            try {
-                              if (editingOffer) {
-                                const res = await authedFetch(`${API_URL}/job-offers/${editingOffer._id}`, {
-                                  method: 'PUT', body: JSON.stringify(body),
-                                });
-                                if (res.ok) {
-                                  const updated = await res.json();
-                                  setJobOffers((prev: any[]) => prev.map((o: any) => o._id === editingOffer._id ? updated : o));
-                                  addToast('Offre modifiée');
-                                } else {
-                                  const err = await res.json().catch(() => null);
-                                  addToast(err?.message || 'Erreur lors de la modification', 'info');
-                                }
-                              } else {
-                                const res = await authedFetch(`${API_URL}/job-offers`, {
-                                  method: 'POST', body: JSON.stringify(body),
-                                });
-                                if (res.ok) {
-                                  const created = await res.json();
-                                  setJobOffers((prev: any[]) => [created, ...prev]);
-                                  addToast('Offre créée');
-                                } else {
-                                  const err = await res.json().catch(() => null);
-                                  addToast(err?.message || 'Erreur lors de la création', 'info');
-                                }
-                              }
-                              setIsOfferModalOpen(false);
-                            } catch { addToast('Erreur', 'info'); }
-                          }} className="p-6 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-1.5 col-span-2">
-                                <label className="text-xs font-bold text-gray-700">Titre *</label>
-                                <input value={offerTitle} onChange={e => setOfferTitle(e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none" placeholder="Ex: Expert-Comptable" />
-                              </div>
-                              <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-gray-700">Département *</label>
-                                <input value={offerDepartment} onChange={e => setOfferDepartment(e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none" placeholder="Ex: Audit" />
-                              </div>
-                              <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-gray-700">Localisation *</label>
-                                <input value={offerLocation} onChange={e => setOfferLocation(e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none" placeholder="Ex: Tunis" />
-                              </div>
-                              <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-gray-700">Type de contrat *</label>
-                                <input value={offerContractType} onChange={e => setOfferContractType(e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none" placeholder="Ex: CDI, CDD, Stage" />
-                              </div>
-                              <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-gray-700">Date limite *</label>
-                                <input type="date" value={offerDeadline} onChange={e => setOfferDeadline(e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none" />
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="text-xs font-bold text-gray-700">Description *</label>
-                              <textarea value={offerDescription} onChange={e => setOfferDescription(e.target.value)} rows={4} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none" placeholder="Description détaillée du poste..." />
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="text-xs font-bold text-gray-700">Compétences requises * (une par ligne)</label>
-                              <textarea value={offerSkillsText} onChange={e => setOfferSkillsText(e.target.value)} rows={3} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none" placeholder="Maîtrise des normes IFRS&#10;Excel avancé&#10;Anglais courant" />
-                            </div>
-                            <div className="flex gap-3 pt-2">
-                              <button type="button" onClick={() => setIsOfferModalOpen(false)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold text-on-surface hover:bg-gray-50 transition-all cursor-pointer">Annuler</button>
-                              <button type="submit" className="flex-1 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary-container transition-all cursor-pointer">
-                                {editingOffer ? 'Modifier' : 'Créer'}
-                              </button>
-                            </div>
-                          </form>
-                        </div>
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            )}
-
             {activeTab === 'settings' && (
               <motion.div
                 key="settings"

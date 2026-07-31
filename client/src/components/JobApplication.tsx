@@ -45,7 +45,6 @@ export default function JobApplication() {
   const [motivationMessage, setMotivationMessage] = useState('');
 
   const [cvFile, setCvFile] = useState<File | null>(null);
-  const [coverLetterFile, setCoverLetterFile] = useState<File | null>(null);
   const [certificates, setCertificates] = useState<File[]>([]);
 
   // Offres d'emploi publiées (liées au module de gestion des offres)
@@ -56,7 +55,6 @@ export default function JobApplication() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const cvInputRef = useRef<HTMLInputElement>(null);
-  const coverLetterInputRef = useRef<HTMLInputElement>(null);
   const certInputRef = useRef<HTMLInputElement>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -92,16 +90,6 @@ export default function JobApplication() {
     }
   };
 
-  const handleCoverLetterChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const err = validateFile(file);
-      if (err) { setValidationError(err); return; }
-      setValidationError('');
-      setCoverLetterFile(file);
-    }
-  };
-
   const handleCertificatesChange = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files) {
@@ -125,11 +113,6 @@ export default function JobApplication() {
     if (cvInputRef.current) cvInputRef.current.value = '';
   };
 
-  const removeCoverLetter = () => {
-    setCoverLetterFile(null);
-    if (coverLetterInputRef.current) coverLetterInputRef.current.value = '';
-  };
-
   const removeCertificate = (index: number) => {
     setCertificates(prev => prev.filter((_, i) => i !== index));
     if (certInputRef.current) certInputRef.current.value = '';
@@ -139,8 +122,21 @@ export default function JobApplication() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   };
 
+  // Le téléphone doit contenir exactement 8 chiffres (uniquement des chiffres)
   const validatePhone = (value: string): boolean => {
-    return /^[\d\s+\-().]{8,20}$/.test(value);
+    return /^\d{8}$/.test(value);
+  };
+
+  // Efface l'erreur d'un champ dès que l'utilisateur le corrige
+  const clearFieldError = (key: string) => {
+    if (fieldErrors[key]) setFieldErrors((prev) => ({ ...prev, [key]: '' }));
+  };
+
+  // Filtre la saisie du téléphone : chiffres uniquement, 8 maximum
+  const handlePhoneChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 8);
+    setPhone(digits);
+    clearFieldError('phone');
   };
 
   // Validation complète de tous les champs avant envoi
@@ -149,10 +145,11 @@ export default function JobApplication() {
     if (!lastName.trim()) errs.lastName = 'Le nom est requis';
     if (!firstName.trim()) errs.firstName = 'Le prénom est requis';
     if (!email.trim()) errs.email = 'L\'adresse email est requise';
-    else if (!validateEmail(email)) errs.email = 'Adresse email invalide';
+    else if (!validateEmail(email)) errs.email = 'Adresse email invalide (ex : nom@exemple.tn)';
     if (!phone.trim()) errs.phone = 'Le numéro de téléphone est requis';
-    else if (!validatePhone(phone)) errs.phone = 'Numéro de téléphone invalide';
+    else if (!validatePhone(phone)) errs.phone = 'Le téléphone doit contenir 8 chiffres';
     if (!position) errs.position = 'Veuillez sélectionner un poste recherché';
+    if (!experience) errs.experience = 'Veuillez sélectionner vos années d\'expérience';
     if (!education.trim()) errs.education = 'Le niveau d\'étude / la formation est requis';
     if (!cvFile) errs.cv = 'Le CV est obligatoire (PDF, DOC ou DOCX)';
     return errs;
@@ -183,7 +180,6 @@ export default function JobApplication() {
       formData.append('cv', cvFile!);
       if (experience) formData.append('experience', experience);
       if (address.trim()) formData.append('address', address.trim());
-      if (coverLetterFile) formData.append('coverLetter', coverLetterFile);
       if (motivationMessage.trim()) formData.append('motivationMessage', motivationMessage.trim());
       if (offerId) formData.append('jobOfferId', offerId);
       certificates.forEach(cert => formData.append('certificates', cert));
@@ -232,11 +228,9 @@ export default function JobApplication() {
     setAddress('');
     setMotivationMessage('');
     setCvFile(null);
-    setCoverLetterFile(null);
     setCertificates([]);
     setFieldErrors({});
     if (cvInputRef.current) cvInputRef.current.value = '';
-    if (coverLetterInputRef.current) coverLetterInputRef.current.value = '';
     if (certInputRef.current) certInputRef.current.value = '';
     setIsSuccess(false);
   };
@@ -249,6 +243,18 @@ export default function JobApplication() {
 
   const fieldError = (key: string) =>
     fieldErrors[key] ? <p className="text-xs text-red-500 mt-1">{fieldErrors[key]}</p> : null;
+
+  // Note affichée devant chaque champ : Obligatoire ou Optionnel
+  const FieldBadge = ({ required }: { required: boolean }) =>
+    required ? (
+      <span className="ml-2 inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 align-middle">
+        Obligatoire
+      </span>
+    ) : (
+      <span className="ml-2 inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200 align-middle">
+        Optionnel
+      </span>
+    );
 
   return (
     <section id="job-application" className="scroll-mt-12">
@@ -267,7 +273,7 @@ export default function JobApplication() {
             <Briefcase className="w-8 h-8 text-white" />
           </div>
           <h1 className="font-display text-3xl md:text-5xl font-extrabold text-white mb-6">
-            Rejoignez notre équipe d'experts
+            Rejoignez notre équipe
           </h1>
           <p className="text-base md:text-lg text-white/80 max-w-2xl mx-auto leading-relaxed font-sans">
             Chez RM Consulting, nous valorisons l'excellence, l'intégrité et
@@ -334,12 +340,15 @@ export default function JobApplication() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="block text-sm font-bold text-gray-700">
-                        Nom <span className="text-error">*</span>
+                        Nom <FieldBadge required />
                       </label>
                       <input
                         type="text"
                         value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
+                        onChange={(e) => {
+                          setLastName(e.target.value);
+                          clearFieldError('lastName');
+                        }}
                         className={inputClass(!!fieldErrors.lastName)}
                         placeholder="Votre nom"
                       />
@@ -347,12 +356,15 @@ export default function JobApplication() {
                     </div>
                     <div className="space-y-2">
                       <label className="block text-sm font-bold text-gray-700">
-                        Prénom <span className="text-error">*</span>
+                        Prénom <FieldBadge required />
                       </label>
                       <input
                         type="text"
                         value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
+                        onChange={(e) => {
+                          setFirstName(e.target.value);
+                          clearFieldError('firstName');
+                        }}
                         className={inputClass(!!fieldErrors.firstName)}
                         placeholder="Votre prénom"
                       />
@@ -360,12 +372,15 @@ export default function JobApplication() {
                     </div>
                     <div className="space-y-2">
                       <label className="block text-sm font-bold text-gray-700">
-                        Email <span className="text-error">*</span>
+                        Email <FieldBadge required />
                       </label>
                       <input
                         type="email"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          clearFieldError('email');
+                        }}
                         className={inputClass(!!fieldErrors.email)}
                         placeholder="email@exemple.tn"
                       />
@@ -373,14 +388,17 @@ export default function JobApplication() {
                     </div>
                     <div className="space-y-2">
                       <label className="block text-sm font-bold text-gray-700">
-                        Téléphone <span className="text-error">*</span>
+                        Téléphone <FieldBadge required />
                       </label>
                       <input
                         type="tel"
+                        inputMode="numeric"
+                        pattern="[0-9]{8}"
+                        maxLength={8}
                         value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
+                        onChange={handlePhoneChange}
                         className={inputClass(!!fieldErrors.phone)}
-                        placeholder="+216 XX XXX XXX"
+                        placeholder="8 chiffres (ex : 22123456)"
                       />
                       {fieldError('phone')}
                     </div>
@@ -389,12 +407,13 @@ export default function JobApplication() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="block text-sm font-bold text-gray-700">
-                        Poste recherché <span className="text-error">*</span>
+                        Poste recherché <FieldBadge required />
                       </label>
                       <select
                         value={position}
                         onChange={(e) => {
                           setPosition(e.target.value);
+                          clearFieldError('position');
                           const offer = activeOffers.find((o) => o.title === e.target.value);
                           setOfferId(offer ? offer._id : '');
                         }}
@@ -420,29 +439,38 @@ export default function JobApplication() {
                     </div>
                     <div className="space-y-2">
                       <label className="block text-sm font-bold text-gray-700">
-                        Années d'expérience
+                        Années d'expérience <FieldBadge required />
                       </label>
                       <select
                         value={experience}
-                        onChange={(e) => setExperience(e.target.value)}
-                        className="w-full p-4 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none transition-all text-gray-900 appearance-none"
+                        onChange={(e) => {
+                          setExperience(e.target.value);
+                          clearFieldError('experience');
+                        }}
+                        className={`w-full p-4 rounded-xl border bg-white text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none transition-all text-gray-900 appearance-none ${
+                          !!fieldErrors.experience ? 'border-red-400' : 'border-gray-200'
+                        }`}
                       >
                         <option value="">Sélectionner</option>
                         {EXPERIENCE_OPTIONS.map((opt) => (
                           <option key={opt} value={opt}>{opt}</option>
                         ))}
                       </select>
+                      {fieldError('experience')}
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <label className="block text-sm font-bold text-gray-700">
-                      Niveau d'étude / Formation <span className="text-error">*</span>
+                      Niveau d'étude / Formation <FieldBadge required />
                     </label>
                     <input
                       type="text"
                       value={education}
-                      onChange={(e) => setEducation(e.target.value)}
+                      onChange={(e) => {
+                        setEducation(e.target.value);
+                        clearFieldError('education');
+                      }}
                       className={inputClass(!!fieldErrors.education)}
                       placeholder="Ex: Master en Comptabilité, IHEC..."
                     />
@@ -451,7 +479,7 @@ export default function JobApplication() {
 
                   <div className="space-y-2">
                     <label className="block text-sm font-bold text-gray-700">
-                      Adresse
+                      Adresse <FieldBadge required={false} />
                     </label>
                     <input
                       type="text"
@@ -462,100 +490,56 @@ export default function JobApplication() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="block text-sm font-bold text-gray-700">
-                        CV (PDF, DOC, DOCX) <span className="text-error">*</span>
-                      </label>
-                      {cvFile ? (
-                        <div className="flex items-center justify-between border-2 border-secondary/30 rounded-xl px-4 py-4 bg-secondary/5">
-                          <div className="flex items-center gap-3">
-                            <FileText className="w-5 h-5 text-secondary" />
-                            <span className="text-sm text-gray-700 truncate max-w-[180px] sm:max-w-[280px]">
-                              {cvFile.name}
-                            </span>
-                            <span className="text-[10px] text-gray-400">
-                              ({Math.round(cvFile.size / 1024)} Ko)
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={removeCv}
-                            className="p-1 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <X className="w-4 h-4 text-red-500" />
-                          </button>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-bold text-gray-700">
+                      CV (PDF, DOC, DOCX) <FieldBadge required />
+                    </label>
+                    {cvFile ? (
+                      <div className="flex items-center justify-between border-2 border-secondary/30 rounded-xl px-4 py-4 bg-secondary/5">
+                        <div className="flex items-center gap-3">
+                          <FileText className="w-5 h-5 text-secondary" />
+                          <span className="text-sm text-gray-700 truncate max-w-[180px] sm:max-w-[280px]">
+                            {cvFile.name}
+                          </span>
+                          <span className="text-[10px] text-gray-400">
+                            ({Math.round(cvFile.size / 1024)} Ko)
+                          </span>
                         </div>
-                      ) : (
-                        <div
-                          onClick={() => cvInputRef.current?.click()}
-                          className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer bg-white hover:border-secondary/40 hover:bg-secondary/5 transition-all group ${
-                            fieldErrors.cv ? 'border-red-400' : 'border-gray-300'
-                          }`}
+                        <button
+                          type="button"
+                          onClick={removeCv}
+                          className="p-1 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                         >
-                          <Upload className="w-8 h-8 text-gray-300 group-hover:text-secondary mb-2" />
-                          <p className="text-sm text-gray-400 group-hover:text-gray-600 text-center">
-                            Cliquez pour uploader votre CV (PDF, DOC, DOCX)
-                          </p>
-                        </div>
-                      )}
-                      <input
-                        ref={cvInputRef}
-                        type="file"
-                        accept={ALLOWED_EXT}
-                        onChange={handleCvChange}
-                        className="hidden"
-                      />
-                      {fieldError('cv')}
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="block text-sm font-bold text-gray-700">
-                        Lettre de motivation
-                      </label>
-                      {coverLetterFile ? (
-                        <div className="flex items-center justify-between border-2 border-secondary/30 rounded-xl px-4 py-4 bg-secondary/5">
-                          <div className="flex items-center gap-3">
-                            <FileText className="w-5 h-5 text-secondary" />
-                            <span className="text-sm text-gray-700 truncate max-w-[180px] sm:max-w-[280px]">
-                              {coverLetterFile.name}
-                            </span>
-                            <span className="text-[10px] text-gray-400">
-                              ({Math.round(coverLetterFile.size / 1024)} Ko)
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={removeCoverLetter}
-                            className="p-1 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <X className="w-4 h-4 text-red-500" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div
-                          onClick={() => coverLetterInputRef.current?.click()}
-                          className="border-2 border-dashed border-gray-300 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer bg-white hover:border-secondary/40 hover:bg-secondary/5 transition-all group"
-                        >
-                          <Upload className="w-8 h-8 text-gray-300 group-hover:text-secondary mb-2" />
-                          <p className="text-sm text-gray-400 group-hover:text-gray-600 text-center">
-                            Cliquez pour ajouter votre lettre de motivation
-                          </p>
-                        </div>
-                      )}
-                      <input
-                        ref={coverLetterInputRef}
-                        type="file"
-                        accept={ALLOWED_EXT}
-                        onChange={handleCoverLetterChange}
-                        className="hidden"
-                      />
-                    </div>
+                          <X className="w-4 h-4 text-red-500" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => cvInputRef.current?.click()}
+                        className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer bg-white hover:border-secondary/40 hover:bg-secondary/5 transition-all group ${
+                          fieldErrors.cv ? 'border-red-400' : 'border-gray-300'
+                        }`}
+                      >
+                        <Upload className="w-8 h-8 text-gray-300 group-hover:text-secondary mb-2" />
+                        <p className="text-sm text-gray-400 group-hover:text-gray-600 text-center">
+                          Cliquez pour uploader votre CV (PDF, DOC, DOCX)
+                        </p>
+                      </div>
+                    )}
+                    <input
+                      ref={cvInputRef}
+                      type="file"
+                      accept={ALLOWED_EXT}
+                      onChange={handleCvChange}
+                      className="hidden"
+                    />
+                    {fieldError('cv')}
                   </div>
 
                   <div className="space-y-2">
                     <label className="block text-sm font-bold text-gray-700">
-                      Certificats / Diplômes (optionnel, max 5 fichiers)
+                      Certificats / Diplômes <FieldBadge required={false} />
+                      <span className="ml-2 text-xs font-normal text-gray-400">(max 5 fichiers)</span>
                     </label>
                     {certificates.length > 0 && (
                       <div className="space-y-2 mb-3">
@@ -602,7 +586,7 @@ export default function JobApplication() {
 
                   <div className="space-y-2">
                     <label className="block text-sm font-bold text-gray-700">
-                      Message de motivation
+                      Message de motivation <FieldBadge required={false} />
                     </label>
                     <textarea
                       value={motivationMessage}

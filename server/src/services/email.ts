@@ -257,6 +257,8 @@ interface ApplicationOutcomeData {
   firstName: string;
   lastName: string;
   position: string;
+  startDate?: string;
+  startTime?: string;
 }
 
 /** Email envoyé au candidat lorsque sa candidature est acceptée. */
@@ -264,6 +266,27 @@ export async function sendApplicationAccepted(to: string, data: ApplicationOutco
   console.log(`[Recruitment] Acceptance email for ${to}`);
   const transporter = createTransporter();
   if (!transporter) { return; }
+
+  const hasStart = Boolean(data.startDate && data.startTime);
+  const formattedStartDate = data.startDate
+    ? new Date(`${data.startDate}T00:00:00`).toLocaleDateString('fr-FR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : '';
+
+  const startRows = hasStart
+    ? `
+      <div style="background: #1e7a3c; border-radius: 8px; padding: 16px 20px; margin: 16px 0;">
+        <p style="color: #ffffff; font-size: 12px; font-weight: 700; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 1px;">Date de prise de poste</p>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #ffffff;">
+          <tr><td style="padding: 8px 0; font-weight: 700; width: 140px;">Date</td><td style="padding: 8px 0; font-weight: 600;">${esc(formattedStartDate)}</td></tr>
+          <tr><td style="padding: 8px 0; font-weight: 700;">Heure d'arrivée</td><td style="padding: 8px 0; font-weight: 600;">${esc(formatTimeAmPm(data.startTime || ''))}</td></tr>
+        </table>
+      </div>`
+    : '';
 
   try {
     await transporter.sendMail({
@@ -277,12 +300,15 @@ export async function sendApplicationAccepted(to: string, data: ApplicationOutco
           </div>
           <p style="color: #1a1c1c; font-size: 15px; margin: 0 0 16px;">Bonjour <strong>${esc(data.firstName)} ${esc(data.lastName)}</strong>,</p>
           <p style="color: #554249; font-size: 14px; margin: 0 0 16px;">
-            Félicitations ! Suite à l'étude de votre candidature pour le poste de <strong>${esc(data.position)}</strong>, nous avons le plaisir de vous annoncer que votre profil a été <strong>retenu</strong>.
+            Félicitations ! Suite à l'étude de votre candidature pour le poste de <strong>${esc(data.position)}</strong>, nous avons le plaisir de vous annoncer que votre profil a été <strong>retenu</strong>. Vous intégrerez l'équipe RM Consulting !
           </p>
+          ${startRows}
           <div style="background: #f3eef0; border-radius: 8px; padding: 16px; margin: 16px 0;">
             <p style="color: #6c0042; font-size: 12px; font-weight: 700; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 1px;">Prochaines étapes</p>
             <p style="color: #554249; font-size: 13px; margin: 0;">
-              Notre équipe RH vous contactera très prochainement pour les formalités d'intégration (documents administratifs, date de prise de poste, etc.). N'hésitez pas à nous poser vos questions par retour d'email.
+              ${hasStart
+                ? `Nous vous attendons le <strong>${esc(formattedStartDate)}</strong> à <strong>${esc(formatTimeAmPm(data.startTime || ''))}</strong> pour votre première journée de travail. Veuillez vous présenter avec les documents administratifs requis (pièce d'identité, diplômes, relevé d'identité bancaire).`
+                : 'Notre équipe RH vous contactera très prochainement pour les formalités d\'intégration (documents administratifs, date de prise de poste, etc.). N\'hésitez pas à nous poser vos questions par retour d\'email.'}
             </p>
           </div>
           <p style="color: #877179; font-size: 13px; margin: 0;">

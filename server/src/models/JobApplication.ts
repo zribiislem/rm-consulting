@@ -59,9 +59,13 @@ export interface IJobApplication extends Document {
   statusHistory: IStatusHistoryEntry[];
   notes: INote[];
   interview?: IInterview;
+  startDate?: string;
+  startTime?: string;
   jobOffer?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
+  /** Date d'archivage (null = candidature active, renseignée = corbeille). */
+  deletedAt?: Date | null;
 }
 
 const StatusHistoryEntrySchema = new Schema<IStatusHistoryEntry>({
@@ -116,12 +120,16 @@ const JobApplicationSchema = new Schema<IJobApplication>({
   statusHistory: { type: [StatusHistoryEntrySchema], default: [] },
   notes: { type: [NoteSchema], default: [] },
   interview: { type: InterviewSchema },
+  startDate: { type: String, default: '' },
+  startTime: { type: String, default: '' },
   jobOffer: { type: Schema.Types.ObjectId, ref: 'JobOffer' },
+  deletedAt: { type: Date, default: null },
 }, { timestamps: true });
 
 JobApplicationSchema.index({ createdAt: -1 });
 JobApplicationSchema.index({ status: 1 });
 JobApplicationSchema.index({ position: 1 });
 JobApplicationSchema.index({ email: 1 });
+JobApplicationSchema.index({ deletedAt: 1 });
 
 export default mongoose.model<IJobApplication>('JobApplication', JobApplicationSchema);

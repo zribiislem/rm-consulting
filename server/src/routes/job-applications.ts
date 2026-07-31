@@ -78,7 +78,7 @@ const validateApplication = [
     .customSanitizer(sanitize),
   body('position').trim().notEmpty().withMessage('Le poste est requis').customSanitizer(sanitize),
   body('education').trim().notEmpty().withMessage('La formation est requise').customSanitizer(sanitize),
-  body('experience').optional({ values: 'falsy' }).trim().customSanitizer(sanitize),
+  body('experience').trim().notEmpty().withMessage('Les années d\'expérience sont requises').customSanitizer(sanitize),
   body('address').optional({ values: 'falsy' }).trim().customSanitizer(sanitize),
   body('motivationMessage').optional({ values: 'falsy' }).trim().customSanitizer(sanitize),
   body('jobOfferId').optional({ values: 'falsy' }).isMongoId().withMessage('Offre d\'emploi invalide'),
@@ -106,11 +106,15 @@ const populates = () => [
 
 /* -------------------------------------------------------------------------
  * Liste des candidatures (recherche / filtres / tri) — admin uniquement.
+ * Par défaut : candidatures actives. `?archived=true` : candidatures archivées.
  * ----------------------------------------------------------------------- */
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { search, position, status, sortBy, sortOrder } = req.query;
+    const { search, position, status, sortBy, sortOrder, archived } = req.query;
     const filter: Record<string, unknown> = {};
+
+    // Archivées (corbeille) ou actives
+    filter.deletedAt = archived === 'true' ? { $ne: null } : null;
 
     // Recherche plein-texte sur le candidat (nom, prénom, email) et le poste
     if (search && typeof search === 'string') {
@@ -148,7 +152,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
 /* Liste des postes distincts (filtre admin) */
 router.get('/positions', authenticate, async (_req: AuthRequest, res: Response) => {
   try {
-    const positions = await JobApplication.distinct('position');
+    const positions = await JobApplication.distinct('position', { deletedAt: null });
     res.json(positions);
   } catch (error) {
     console.error('[job-applications] GET /positions failed:', error);
@@ -160,9 +164,10 @@ router.get('/positions', authenticate, async (_req: AuthRequest, res: Response) 
 router.get('/stats', authenticate, async (_req: AuthRequest, res: Response) => {
   try {
     const stats = await JobApplication.aggregate([
+      { $match: { deletedAt: null } },
       { $group: { _id: '$status', count: { $sum: 1 } } },
     ]);
-    const total = await JobApplication.countDocuments();
+    const total = await JobApplication.countDocuments({ deletedAt: null });
     const statusMap: Record<string, number> = {};
     stats.forEach((s: { _id: string; count: number }) => { statusMap[s._id] = s.count; });
     res.json({ total, ...statusMap });
@@ -179,7 +184,6 @@ router.get('/stats', authenticate, async (_req: AuthRequest, res: Response) => {
 router.post('/',
   upload.fields([
     { name: 'cv', maxCount: 1 },
-    { name: 'coverLetter', maxCount: 1 },
     { name: 'certificates', maxCount: 5 },
   ]),
   async (req: Request, res: Response) => {
@@ -196,7 +200,6 @@ router.post('/',
       }
 
       const cvFile = files?.['cv']?.[0];
-      const coverLetterFile = files?.['coverLetter']?.[0];
       const certFiles = files?.['certificates'] || [];
 
       if (!cvFile) {
@@ -214,16 +217,6 @@ router.post('/',
         size: cvFile.size,
         mimeType: cvFile.mimetype,
       });
-      if (coverLetterFile) {
-        attachments.push({
-          filename: coverLetterFile.filename,
-          originalName: coverLetterFile.originalname,
-          url: '/uploads/applications/' + coverLetterFile.filename,
-          type: 'coverLetter',
-          size: coverLetterFile.size,
-          mimeType: coverLetterFile.mimetype,
-        });
-      }
       for (const cert of certFiles) {
         attachments.push({
           filename: cert.filename,
@@ -419,6 +412,14 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
       };
     }
 
+    // Date et heure de prise de poste (candidat accepté)
+    if (req.body.startDate !== undefined || req.body.startTime !== undefined) {
+      const startDate = sanitize(String(req.body.startDate || ''));
+      const startTime = sanitize(String(req.body.startTime || ''));
+      if (startDate) update.startDate = startDate;
+      if (startTime) update.startTime = startTime;
+    }
+
     // Ajout d'une note interne
     if (req.body.note && typeof req.body.note === 'string') {
       const noteText = sanitize(req.body.note);
@@ -441,11 +442,17 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
 
     // Emails automatiques selon le nouveau statut (en arrière-plan, sans bloquer la réponse)
     if (updated) {
-      if (updated.status === 'accepted' && app.status !== 'accepted') {
+      // Un SEUL email d'acceptation est envoyé, et uniquement lorsqu'il contient la date et l'heure de prise de poste
+      const startChanged = updated.startDate !== app.startDate || updated.startTime !== app.startTime;
+      const hasStartInfo = Boolean(updated.startDate && updated.startTime);
+      const justAccepted = app.status !== 'accepted' && updated.status === 'accepted';
+      if (updated.status === 'accepted' && hasStartInfo && (startChanged || justAccepted)) {
         sendApplicationAccepted(updated.email, {
           firstName: updated.firstName,
           lastName: updated.lastName,
           position: updated.position,
+          startDate: updated.startDate,
+          startTime: updated.startTime,
         }).catch(() => {});
       } else if (updated.status === 'rejected' && app.status !== 'rejected') {
         sendApplicationRejected(updated.email, {
@@ -476,9 +483,10 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
 });
 
 /* -------------------------------------------------------------------------
- * Suppression (candidature + pièces jointes + fichiers) — admin uniquement.
+ * Suppression définitive (candidature + pièces jointes + fichiers) —
+ * admin uniquement. Utilisé depuis la corbeille.
  * ----------------------------------------------------------------------- */
-router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
+router.delete('/:id/permanent', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const app = await JobApplication.findById(req.params.id).populate('attachments');
     if (!app) return res.status(404).json({ message: 'Candidature introuvable' });
@@ -512,10 +520,48 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
       await Candidate.findByIdAndDelete(app.candidate);
     }
 
-    res.json({ message: 'Candidature supprimée' });
+    res.json({ message: 'Candidature supprimée définitivement' });
+  } catch (error) {
+    console.error('[job-applications] DELETE /:id/permanent failed:', error);
+    res.status(500).json({ message: 'Erreur lors de la suppression définitive' });
+  }
+});
+
+/* -------------------------------------------------------------------------
+ * Suppression (archivage) — admin uniquement.
+ * La candidature est déplacée vers la corbeille (soft delete) et peut être
+ * restaurée ou supprimée définitivement.
+ * ----------------------------------------------------------------------- */
+router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const app = await JobApplication.findByIdAndUpdate(
+      req.params.id,
+      { $set: { deletedAt: new Date() } },
+      { new: true }
+    );
+    if (!app) return res.status(404).json({ message: 'Candidature introuvable' });
+    res.json({ message: 'Candidature archivée', archivedAt: app.deletedAt });
   } catch (error) {
     console.error('[job-applications] DELETE failed:', error);
-    res.status(500).json({ message: 'Erreur lors de la suppression' });
+    res.status(500).json({ message: 'Erreur lors de l\'archivage' });
+  }
+});
+
+/* -------------------------------------------------------------------------
+ * Restauration d'une candidature archivée — admin uniquement.
+ * ----------------------------------------------------------------------- */
+router.post('/:id/restore', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const app = await JobApplication.findByIdAndUpdate(
+      req.params.id,
+      { $set: { deletedAt: null } },
+      { new: true }
+    );
+    if (!app) return res.status(404).json({ message: 'Candidature introuvable' });
+    res.json({ message: 'Candidature restaurée' });
+  } catch (error) {
+    console.error('[job-applications] POST /:id/restore failed:', error);
+    res.status(500).json({ message: 'Erreur lors de la restauration' });
   }
 });
 
