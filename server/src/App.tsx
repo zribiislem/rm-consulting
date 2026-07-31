@@ -117,6 +117,27 @@ const safeSetSiteOrigin = (origin: string): void => {
   }
 };
 
+// Headers d'authentification pour les appels API admin (Bearer JWT)
+const authHeaders = (json = true): Record<string, string> => {
+  const headers: Record<string, string> = json ? { 'Content-Type': 'application/json' } : {};
+  const token = safeGetToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+};
+
+// Fetch avec authentification automatique
+const authedFetch = (url: string, init: RequestInit = {}): Promise<Response> =>
+  fetch(url, { ...init, headers: { ...authHeaders(!!init.body), ...(init.headers || {}) } });
+
+// Échappe le contenu candidat avant insertion dans le document HTML du PDF exporté
+const escHtml = (value: unknown): string =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 const getDeptIcon = (id: string) => {
   switch (id) {
     case 'audit':
@@ -217,8 +238,22 @@ export default function App() {
   const [refExistingImageUrl, setRefExistingImageUrl] = useState<string | null>(null);
 
   // Job applications state
+  interface JobAttachment {
+    _id: string;
+    filename: string;
+    originalName: string;
+    url: string;
+    type: 'cv' | 'coverLetter' | 'certificate';
+    size: number;
+  }
+  interface JobNote {
+    text: string;
+    addedBy: string;
+    createdAt: string;
+  }
   interface JobApp {
     _id: string;
+    candidate: string;
     lastName: string;
     firstName: string;
     email: string;
@@ -227,10 +262,10 @@ export default function App() {
     education: string;
     experience?: string;
     address?: string;
-    cvUrl: string;
-    coverLetterUrl?: string;
     motivationMessage?: string;
-    status: 'pending' | 'reviewed' | 'accepted' | 'rejected';
+    attachments?: JobAttachment[];
+    notes?: JobNote[];
+    status: 'new' | 'analyzing' | 'interview' | 'accepted' | 'rejected';
     createdAt: string;
   }
   const [jobApps, setJobApps] = useState<JobApp[]>([]);
@@ -291,8 +326,8 @@ export default function App() {
           fetch(`${API_URL}/available-dates`),
           fetch(`${API_URL}/references`),
           fetch(`${API_URL}/parameters`),
-          fetch(`${API_URL}/job-applications`),
-          fetch(`${API_URL}/job-offers`)
+          authedFetch(`${API_URL}/job-applications`),
+          authedFetch(`${API_URL}/job-offers`)
         ]);
         const depts = await deptRes.json();
         const missionsData = await missionRes.json();
@@ -375,7 +410,7 @@ export default function App() {
   const [newMissionProg, setNewMissionProg] = useState(10);
 
   // Notifications alerts
-  const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'info' }[]>([]);
+  const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'info' | 'error' }[]>([]);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -414,7 +449,7 @@ export default function App() {
     checkAuth();
   }, []);
 
-  const addToast = (message: string, type: 'success' | 'info' = 'success') => {
+  const addToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
     const id = Date.now().toString();
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
@@ -875,11 +910,15 @@ export default function App() {
               className={`p-4 rounded-lg shadow-lg flex items-center gap-3 pointer-events-auto min-w-[300px] border ${
                 toast.type === 'success'
                   ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : toast.type === 'error'
+                  ? 'bg-red-50 border-red-200 text-red-800'
                   : 'bg-primary-fixed border-outline-variant text-on-primary-fixed-variant'
               }`}
             >
               {toast.type === 'success' ? (
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              ) : toast.type === 'error' ? (
+                <XCircle className="w-5 h-5 text-red-500 shrink-0" />
               ) : (
                 <Clock className="w-5 h-5 text-primary shrink-0" />
               )}
@@ -1973,7 +2012,7 @@ export default function App() {
                       className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none"
                       onChange={(e) => {
                         const val = e.target.value;
-                        fetch(`${API_URL}/job-applications${val ? `?search=${encodeURIComponent(val)}` : ''}`)
+                        authedFetch(`${API_URL}/job-applications${val ? `?search=${encodeURIComponent(val)}` : ''}`)
                           .then(r => r.json())
                           .then(setJobApps)
                           .catch(() => {});
@@ -1983,7 +2022,7 @@ export default function App() {
                   <select
                     onChange={(e) => {
                       const val = e.target.value;
-                      fetch(`${API_URL}/job-applications${val ? `?status=${val}` : ''}`)
+                      authedFetch(`${API_URL}/job-applications${val ? `?status=${val}` : ''}`)
                         .then(r => r.json())
                         .then(setJobApps)
                         .catch(() => {});
@@ -2000,7 +2039,7 @@ export default function App() {
                   <select
                     onChange={(e) => {
                       const val = e.target.value;
-                      fetch(`${API_URL}/job-applications${val ? `?position=${encodeURIComponent(val)}` : ''}`)
+                      authedFetch(`${API_URL}/job-applications${val ? `?position=${encodeURIComponent(val)}` : ''}`)
                         .then(r => r.json())
                         .then(setJobApps)
                         .catch(() => {});
@@ -2016,7 +2055,7 @@ export default function App() {
                     onChange={(e) => {
                       const val = e.target.value;
                       const [sortBy, sortOrder] = val.split('-');
-                      fetch(`${API_URL}/job-applications?sortBy=${sortBy}&sortOrder=${sortOrder || 'desc'}`)
+                      authedFetch(`${API_URL}/job-applications?sortBy=${sortBy}&sortOrder=${sortOrder || 'desc'}`)
                         .then(r => r.json())
                         .then(setJobApps)
                         .catch(() => {});
@@ -2118,22 +2157,22 @@ export default function App() {
                                         <body>
                                           <h1>Fiche Candidat</h1>
                                           <p style="color: #735b24; font-size: 12px; margin-top: -5px;">RM Consulting — Recrutement</p>
-                                          <div class="section"><div class="label">Nom complet</div><div class="value">${app.firstName} ${app.lastName}</div></div>
+                                          <div class="section"><div class="label">Nom complet</div><div class="value">${escHtml(app.firstName)} ${escHtml(app.lastName)}</div></div>
                                           <div class="grid">
-                                            <div><div class="label">Email</div><div class="value">${app.email}</div></div>
-                                            <div><div class="label">Téléphone</div><div class="value">${app.phone}</div></div>
+                                            <div><div class="label">Email</div><div class="value">${escHtml(app.email)}</div></div>
+                                            <div><div class="label">Téléphone</div><div class="value">${escHtml(app.phone)}</div></div>
                                           </div>
-                                          <div class="section"><div class="label">Poste recherché</div><div class="value">${app.position}</div></div>
+                                          <div class="section"><div class="label">Poste recherché</div><div class="value">${escHtml(app.position)}</div></div>
                                           <div class="grid">
-                                            <div><div class="label">Niveau d'étude</div><div class="value">${app.education}</div></div>
-                                            <div><div class="label">Expérience</div><div class="value">${app.experience || 'Non spécifiée'}</div></div>
+                                            <div><div class="label">Niveau d'étude</div><div class="value">${escHtml(app.education)}</div></div>
+                                            <div><div class="label">Expérience</div><div class="value">${escHtml(app.experience) || 'Non spécifiée'}</div></div>
                                           </div>
-                                          <div class="section"><div class="label">Adresse</div><div class="value">${app.address || 'Non spécifiée'}</div></div>
-                                          ${app.motivationMessage ? '<div class="section"><div class="label">Message de motivation</div><div class="value">' + app.motivationMessage + '</div></div>' : ''}
-                                          <div class="section"><div class="label">Statut</div><div><span class="badge badge-${app.status}">${statusLabel}</span></div></div>
-                                          <div class="section"><div class="label">Date de candidature</div><div class="value">${new Date(app.createdAt).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div></div>
-                                          ${app.attachments && app.attachments.length > 0 ? '<div class="section"><div class="label">Pièces jointes</div><table><tr><th>Fichier</th><th>Type</th><th>Taille</th></tr>' + app.attachments.map((a: any) => '<tr><td>' + a.originalName + '</td><td>' + a.type + '</td><td>' + Math.round(a.size / 1024) + ' Ko</td></tr>').join('') + '</table></div>' : ''}
-                                          <footer>RM Consulting — Expertise Comptable & Audit — Document généré le ${new Date().toLocaleDateString('fr-FR')}</footer>
+                                          <div class="section"><div class="label">Adresse</div><div class="value">${escHtml(app.address) || 'Non spécifiée'}</div></div>
+                                          ${app.motivationMessage ? '<div class="section"><div class="label">Message de motivation</div><div class="value">' + escHtml(app.motivationMessage) + '</div></div>' : ''}
+                                          <div class="section"><div class="label">Statut</div><div><span class="badge badge-${escHtml(app.status)}">${escHtml(statusLabel)}</span></div></div>
+                                          <div class="section"><div class="label">Date de candidature</div><div class="value">${escHtml(new Date(app.createdAt).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</div></div>
+                                          ${app.attachments && app.attachments.length > 0 ? '<div class="section"><div class="label">Pièces jointes</div><table><tr><th>Fichier</th><th>Type</th><th>Taille</th></tr>' + app.attachments.map((a: any) => '<tr><td>' + escHtml(a.originalName) + '</td><td>' + escHtml(a.type) + '</td><td>' + Math.round(a.size / 1024) + ' Ko</td></tr>').join('') + '</table></div>' : ''}
+                                          <footer>RM Consulting — Expertise Comptable &amp; Audit — Document généré le ${escHtml(new Date().toLocaleDateString('fr-FR'))}</footer>
                                           <script>window.onload = function() { window.print(); }<\/script>
                                         </body>
                                         </html>
@@ -2150,9 +2189,8 @@ export default function App() {
                                     onChange={async (e) => {
                                       const newStatus = e.target.value;
                                       try {
-                                        const res = await fetch(`${API_URL}/job-applications/${app._id}`, {
+                                        const res = await authedFetch(`${API_URL}/job-applications/${app._id}`, {
                                           method: 'PUT',
-                                          headers: { 'Content-Type': 'application/json' },
                                           body: JSON.stringify({ status: newStatus }),
                                         });
                                         if (res.ok) {
@@ -2278,23 +2316,29 @@ export default function App() {
                             {selectedApp.attachments && selectedApp.attachments.length > 0 && (
                               <div className="space-y-3">
                                 <p className="text-[10px] font-bold text-secondary uppercase tracking-wider">Pièces jointes</p>
-                                {selectedApp.attachments.map((att: any, idx: number) => (
-                                  <a
-                                    key={idx}
-                                    href={att.url}
-                                    target="_blank"
-                                    className="flex items-center justify-between bg-surface-container-low rounded-xl px-4 py-3 hover:bg-secondary/5 transition-colors group"
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <FileText className="w-5 h-5 text-secondary" />
-                                      <div>
-                                        <p className="text-sm font-medium text-on-surface group-hover:text-primary transition-colors">{att.originalName}</p>
-                                        <p className="text-[10px] text-on-surface-variant">{att.type === 'cv' ? 'CV' : att.type === 'coverLetter' ? 'Lettre de motivation' : 'Certificat'} — {Math.round(att.size / 1024)} Ko</p>
+                                {selectedApp.attachments.map((att: any, idx: number) => {
+                                  const downloadUrl = att._id
+                                    ? `${API_URL}/job-applications/${selectedApp._id}/attachments/${att._id}?token=${encodeURIComponent(safeGetToken() || '')}`
+                                    : att.url;
+                                  return (
+                                    <a
+                                      key={idx}
+                                      href={downloadUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center justify-between bg-surface-container-low rounded-xl px-4 py-3 hover:bg-secondary/5 transition-colors group"
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <FileText className="w-5 h-5 text-secondary" />
+                                        <div>
+                                          <p className="text-sm font-medium text-on-surface group-hover:text-primary transition-colors">{att.originalName}</p>
+                                          <p className="text-[10px] text-on-surface-variant">{att.type === 'cv' ? 'CV' : att.type === 'coverLetter' ? 'Lettre de motivation' : 'Certificat'} — {Math.round(att.size / 1024)} Ko</p>
+                                        </div>
                                       </div>
-                                    </div>
-                                    <span className="text-xs text-secondary font-bold">Voir →</span>
-                                  </a>
-                                ))}
+                                      <span className="text-xs text-secondary font-bold">Télécharger →</span>
+                                    </a>
+                                  );
+                                })}
                               </div>
                             )}
 
@@ -2306,9 +2350,8 @@ export default function App() {
                                 onChange={async (e) => {
                                   const newStatus = e.target.value;
                                   try {
-                                    const res = await fetch(`${API_URL}/job-applications/${selectedApp._id}`, {
+                                    const res = await authedFetch(`${API_URL}/job-applications/${selectedApp._id}`, {
                                       method: 'PUT',
-                                      headers: { 'Content-Type': 'application/json' },
                                       body: JSON.stringify({ status: newStatus }),
                                     });
                                     if (res.ok) {
@@ -2360,9 +2403,8 @@ export default function App() {
                                 const text = input.value.trim();
                                 if (!text) return;
                                 try {
-                                  const res = await fetch(`${API_URL}/job-applications/${selectedApp._id}`, {
+                                  const res = await authedFetch(`${API_URL}/job-applications/${selectedApp._id}`, {
                                     method: 'PUT',
-                                    headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ note: text }),
                                   });
                                   if (res.ok) {
@@ -2420,7 +2462,7 @@ export default function App() {
                               onClick={async () => {
                                 if (!appToDelete) return;
                                 try {
-                                  const res = await fetch(`${API_URL}/job-applications/${appToDelete}`, { method: 'DELETE' });
+                                  const res = await authedFetch(`${API_URL}/job-applications/${appToDelete}`, { method: 'DELETE' });
                                   if (res.ok) {
                                     setJobApps((prev: any[]) => prev.filter((a: any) => a._id !== appToDelete));
                                     addToast('Candidature supprimée');
@@ -2538,11 +2580,13 @@ export default function App() {
                                   <button
                                     onClick={async () => {
                                       try {
-                                        const res = await fetch(`${API_URL}/job-offers/${offer._id}/toggle`, { method: 'PATCH' });
+                                        const res = await authedFetch(`${API_URL}/job-offers/${offer._id}/toggle`, { method: 'PATCH' });
                                         if (res.ok) {
                                           const updated = await res.json();
                                           setJobOffers((prev: any[]) => prev.map((o: any) => o._id === offer._id ? updated : o));
                                           addToast(`Offre ${updated.isActive ? 'activée' : 'désactivée'}`);
+                                        } else {
+                                          addToast('Erreur lors de la mise à jour', 'info');
                                         }
                                       } catch { addToast('Erreur', 'info'); }
                                     }}
@@ -2559,10 +2603,12 @@ export default function App() {
                                     onClick={async () => {
                                       if (!confirm('Supprimer cette offre ?')) return;
                                       try {
-                                        const res = await fetch(`${API_URL}/job-offers/${offer._id}`, { method: 'DELETE' });
+                                        const res = await authedFetch(`${API_URL}/job-offers/${offer._id}`, { method: 'DELETE' });
                                         if (res.ok) {
                                           setJobOffers((prev: any[]) => prev.filter((o: any) => o._id !== offer._id));
                                           addToast('Offre supprimée');
+                                        } else {
+                                          addToast('Erreur lors de la suppression', 'info');
                                         }
                                       } catch { addToast('Erreur', 'info'); }
                                     }}
@@ -2617,27 +2663,29 @@ export default function App() {
                               applicationDeadline: new Date(offerDeadline).toISOString(),
                             };
                             try {
-                              const token = safeGetToken();
-                              const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-                              if (token) headers['Authorization'] = 'Bearer ' + token;
-
                               if (editingOffer) {
-                                const res = await fetch(`${API_URL}/job-offers/${editingOffer._id}`, {
-                                  method: 'PUT', headers, body: JSON.stringify(body),
+                                const res = await authedFetch(`${API_URL}/job-offers/${editingOffer._id}`, {
+                                  method: 'PUT', body: JSON.stringify(body),
                                 });
                                 if (res.ok) {
                                   const updated = await res.json();
                                   setJobOffers((prev: any[]) => prev.map((o: any) => o._id === editingOffer._id ? updated : o));
                                   addToast('Offre modifiée');
+                                } else {
+                                  const err = await res.json().catch(() => null);
+                                  addToast(err?.message || 'Erreur lors de la modification', 'info');
                                 }
                               } else {
-                                const res = await fetch(`${API_URL}/job-offers\`, {
-                                  method: 'POST', headers, body: JSON.stringify(body),
+                                const res = await authedFetch(`${API_URL}/job-offers`, {
+                                  method: 'POST', body: JSON.stringify(body),
                                 });
                                 if (res.ok) {
                                   const created = await res.json();
                                   setJobOffers((prev: any[]) => [created, ...prev]);
                                   addToast('Offre créée');
+                                } else {
+                                  const err = await res.json().catch(() => null);
+                                  addToast(err?.message || 'Erreur lors de la création', 'info');
                                 }
                               }
                               setIsOfferModalOpen(false);

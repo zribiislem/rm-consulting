@@ -1,4 +1,4 @@
-import { useState, FormEvent, useRef, ChangeEvent } from 'react';
+import { useState, FormEvent, useRef, ChangeEvent, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Send, CheckCircle2, AlertCircle, Upload, X, FileText, Briefcase, Award } from 'lucide-react';
 
@@ -28,6 +28,11 @@ const ALLOWED_TYPES = [
 const ALLOWED_EXT = '.pdf,.doc,.docx';
 const MAX_SIZE = 15 * 1024 * 1024;
 
+interface ActiveOffer {
+  _id: string;
+  title: string;
+}
+
 export default function JobApplication() {
   const [lastName, setLastName] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -43,6 +48,13 @@ export default function JobApplication() {
   const [coverLetterFile, setCoverLetterFile] = useState<File | null>(null);
   const [certificates, setCertificates] = useState<File[]>([]);
 
+  // Offres d'emploi publiées (liées au module de gestion des offres)
+  const [activeOffers, setActiveOffers] = useState<ActiveOffer[]>([]);
+  const [offerId, setOfferId] = useState('');
+
+  // Erreurs par champ (validation côté client + retours serveur)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
   const cvInputRef = useRef<HTMLInputElement>(null);
   const coverLetterInputRef = useRef<HTMLInputElement>(null);
   const certInputRef = useRef<HTMLInputElement>(null);
@@ -50,6 +62,14 @@ export default function JobApplication() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [validationError, setValidationError] = useState('');
+
+  // Charge les offres actives pour proposer les postes publiés
+  useEffect(() => {
+    fetch('/api/job-offers/active')
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setActiveOffers)
+      .catch(() => setActiveOffers([]));
+  }, []);
 
   const validateFile = (file: File): string | null => {
     if (!ALLOWED_TYPES.includes(file.type)) {
@@ -67,6 +87,7 @@ export default function JobApplication() {
       const err = validateFile(file);
       if (err) { setValidationError(err); return; }
       setValidationError('');
+      setFieldErrors((prev) => ({ ...prev, cv: '' }));
       setCvFile(file);
     }
   };
@@ -122,17 +143,32 @@ export default function JobApplication() {
     return /^[\d\s+\-().]{8,20}$/.test(value);
   };
 
+  // Validation complète de tous les champs avant envoi
+  const validateForm = (): Record<string, string> => {
+    const errs: Record<string, string> = {};
+    if (!lastName.trim()) errs.lastName = 'Le nom est requis';
+    if (!firstName.trim()) errs.firstName = 'Le prénom est requis';
+    if (!email.trim()) errs.email = 'L\'adresse email est requise';
+    else if (!validateEmail(email)) errs.email = 'Adresse email invalide';
+    if (!phone.trim()) errs.phone = 'Le numéro de téléphone est requis';
+    else if (!validatePhone(phone)) errs.phone = 'Numéro de téléphone invalide';
+    if (!position) errs.position = 'Veuillez sélectionner un poste recherché';
+    if (!education.trim()) errs.education = 'Le niveau d\'étude / la formation est requis';
+    if (!cvFile) errs.cv = 'Le CV est obligatoire (PDF, DOC ou DOCX)';
+    return errs;
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setValidationError('');
 
-    if (!lastName.trim()) { setValidationError('Veuillez renseigner votre nom'); return; }
-    if (!firstName.trim()) { setValidationError('Veuillez renseigner votre prénom'); return; }
-    if (!email.trim() || !validateEmail(email)) { setValidationError('Veuillez renseigner une adresse email valide'); return; }
-    if (!phone.trim() || !validatePhone(phone)) { setValidationError('Veuillez renseigner un numéro de téléphone valide'); return; }
-    if (!position) { setValidationError('Veuillez sélectionner un poste recherché'); return; }
-    if (!education.trim()) { setValidationError('Veuillez renseigner votre niveau d\'étude/formation'); return; }
-    if (!cvFile) { setValidationError('Veuillez uploader votre CV (PDF, DOC ou DOCX)'); return; }
+    // 1. Validation locale de tous les champs
+    const errs = validateForm();
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      setValidationError('Veuillez corriger les champs signalés ci-dessous.');
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -144,11 +180,12 @@ export default function JobApplication() {
       formData.append('phone', phone.trim());
       formData.append('position', position);
       formData.append('education', education.trim());
-      formData.append('cv', cvFile);
+      formData.append('cv', cvFile!);
       if (experience) formData.append('experience', experience);
       if (address.trim()) formData.append('address', address.trim());
       if (coverLetterFile) formData.append('coverLetter', coverLetterFile);
       if (motivationMessage.trim()) formData.append('motivationMessage', motivationMessage.trim());
+      if (offerId) formData.append('jobOfferId', offerId);
       certificates.forEach(cert => formData.append('certificates', cert));
 
       const res = await fetch('/api/job-applications', {
@@ -157,13 +194,25 @@ export default function JobApplication() {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        setValidationError(err.message || 'Erreur lors de l\'envoi de votre candidature');
+        const err = await res.json().catch(() => null);
+        // 2. Rétroaction des erreurs de validation serveur, champ par champ
+        if (err?.errors && Array.isArray(err.errors)) {
+          const serverErrs: Record<string, string> = {};
+          err.errors.forEach((e: { param?: string; msg?: string }) => {
+            const field = e.param;
+            if (field && !serverErrs[field]) serverErrs[field] = e.msg || 'Champ invalide';
+          });
+          setFieldErrors(serverErrs);
+          setValidationError('Veuillez corriger les champs signalés ci-dessous.');
+        } else {
+          setValidationError(err?.message || 'Erreur lors de l\'envoi de votre candidature');
+        }
         setIsSubmitting(false);
         return;
       }
 
       setIsSubmitting(false);
+      setFieldErrors({});
       setIsSuccess(true);
     } catch {
       setValidationError('Erreur lors de l\'envoi de votre candidature. Veuillez réessayer.');
@@ -177,6 +226,7 @@ export default function JobApplication() {
     setEmail('');
     setPhone('');
     setPosition('');
+    setOfferId('');
     setEducation('');
     setExperience('');
     setAddress('');
@@ -184,11 +234,21 @@ export default function JobApplication() {
     setCvFile(null);
     setCoverLetterFile(null);
     setCertificates([]);
+    setFieldErrors({});
     if (cvInputRef.current) cvInputRef.current.value = '';
     if (coverLetterInputRef.current) coverLetterInputRef.current.value = '';
     if (certInputRef.current) certInputRef.current.value = '';
     setIsSuccess(false);
   };
+
+  // Classes réutilisables : bordure rouge si le champ est en erreur
+  const inputClass = (hasError: boolean): string =>
+    `w-full p-4 rounded-xl border bg-white text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none transition-all text-gray-900 ${
+      hasError ? 'border-red-400' : 'border-gray-200'
+    }`;
+
+  const fieldError = (key: string) =>
+    fieldErrors[key] ? <p className="text-xs text-red-500 mt-1">{fieldErrors[key]}</p> : null;
 
   return (
     <section id="job-application" className="scroll-mt-12">
@@ -280,9 +340,10 @@ export default function JobApplication() {
                         type="text"
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
-                        className="w-full p-4 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none transition-all text-gray-900"
+                        className={inputClass(!!fieldErrors.lastName)}
                         placeholder="Votre nom"
                       />
+                      {fieldError('lastName')}
                     </div>
                     <div className="space-y-2">
                       <label className="block text-sm font-bold text-gray-700">
@@ -292,9 +353,10 @@ export default function JobApplication() {
                         type="text"
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
-                        className="w-full p-4 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none transition-all text-gray-900"
+                        className={inputClass(!!fieldErrors.firstName)}
                         placeholder="Votre prénom"
                       />
+                      {fieldError('firstName')}
                     </div>
                     <div className="space-y-2">
                       <label className="block text-sm font-bold text-gray-700">
@@ -304,9 +366,10 @@ export default function JobApplication() {
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full p-4 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none transition-all text-gray-900"
+                        className={inputClass(!!fieldErrors.email)}
                         placeholder="email@exemple.tn"
                       />
+                      {fieldError('email')}
                     </div>
                     <div className="space-y-2">
                       <label className="block text-sm font-bold text-gray-700">
@@ -316,9 +379,10 @@ export default function JobApplication() {
                         type="tel"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        className="w-full p-4 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none transition-all text-gray-900"
+                        className={inputClass(!!fieldErrors.phone)}
                         placeholder="+216 XX XXX XXX"
                       />
+                      {fieldError('phone')}
                     </div>
                   </div>
 
@@ -329,14 +393,30 @@ export default function JobApplication() {
                       </label>
                       <select
                         value={position}
-                        onChange={(e) => setPosition(e.target.value)}
-                        className="w-full p-4 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none transition-all text-gray-900 appearance-none"
+                        onChange={(e) => {
+                          setPosition(e.target.value);
+                          const offer = activeOffers.find((o) => o.title === e.target.value);
+                          setOfferId(offer ? offer._id : '');
+                        }}
+                        className={`w-full p-4 rounded-xl border bg-white text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none transition-all text-gray-900 appearance-none ${
+                          !!fieldErrors.position ? 'border-red-400' : 'border-gray-200'
+                        }`}
                       >
                         <option value="">Choisir un poste</option>
-                        {POSITIONS.map((p) => (
-                          <option key={p} value={p}>{p}</option>
-                        ))}
+                        {activeOffers.length > 0 && (
+                          <optgroup label="Offres publiées">
+                            {activeOffers.map((o) => (
+                              <option key={o._id} value={o.title}>{o.title}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        <optgroup label="Candidature spontanée">
+                          {POSITIONS.map((p) => (
+                            <option key={p} value={p}>{p}</option>
+                          ))}
+                        </optgroup>
                       </select>
+                      {fieldError('position')}
                     </div>
                     <div className="space-y-2">
                       <label className="block text-sm font-bold text-gray-700">
@@ -363,9 +443,10 @@ export default function JobApplication() {
                       type="text"
                       value={education}
                       onChange={(e) => setEducation(e.target.value)}
-                      className="w-full p-4 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none transition-all text-gray-900"
+                      className={inputClass(!!fieldErrors.education)}
                       placeholder="Ex: Master en Comptabilité, IHEC..."
                     />
+                    {fieldError('education')}
                   </div>
 
                   <div className="space-y-2">
@@ -376,7 +457,7 @@ export default function JobApplication() {
                       type="text"
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
-                      className="w-full p-4 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-secondary focus:border-secondary focus:outline-none transition-all text-gray-900"
+                      className={inputClass(false)}
                       placeholder="Votre adresse actuelle"
                     />
                   </div>
@@ -408,7 +489,9 @@ export default function JobApplication() {
                       ) : (
                         <div
                           onClick={() => cvInputRef.current?.click()}
-                          className="border-2 border-dashed border-gray-300 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer bg-white hover:border-secondary/40 hover:bg-secondary/5 transition-all group"
+                          className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer bg-white hover:border-secondary/40 hover:bg-secondary/5 transition-all group ${
+                            fieldErrors.cv ? 'border-red-400' : 'border-gray-300'
+                          }`}
                         >
                           <Upload className="w-8 h-8 text-gray-300 group-hover:text-secondary mb-2" />
                           <p className="text-sm text-gray-400 group-hover:text-gray-600 text-center">
@@ -423,6 +506,7 @@ export default function JobApplication() {
                         onChange={handleCvChange}
                         className="hidden"
                       />
+                      {fieldError('cv')}
                     </div>
 
                     <div className="space-y-2">

@@ -1,5 +1,14 @@
 import nodemailer from 'nodemailer';
 
+/** Échappe les valeurs insérées dans les templates HTML (protection XSS email). */
+const esc = (value: unknown): string =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 const createTransporter = () => {
   const host = process.env.SMTP_HOST;
   const port = process.env.SMTP_PORT;
@@ -100,7 +109,7 @@ export async function sendJobConfirmation(to: string, firstName: string): Promis
       subject: 'Confirmation de réception - Candidature RM Consulting',
       html: `${tplHeader}
         <div style="background: white; border-radius: 12px; padding: 24px; border: 1px solid #dac0c8;">
-          <p style="color: #1a1c1c; font-size: 15px; margin: 0 0 16px;">Bonjour <strong>${firstName}</strong>,</p>
+          <p style="color: #1a1c1c; font-size: 15px; margin: 0 0 16px;">Bonjour <strong>${esc(firstName)}</strong>,</p>
           <p style="color: #554249; font-size: 14px; margin: 0 0 16px;">
             Nous vous remercions pour l'intérêt que vous portez à RM Consulting.
           </p>
@@ -131,24 +140,26 @@ export async function sendNewApplicationAlert(adminEmail: string, app: SimpleJob
   const transporter = createTransporter();
   if (!transporter) { return; }
 
+  const adminUrl = process.env.ADMIN_URL || 'http://localhost:3001';
+
   try {
     await transporter.sendMail({
       from: `"RM Consulting Recrutement" <${process.env.SMTP_USER}>`,
       to: adminEmail,
-      subject: `Nouvelle candidature - ${app.firstName} ${app.lastName} (${app.position})`,
+      subject: `Nouvelle candidature - ${esc(app.firstName)} ${esc(app.lastName)} (${esc(app.position)})`,
       html: `${tplHeader}
         <div style="background: white; border-radius: 12px; padding: 24px; border: 1px solid #dac0c8;">
           <div style="background: #6c0042; color: white; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
             <p style="font-size: 14px; font-weight: 700; margin: 0;">Nouvelle candidature reçue</p>
           </div>
           <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-            <tr><td style="padding: 8px 0; color: #735b24; font-weight: 700; width: 120px;">Candidat</td><td style="padding: 8px 0;">${app.firstName} ${app.lastName}</td></tr>
-            <tr><td style="padding: 8px 0; color: #735b24; font-weight: 700;">Email</td><td style="padding: 8px 0;">${app.email}</td></tr>
-            <tr><td style="padding: 8px 0; color: #735b24; font-weight: 700;">Téléphone</td><td style="padding: 8px 0;">${app.phone}</td></tr>
-            <tr><td style="padding: 8px 0; color: #735b24; font-weight: 700;">Poste</td><td style="padding: 8px 0;">${app.position}</td></tr>
+            <tr><td style="padding: 8px 0; color: #735b24; font-weight: 700; width: 120px;">Candidat</td><td style="padding: 8px 0;">${esc(app.firstName)} ${esc(app.lastName)}</td></tr>
+            <tr><td style="padding: 8px 0; color: #735b24; font-weight: 700;">Email</td><td style="padding: 8px 0;">${esc(app.email)}</td></tr>
+            <tr><td style="padding: 8px 0; color: #735b24; font-weight: 700;">Téléphone</td><td style="padding: 8px 0;">${esc(app.phone)}</td></tr>
+            <tr><td style="padding: 8px 0; color: #735b24; font-weight: 700;">Poste</td><td style="padding: 8px 0;">${esc(app.position)}</td></tr>
           </table>
           <div style="margin-top: 20px; text-align: center;">
-            <a href="http://localhost:3001" style="display: inline-block; background: #6c0042; color: white; text-decoration: none; padding: 10px 24px; border-radius: 8px; font-size: 13px; font-weight: 700;">Voir dans le tableau de bord</a>
+            <a href="${esc(adminUrl)}" style="display: inline-block; background: #6c0042; color: white; text-decoration: none; padding: 10px 24px; border-radius: 8px; font-size: 13px; font-weight: 700;">Voir dans le tableau de bord</a>
           </div>
         </div>
       ${tplFooter}`,

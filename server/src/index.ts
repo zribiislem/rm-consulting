@@ -69,7 +69,20 @@ const distPath = path.resolve(__dirname, '..', 'dist');
 app.use(express.static(distPath));
 
 const uploadsPath = path.resolve(__dirname, '..', 'uploads');
-app.use('/uploads', express.static(uploadsPath));
+
+// Les CV / pièces jointes des candidatures ne sont PAS servis publiquement :
+// ils sont téléchargés uniquement via la route authentifiée
+// GET /api/job-applications/:id/attachments/:attId
+app.use(
+  '/uploads',
+  (req, res, next) => {
+    if (req.path.startsWith('/applications')) {
+      return res.status(404).end();
+    }
+    next();
+  },
+  express.static(uploadsPath)
+);
 
 app.get('*', (_req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));

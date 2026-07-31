@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { motion, useInView } from 'motion/react';
 
 interface Stat {
@@ -118,12 +118,13 @@ export default function Stats() {
       <div className="bg-white rounded-2xl shadow-xl border border-secondary/10 py-10 px-6 sm:px-12">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
           {stats.map((stat, idx) => (
-            <AnimatedCounter
-              key={idx}
-              value={stat.value}
-              label={stat.label}
-              delay={idx * 0.15}
-            />
+            <Fragment key={idx}>
+              <AnimatedCounter
+                value={stat.value}
+                label={stat.label}
+                delay={idx * 0.15}
+              />
+            </Fragment>
           ))}
         </div>
       </div>

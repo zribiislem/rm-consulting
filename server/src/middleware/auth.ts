@@ -5,7 +5,7 @@ export interface AuthRequest extends Request {
   adminId?: string;
 }
 
-const getSecret = (): string => {
+export const getSecret = (): string => {
   const secret = process.env.AUTH_SECRET;
   if (!secret) throw new Error('AUTH_SECRET is not defined');
   return secret;

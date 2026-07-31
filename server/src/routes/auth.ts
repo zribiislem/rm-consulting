@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { rateLimit } from '../middleware/rate-limit.js';
 import { sendVerificationCode } from '../services/email.js';
 
 const router = Router();
@@ -39,7 +40,9 @@ setInterval(() => {
 
 const TOKEN_EXPIRY = '24h';
 
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login',
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.' }),
+  async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
     const adminEmail = getAdminEmail();
@@ -83,7 +86,9 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/verify-2fa', async (req: Request, res: Response) => {
+router.post('/verify-2fa',
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 15, message: 'Trop de tentatives. Réessayez dans 15 minutes.' }),
+  async (req: Request, res: Response) => {
   try {
     const { email, code } = req.body;
     const lookupKey = (email || '').toLowerCase().trim();
