@@ -259,15 +259,6 @@ export default function JobApplication() {
   return (
     <section id="job-application" className="scroll-mt-12">
       <div className="relative py-20 md:py-24 overflow-hidden bg-primary">
-        <div className="absolute inset-0 opacity-10">
-          <div
-            className="w-full h-full bg-cover bg-center"
-            style={{
-              backgroundImage:
-                "url('https://lh3.googleusercontent.com/aida-public/AB6AXuBUlhbTUetUI0FGkUYgxYNWAya0bi4BjXrdQHiObH6TTY8hQ0cXNY0hd3-DwVxE46cUieiY7t_4G3ywCzGq4qMXCw6Qg-zSDnsscZ7OYU82mnssGrMPJuKW0T03xyF1X0tTez7J0So6gZNjbWgY1rRtBtquwBjkyp4C_baZBe7eHKpZlQEbsA6c7qSi9TPo6dfHnioPhpVteiFmiv0DwquzZVjOU5EIS1np9yLbqSSiKSRMIve_Ob4F')",
-            }}
-          />
-        </div>
         <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-10 text-center">
           <div className="w-16 h-16 bg-white/15 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg ring-1 ring-white/10">
             <Briefcase className="w-8 h-8 text-white" />
