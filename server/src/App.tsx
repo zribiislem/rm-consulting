@@ -445,6 +445,7 @@ export default function App() {
 
   // Fetch data from API on mount
   useEffect(() => {
+    if (!isAuthChecked) return;
     const fetchData = async () => {
       try {
         const [deptRes, missionRes, msgRes, apptRes, availRes, refRes, paramRes, jobRes, archivedRes, progRes] = await Promise.all([
@@ -476,15 +477,15 @@ export default function App() {
         setAvailableDatesList(avails);
         setReferences(refs);
         setParameters(params);
-        setJobApps(jobs);
-        setArchivedApps(archived);
+        setJobApps(Array.isArray(jobs) ? jobs : []);
+        setArchivedApps(Array.isArray(archived) ? archived : []);
         setProgrammes(Array.isArray(progs) ? progs.map((p: any) => ({ ...p, id: p._id })) : []);
       } catch (err) {
         console.error('Failed to fetch data from API:', err);
       }
     };
     fetchData();
-  }, []);
+  }, [isAuthChecked]);
 
   // Dashboard calendar state
   const today = new Date();
