@@ -5,7 +5,7 @@ const router = Router();
 
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const messages = await Message.find();
+    const messages = await Message.find({ archived: { $ne: true } });
     res.json(messages);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching messages', error });

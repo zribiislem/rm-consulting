@@ -24,7 +24,6 @@ import {
   CheckCircle2,
   Clock,
   Send,
-  MessageSquare,
   Building2,
   Award,
   Globe,
@@ -39,7 +38,8 @@ import {
   Filter,
   Download,
   Archive,
-  ArchiveRestore
+  ArchiveRestore,
+  Eye
 } from 'lucide-react';
 
 // Interfaces
@@ -63,6 +63,9 @@ interface Message {
   isUnread: boolean;
   parentId?: string;
   email?: string;
+  status: 'new' | 'processing' | 'done';
+  archived?: boolean;
+  createdAt?: string;
 }
 
 interface Department {
@@ -195,11 +198,64 @@ const formatTimeAmPm = (time?: string): string => {
   return `${hour12}:${String(minutes).padStart(2, '0')} ${period}`;
 };
 
+// Libellé + classes de couleur pour chaque statut de message
+const messageStatusInfo = (status: string): { label: string; cls: string } => {
+  switch (status) {
+    case 'processing':
+      return { label: 'En cours', cls: 'bg-amber-100 text-amber-700 border-amber-200' };
+    case 'done':
+      return { label: 'Traité', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+    default:
+      return { label: 'Nouveau', cls: 'bg-blue-100 text-blue-700 border-blue-200' };
+  }
+};
+
+// Date de réception lisible d'un message (créé en base) sinon son heure
+const formatMessageDate = (msg: Message): string => {
+  if (msg.createdAt) {
+    try {
+      return new Date(msg.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch { /* fall through */ }
+  }
+  return msg.time || '';
+};
+
+// Extrait le sujet, l'email et le corps d'un message au format "[Sujet]\n\nEmail: x\n\nTexte"
+const parseMessageParts = (msg: Message): { subject: string; email: string; body: string } => {
+  const content = msg.content || '';
+  const subjectMatch = content.match(/^\[(.+?)\]/);
+  const subject = subjectMatch ? subjectMatch[1] : (msg.role === 'Client' ? 'Demande de contact' : '');
+  const emailMatch = content.match(/Email:\s*(.+)/);
+  const email = emailMatch ? emailMatch[1].trim() : (msg.email || '');
+  const body = content
+    .replace(/^\[.+?\]/, '')
+    .replace(/Email:\s*.+/, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return { subject, email, body };
+};
+
 export default function App() {
   const [isAuthChecked, setIsAuthChecked] = useState(false);
 
-  // Navigation active tab
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'references' | 'recruitment'>('dashboard');
+  // Navigation active tab (persisted so refresh keeps the current page)
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'messages' | 'references' | 'recruitment'>(() => {
+    try {
+      const saved = localStorage.getItem('rm_admin_active_tab');
+      const valid = ['dashboard', 'missions', 'reporting', 'settings', 'departments', 'appointments', 'messages', 'references', 'recruitment'];
+      return (saved && valid.includes(saved) ? saved : 'dashboard') as 'dashboard' | 'missions' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'messages' | 'references' | 'recruitment';
+    } catch {
+      return 'dashboard';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rm_admin_active_tab', activeTab);
+    } catch {
+      // ignore storage errors
+    }
+  }, [activeTab]);
 
   // Departments dynamic state
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -226,6 +282,11 @@ export default function App() {
   // Messages state
   const [messages, setMessages] = useState<Message[]>([]);
 
+  // Messages inbox state
+  const [messageFilter, setMessageFilter] = useState<'all' | 'unread' | 'processing' | 'done'>('all');
+  const [messageDetailOpen, setMessageDetailOpen] = useState(false);
+  const [activeMessageDetail, setActiveMessageDetail] = useState<Message | null>(null);
+
   // Appointments state
   interface AppointmentData {
     _id: string;
@@ -238,6 +299,7 @@ export default function App() {
     status: 'pending' | 'confirmed' | 'cancelled' | 'rescheduled';
     rescheduledDate: string;
     rescheduledTimeSlot: string;
+    duration?: string;
   }
   interface AvailableDateData {
     _id: string;
@@ -251,6 +313,16 @@ export default function App() {
   const [availableDatesList, setAvailableDatesList] = useState<AvailableDateData[]>([]);
   const [availCalMonth, setAvailCalMonth] = useState(new Date().getMonth());
   const [availCalYear, setAvailCalYear] = useState(new Date().getFullYear());
+
+  // Appointment creation state
+  const [appointmentModalOpen, setAppointmentModalOpen] = useState(false);
+  const [newApptClient, setNewApptClient] = useState('');
+  const [newApptEmail, setNewApptEmail] = useState('');
+  const [newApptService, setNewApptService] = useState('');
+  const [newApptDate, setNewApptDate] = useState('');
+  const [newApptTime, setNewApptTime] = useState('09:00');
+  const [newApptDuration, setNewApptDuration] = useState('30');
+  const [newApptNotes, setNewApptNotes] = useState('');
 
   const [timeSlotModalOpen, setTimeSlotModalOpen] = useState(false);
   const [timeSlotDateStr, setTimeSlotDateStr] = useState('');
@@ -375,7 +447,7 @@ export default function App() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [deptRes, missionRes, msgRes, apptRes, availRes, refRes, paramRes, jobRes, archivedRes] = await Promise.all([
+        const [deptRes, missionRes, msgRes, apptRes, availRes, refRes, paramRes, jobRes, archivedRes, progRes] = await Promise.all([
           fetch(`${API_URL}/departments`),
           fetch(`${API_URL}/missions`),
           fetch(`${API_URL}/messages`),
@@ -384,7 +456,8 @@ export default function App() {
           fetch(`${API_URL}/references`),
           fetch(`${API_URL}/parameters`),
           authedFetch(`${API_URL}/job-applications`),
-          authedFetch(`${API_URL}/job-applications?archived=true`)
+          authedFetch(`${API_URL}/job-applications?archived=true`),
+          authedFetch(`${API_URL}/programs`)
         ]);
         const depts = await deptRes.json();
         const missionsData = await missionRes.json();
@@ -395,6 +468,7 @@ export default function App() {
         const params = await paramRes.json();
         const jobs = await jobRes.json();
         const archived = await archivedRes.json();
+        const progs = await progRes.json();
         setDepartments(depts.map((d: any) => ({ ...d, id: d._id })));
         setMissions(missionsData.map((m: any) => ({ ...m, id: m._id })));
         setMessages(msgs.map((m: any) => ({ ...m, id: m._id })));
@@ -404,6 +478,7 @@ export default function App() {
         setParameters(params);
         setJobApps(jobs);
         setArchivedApps(archived);
+        setProgrammes(Array.isArray(progs) ? progs.map((p: any) => ({ ...p, id: p._id })) : []);
       } catch (err) {
         console.error('Failed to fetch data from API:', err);
       }
@@ -417,6 +492,114 @@ export default function App() {
   const [calYear, setCalYear] = useState(today.getFullYear());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
+  // Programmes state (synced with MongoDB via /api/programs)
+  interface ProgrammeData {
+    id: string;
+    title: string;
+    description: string;
+    date: string; // YYYY-MM-DD
+    startTime: string;
+    endTime: string;
+    type: string;
+    notes: string;
+  }
+  const [programmes, setProgrammes] = useState<ProgrammeData[]>([]);
+
+  // Programme form modal state
+  const [programmeFormOpen, setProgrammeFormOpen] = useState(false);
+  const [editingProgrammeId, setEditingProgrammeId] = useState<string | null>(null);
+  const [progTitle, setProgTitle] = useState('');
+  const [progDescription, setProgDescription] = useState('');
+  const [progDate, setProgDate] = useState('');
+  const [progStartTime, setProgStartTime] = useState('09:00');
+  const [progEndTime, setProgEndTime] = useState('12:00');
+  const [progType, setProgType] = useState('Formation');
+  const [progNotes, setProgNotes] = useState('');
+
+  // Programme view modal state
+  const [viewingProgramme, setViewingProgramme] = useState<ProgrammeData | null>(null);
+
+  const toDateInputValue = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const openNewProgramme = () => {
+    setEditingProgrammeId(null);
+    setProgTitle('');
+    setProgDescription('');
+    setProgDate(selectedDay ? `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}` : toDateInputValue(new Date()));
+    setProgStartTime('09:00');
+    setProgEndTime('12:00');
+    setProgType('Formation');
+    setProgNotes('');
+    setProgrammeFormOpen(true);
+  };
+
+  const openEditProgramme = (p: ProgrammeData) => {
+    setEditingProgrammeId(p.id);
+    setProgTitle(p.title);
+    setProgDescription(p.description);
+    setProgDate(p.date);
+    setProgStartTime(p.startTime);
+    setProgEndTime(p.endTime);
+    setProgType(p.type);
+    setProgNotes(p.notes);
+    setProgrammeFormOpen(true);
+  };
+
+  const handleSaveProgramme = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!progTitle.trim() || !progDate || !progStartTime || !progEndTime || !progType.trim()) {
+      addToast('Veuillez remplir le titre, la date, les heures et le type.', 'info');
+      return;
+    }
+    const payload = {
+      title: progTitle.trim(),
+      description: progDescription.trim(),
+      date: progDate,
+      startTime: progStartTime,
+      endTime: progEndTime,
+      type: progType,
+      notes: progNotes.trim(),
+    };
+    if (editingProgrammeId) {
+      const res = await authedFetch(`${API_URL}/programs/${editingProgrammeId}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setProgrammes(prev => prev.map(p => p.id === editingProgrammeId ? { ...updated, id: updated._id } : p));
+        addToast(`Programme "${progTitle.trim()}" mis à jour.`);
+      } else {
+        addToast('Erreur lors de la mise à jour du programme.', 'error');
+      }
+    } else {
+      const res = await authedFetch(`${API_URL}/programs`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setProgrammes(prev => [...prev, { ...created, id: created._id }]);
+        addToast(`Programme "${progTitle.trim()}" ajouté.`);
+      } else {
+        addToast('Erreur lors de l\'ajout du programme.', 'error');
+      }
+    }
+    setProgrammeFormOpen(false);
+  };
+
+  const handleDeleteProgramme = async (id: string, title: string) => {
+    const res = await authedFetch(`${API_URL}/programs/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      setProgrammes(prev => prev.filter(p => p.id !== id));
+      addToast(`Programme "${title}" supprimé.`, 'info');
+    } else {
+      addToast('Erreur lors de la suppression du programme.', 'error');
+    }
+    if (viewingProgramme && viewingProgramme.id === id) setViewingProgramme(null);
+  };
+
   // Build appointments map grouped by day for the current calendar month
   const appointmentsByDay: Record<number, AppointmentData[]> = {};
   appointments.forEach((appt) => {
@@ -425,6 +608,17 @@ export default function App() {
       const day = d.getDate();
       if (!appointmentsByDay[day]) appointmentsByDay[day] = [];
       appointmentsByDay[day].push(appt);
+    }
+  });
+
+  // Build programmes map grouped by day for the current calendar month
+  const programmesByDay: Record<number, ProgrammeData[]> = {};
+  programmes.forEach((p) => {
+    const d = new Date(`${p.date}T00:00:00`);
+    if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
+      const day = d.getDate();
+      if (!programmesByDay[day]) programmesByDay[day] = [];
+      programmesByDay[day].push(p);
     }
   });
 
@@ -518,6 +712,13 @@ export default function App() {
   const activeMissionsCount = missions.length + 21; // Mock constant added to make it matches the original "24"
   const unreadMessagesCount = messages.filter((m) => m.isUnread && m.sender !== 'Rezgui Mihoub' && !m.parentId).length;
 
+  // Boîte de réception Messages (hors messages archivés)
+  const clientInboxMessages = messages.filter(m => m.sender !== 'Rezgui Mihoub' && !m.parentId && !m.archived);
+  const newMessagesCount = clientInboxMessages.filter(m => m.status === 'new' || m.isUnread).length;
+  const filteredMessages = messageFilter === 'all' ? clientInboxMessages
+    : messageFilter === 'unread' ? clientInboxMessages.filter(m => m.isUnread)
+    : clientInboxMessages.filter(m => m.status === messageFilter);
+
   // Handle Nouvelle Mission
   const handleCreateMission = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -562,6 +763,112 @@ export default function App() {
     }
     setMessages((prev) => prev.filter((m) => m.id !== id));
     addToast(`Message de ${senderName} supprimé.`, 'info');
+  };
+
+  // Archiver un message (retiré de la boîte de réception, sans suppression)
+  const archiveMessage = async (msg: Message) => {
+    try {
+      await fetch(`${API_URL}/messages/${msg.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: true }),
+      }).catch(() => {});
+    } catch { /* ignore */ }
+    setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+    addToast(`Message de ${msg.sender} archivé.`, 'info');
+  };
+
+  // Mettre à jour le statut d'un message (nouveau / en cours / traité)
+  const setMessageStatus = async (msg: Message, status: 'new' | 'processing' | 'done') => {
+    const isUnread = status === 'new';
+    try {
+      await fetch(`${API_URL}/messages/${msg.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, isUnread }),
+      }).catch(() => {});
+    } catch { /* ignore */ }
+    setMessages(prev => prev.map(m => (m.id === msg.id ? { ...m, status, isUnread } : m)));
+    if (activeMessageDetail?.id === msg.id) {
+      setActiveMessageDetail({ ...activeMessageDetail, status, isUnread });
+    }
+    addToast(
+      status === 'done'
+        ? 'Message marqué comme traité.'
+        : status === 'processing'
+        ? 'Message marqué en cours de traitement.'
+        : 'Message remis comme nouveau.',
+      'info'
+    );
+  };
+
+  // Messages inbox handlers
+  const openMessageDetail = (msg: Message) => {
+    setActiveMessageDetail(msg);
+    setMessageDetailOpen(true);
+  };
+
+  const openMessageDetailWithReply = (msg: Message) => {
+    openReplyModal(msg);
+    setMessageDetailOpen(false);
+  };
+
+  // Appointment creation handlers (Planifier un rendez-vous)
+  const addMinutes = (time: string, mins: number): string => {
+    const [h, m] = time.split(':').map(Number);
+    const total = (h || 0) * 60 + (m || 0) + mins;
+    const nh = Math.floor(total / 60) % 24;
+    const nm = total % 60;
+    return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
+  };
+
+  const openNewAppointment = (prefill?: Message) => {
+    const parts = prefill ? parseMessageParts(prefill) : { subject: '', email: '', body: '' };
+    setNewApptClient(prefill ? prefill.sender : '');
+    setNewApptEmail(parts.email);
+    setNewApptService(parts.subject === 'Demande de contact' ? '' : parts.subject);
+    setNewApptDate(new Date().toISOString().split('T')[0]);
+    setNewApptTime('09:00');
+    setNewApptDuration('30');
+    setNewApptNotes(parts.body || '');
+    setAppointmentModalOpen(true);
+  };
+
+  const handleSaveAppointment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newApptClient.trim() || !newApptEmail.trim() || !newApptDate || !newApptTime) {
+      addToast('Veuillez renseigner le client, l\'email, la date et l\'heure.', 'info');
+      return;
+    }
+    const duration = Math.max(15, Math.min(240, Number(newApptDuration) || 30));
+    const timeSlot = `${newApptTime} - ${addMinutes(newApptTime, duration)}`;
+    try {
+      const res = await fetch(`${API_URL}/appointments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientName: newApptClient.trim(),
+          email: newApptEmail.trim(),
+          subject: newApptService.trim(),
+          date: newApptDate,
+          timeSlot,
+          duration: String(duration),
+          details: newApptNotes.trim(),
+          status: 'pending',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        addToast(err.message || 'Erreur lors de la création.', 'info');
+        return;
+      }
+      const created = await res.json();
+      setAppointments(prev => [created, ...prev]);
+      addToast(`Rendez-vous avec ${newApptClient.trim()} planifié.`);
+      setAppointmentModalOpen(false);
+    } catch {
+      addToast('Erreur lors de l\'enregistrement.', 'error');
+    }
   };
 
   // Open Reply Modal
@@ -669,7 +976,8 @@ export default function App() {
         initials: initials,
         time: 'À l\'instant',
         content: `Bonjour, j'ai bien reçu votre demande concernant le pôle "${selectedDeptForContact.name}". Je l'étudie dès à présent et reviens vers vous très vite.`,
-        isUnread: true
+        isUnread: true,
+        status: 'new'
       };
 
       try {
@@ -1220,6 +1528,23 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setActiveTab('messages')}
+            className={`w-full flex items-center gap-3 p-3 rounded-lg font-medium transition-all duration-150 ${
+              activeTab === 'messages'
+                ? 'sidebar-active text-white'
+                : 'text-on-surface-variant hover:bg-secondary-container/20 hover:text-secondary'
+            }`}
+          >
+            <Mail className="w-5 h-5" />
+            <span className="text-sm">Messages</span>
+            {unreadMessagesCount > 0 && (
+              <span className="ml-auto px-1.5 py-0.5 bg-error text-white text-[9px] font-bold rounded-full">
+                {unreadMessagesCount}
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab('recruitment')}
             className={`w-full flex items-center gap-3 p-3 rounded-lg font-medium transition-all duration-150 ${
               activeTab === 'recruitment'
@@ -1441,85 +1766,18 @@ export default function App() {
 
                 {/* Dashboard Widgets Row */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Messages Section */}
-                  <div className="glass-card rounded-xl flex flex-col">
-                    <div className="p-6 border-b border-secondary/10">
-                      <h4 className="font-headline text-base font-bold text-on-surface">Derniers Messages</h4>
-                    </div>
-
-                    <div className="flex-1 p-4 space-y-4 overflow-y-auto max-h-[350px] custom-scrollbar">
-                      <AnimatePresence initial={false}>
-                        {(() => {
-                          const clientMessages = messages.filter(m => m.sender !== 'Rezgui Mihoub' && !m.parentId).sort((a, b) => (a.isUnread === b.isUnread ? 0 : a.isUnread ? -1 : 1));
-                          return clientMessages.length === 0 ? (
-                            <div className="text-center py-8 text-sm text-on-surface-variant flex flex-col items-center gap-2">
-                              <MessageSquare className="w-8 h-8 text-on-surface-variant/30" />
-                              <span>Aucun message à traiter</span>
-                            </div>
-                          ) : (
-                            <>
-                            {clientMessages.map((msg) => (
-                            <motion.div
-                              key={msg.id}
-                              initial={{ opacity: 0, height: 0 }}
-                              animate={{ opacity: 1, height: 'auto' }}
-                              exit={{ opacity: 0, height: 0 }}
-                              className={`flex gap-3 p-3 rounded-lg transition-colors border ${msg.isUnread ? 'bg-surface-container-low/60 border-secondary/20' : 'bg-transparent border-transparent'} hover:bg-surface-container-low hover:border-secondary/10`}
-                            >
-                              {msg.avatarUrl ? (
-                                <img
-                                  className="w-10 h-10 rounded-full object-cover shrink-0 border border-secondary/10"
-                                  alt={msg.sender}
-                                  src={msg.avatarUrl}
-                                />
-                              ) : (
-                                <div className="w-10 h-10 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center font-bold text-sm shrink-0">
-                                  {msg.initials}
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex justify-between items-start">
-                                  <div>
-                                    <div className="flex items-center gap-1.5">
-                                      {msg.isUnread && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
-                                      <p className={`text-xs font-bold text-on-surface truncate ${msg.isUnread ? '' : 'opacity-70'}`}>{msg.sender}</p>
-                                    </div>
-                                    <p className="text-[9px] text-on-surface-variant">{msg.role}</p>
-                                  </div>
-                                  <span className="text-[10px] text-on-surface-variant">{msg.time}</span>
-                                </div>
-                                <p className="text-xs text-on-surface-variant line-clamp-2 mt-1 mb-2">
-                                  {msg.content}
-                                </p>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => openReplyModal(msg)}
-                                    className="px-2.5 py-1 bg-primary text-on-primary text-[10px] font-bold rounded hover:bg-primary/90 transition-colors cursor-pointer"
-                                  >
-                                    Répondre
-                                  </button>
-                <button
-                  onClick={() => handleArchiveMessage(msg.id, msg.sender)}
-                  className="px-2.5 py-1 border border-red-300 text-red-600 text-[10px] font-bold rounded hover:bg-red-50 transition-colors cursor-pointer"
-                >
-                  Supprimer
-                </button>
-                                </div>
-                              </div>
-                            </motion.div>
-                          ))}
-                          </>
-                          );
-                        })()}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-
                   {/* Appointment Calendar Widget */}
-                  <div className="glass-card rounded-xl p-6">
+                  <div className="glass-card rounded-xl p-6 lg:col-span-2">
                     <div className="flex justify-between items-center mb-6">
                       <h4 className="font-headline text-base font-bold text-on-surface">Calendrier des Rendez-vous</h4>
                       <div className="flex gap-2 items-center">
+                        <button
+                          onClick={openNewProgramme}
+                          className="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm hover:bg-orange-700 active:scale-95"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Programme
+                        </button>
                         <button
                           onClick={() => {
                             if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); }
@@ -1556,10 +1814,13 @@ export default function App() {
                         const day = i + 1;
                         const hasAppointments = appointmentsByDay[day] && appointmentsByDay[day].length > 0;
                         const isAvailableDate = availableDatesSetByDay.has(`${day}`);
+                        const hasProgrammes = programmesByDay[day] && programmesByDay[day].length > 0;
                         return (
                           <button
                             key={day}
-                            onClick={() => setSelectedDay(selectedDay === day ? null : day)}
+                            onClick={() => {
+                              setSelectedDay(selectedDay === day ? null : day);
+                            }}
                             className={`p-2 text-xs font-semibold rounded-lg relative cursor-pointer ${
                               selectedDay === day
                                 ? 'bg-primary text-white shadow-sm'
@@ -1569,17 +1830,18 @@ export default function App() {
                             }`}
                           >
                             {day}
-                            {isAvailableDate && selectedDay !== day && (
-                              <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-emerald-500 rounded-full" />
-                            )}
-                            {hasAppointments && !isAvailableDate && selectedDay !== day && (
-                              <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-secondary rounded-full" />
-                            )}
-                            {hasAppointments && isAvailableDate && selectedDay !== day && (
-                              <>
-                                <span className="absolute bottom-0.5 left-[calc(50%-4px)] w-1 h-1 bg-emerald-500 rounded-full" />
-                                <span className="absolute bottom-0.5 left-[calc(50%+2px)] w-1 h-1 bg-secondary rounded-full" />
-                              </>
+                            {selectedDay !== day && (
+                              <span className="absolute bottom-0.5 left-0 right-0 flex justify-center gap-[2px]">
+                                {isAvailableDate && (
+                                  <span className="w-1 h-1 bg-emerald-500 rounded-full" />
+                                )}
+                                {hasAppointments && (
+                                  <span className="w-1 h-1 bg-secondary rounded-full" />
+                                )}
+                                {hasProgrammes && (
+                                  <span className="w-1 h-1 bg-orange-500 rounded-full" />
+                                )}
+                              </span>
                             )}
                           </button>
                         );
@@ -1587,7 +1849,7 @@ export default function App() {
                     </div>
 
                     {/* Legend */}
-                    <div className="flex items-center justify-center gap-4 mb-4">
+                    <div className="flex items-center justify-center gap-4 mb-4 flex-wrap">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-emerald-500" />
                         <span className="text-[9px] text-on-surface-variant font-medium">Date disponible</span>
@@ -1596,47 +1858,101 @@ export default function App() {
                         <span className="w-2 h-2 rounded-full bg-secondary" />
                         <span className="text-[9px] text-on-surface-variant font-medium">Rendez-vous</span>
                       </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-purple-500" />
+                        <span className="text-[9px] text-on-surface-variant font-medium">Entretien</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-orange-500" />
+                        <span className="text-[9px] text-on-surface-variant font-medium">Programme</span>
+                      </div>
                     </div>
 
-                    <div className="space-y-3">
+                    <div className="space-y-2 max-h-[150px] overflow-y-auto custom-scrollbar pr-1">
                       <AnimatePresence mode="wait">
-                        {selectedDay && appointmentsByDay[selectedDay] ? (
-                          appointmentsByDay[selectedDay].map((appt) => (
-                            <motion.div
-                              key={appt._id}
-                              initial={{ opacity: 0, x: -10 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              exit={{ opacity: 0, x: 10 }}
-                              className={`flex items-center gap-4 p-3 rounded-lg border-l-4 ${
-                                appt.status === 'confirmed'
-                                  ? 'bg-emerald-50 border-emerald-500'
-                                  : appt.status === 'cancelled'
-                                  ? 'bg-gray-50 border-gray-400 opacity-60'
-                                  : 'bg-primary/5 border-primary'
-                              }`}
-                            >
-                              <div className="text-center shrink-0 min-w-12">
-                                <p className="text-[10px] font-bold text-primary uppercase">Jour {selectedDay}</p>
-                                <p className="font-bold text-sm text-on-surface">{appt.timeSlot}</p>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <p className="text-xs font-bold text-on-surface truncate">{appt.subject}</p>
-                                  <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
-                                    appt.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
-                                    appt.status === 'cancelled' ? 'bg-gray-100 text-gray-500' :
-                                    appt.status === 'rescheduled' ? 'bg-blue-100 text-blue-700' :
-                                    'bg-amber-100 text-amber-700'
-                                  }`}>
-                                    {appt.status === 'confirmed' ? 'CONFIRMÉ' : appt.status === 'cancelled' ? 'ANNULÉ' : appt.status === 'rescheduled' ? 'REPORTÉ' : 'EN ATTENTE'}
-                                  </span>
+                        {selectedDay && ((appointmentsByDay[selectedDay] && appointmentsByDay[selectedDay].length > 0) || (programmesByDay[selectedDay] && programmesByDay[selectedDay].length > 0)) ? (
+                          <>
+                            {(appointmentsByDay[selectedDay] || []).map((appt) => (
+                              <motion.div
+                                key={appt._id}
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 10 }}
+                                className={`flex items-center gap-3 px-2 py-1 rounded-lg border-l-4 ${
+                                  appt.status === 'confirmed'
+                                    ? 'bg-emerald-50 border-emerald-500'
+                                    : appt.status === 'cancelled'
+                                    ? 'bg-gray-50 border-gray-400 opacity-60'
+                                    : 'bg-primary/5 border-primary'
+                                }`}
+                              >
+                                <div className="text-center shrink-0 min-w-12">
+                                  <p className="text-[9px] font-bold text-primary uppercase">Jour {selectedDay}</p>
+                                  <p className="font-bold text-xs text-on-surface">{appt.timeSlot}</p>
                                 </div>
-                                <p className="text-[11px] text-on-surface-variant mt-0.5">
-                                  {appt.clientName} — {appt.email}
-                                </p>
-                              </div>
-                            </motion.div>
-                          ))
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-[11px] font-bold text-on-surface truncate">{appt.subject}</p>
+                                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                                      appt.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
+                                      appt.status === 'cancelled' ? 'bg-gray-100 text-gray-500' :
+                                      appt.status === 'rescheduled' ? 'bg-blue-100 text-blue-700' :
+                                      'bg-amber-100 text-amber-700'
+                                    }`}>
+                                      {appt.status === 'confirmed' ? 'CONFIRMÉ' : appt.status === 'cancelled' ? 'ANNULÉ' : appt.status === 'rescheduled' ? 'REPORTÉ' : 'EN ATTENTE'}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-on-surface-variant truncate">
+                                    {appt.clientName} — {appt.email}
+                                  </p>
+                                </div>
+                              </motion.div>
+                            ))}
+                            {(programmesByDay[selectedDay] || []).map((p) => (
+                              <motion.div
+                                key={p.id}
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 10 }}
+                                className="flex items-center gap-3 px-2 py-1 rounded-lg border-l-4 border-orange-500 bg-orange-50/70"
+                              >
+                                <div className="text-center shrink-0 min-w-12">
+                                  <p className="text-[9px] font-bold text-orange-600 uppercase">Jour {selectedDay}</p>
+                                  <p className="font-bold text-xs text-on-surface">{p.startTime} - {p.endTime}</p>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full shrink-0 bg-orange-100 text-orange-700">{p.type}</span>
+                                    <p className="text-[11px] font-bold text-on-surface truncate">{p.title}</p>
+                                  </div>
+                                  {p.description && <p className="text-[10px] text-on-surface-variant truncate">{p.description}</p>}
+                                  <div className="flex gap-2 mt-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingProgramme(p)}
+                                      className="text-[9px] text-orange-700 hover:underline font-bold cursor-pointer"
+                                    >
+                                      Voir
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditProgramme(p)}
+                                      className="text-[9px] text-orange-700 hover:underline font-bold cursor-pointer"
+                                    >
+                                      Modifier
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteProgramme(p.id, p.title)}
+                                      className="text-[9px] text-red-600 hover:underline font-bold cursor-pointer"
+                                    >
+                                      Supprimer
+                                    </button>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            ))}
+                          </>
                         ) : (
                           <motion.div
                             key="no-appointment"
@@ -1646,8 +1962,8 @@ export default function App() {
                             className="p-3 text-center text-xs text-on-surface-variant italic bg-surface-container-low rounded-lg"
                           >
                             {selectedDay
-                              ? `Aucun rendez-vous le ${selectedDay} ${['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][calMonth]}.`
-                              : 'Sélectionnez un jour pour voir les rendez-vous.'
+                              ? `Aucun rendez-vous ni programme le ${selectedDay} ${['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][calMonth]}.`
+                              : 'Sélectionnez un jour pour voir les rendez-vous et programmes.'
                             }
                           </motion.div>
                         )}
@@ -3424,6 +3740,140 @@ export default function App() {
               </motion.div>
             )}
 
+            {/* 6. MESSAGES VIEW */}
+            {activeTab === 'messages' && (
+              <motion.div
+                key="messages"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-8"
+              >
+                {/* Header */}
+                <div>
+                  <h3 className="font-headline text-2xl font-bold text-primary">Messages</h3>
+                  <p className="text-xs text-on-surface-variant">Demandes reçues depuis le formulaire de contact.</p>
+                </div>
+
+                {/* Summary cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <button
+                    onClick={() => setMessageFilter('all')}
+                    className={`glass-card p-4 rounded-xl text-left cursor-pointer transition-all ${messageFilter === 'all' ? 'ring-2 ring-primary shadow-md' : 'hover:shadow-md'}`}
+                  >
+                    <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">Tous</p>
+                    <p className="font-headline text-2xl font-bold text-on-surface mt-1">{clientInboxMessages.length}</p>
+                    <p className="text-[11px] text-on-surface-variant mt-1">messages reçus</p>
+                  </button>
+                  <button
+                    onClick={() => setMessageFilter('unread')}
+                    className={`glass-card p-4 rounded-xl text-left cursor-pointer transition-all ${messageFilter === 'unread' ? 'ring-2 ring-primary shadow-md' : 'hover:shadow-md'}`}
+                  >
+                    <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">Non lus</p>
+                    <p className="font-headline text-2xl font-bold text-blue-600 mt-1">{clientInboxMessages.filter(m => m.isUnread).length}</p>
+                    <p className="text-[11px] text-on-surface-variant mt-1">à traiter</p>
+                  </button>
+                  <button
+                    onClick={() => setMessageFilter('processing')}
+                    className={`glass-card p-4 rounded-xl text-left cursor-pointer transition-all ${messageFilter === 'processing' ? 'ring-2 ring-primary shadow-md' : 'hover:shadow-md'}`}
+                  >
+                    <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">En cours</p>
+                    <p className="font-headline text-2xl font-bold text-amber-600 mt-1">{clientInboxMessages.filter(m => m.status === 'processing').length}</p>
+                    <p className="text-[11px] text-on-surface-variant mt-1">en traitement</p>
+                  </button>
+                  <button
+                    onClick={() => setMessageFilter('done')}
+                    className={`glass-card p-4 rounded-xl text-left cursor-pointer transition-all ${messageFilter === 'done' ? 'ring-2 ring-primary shadow-md' : 'hover:shadow-md'}`}
+                  >
+                    <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">Traités</p>
+                    <p className="font-headline text-2xl font-bold text-emerald-600 mt-1">{clientInboxMessages.filter(m => m.status === 'done').length}</p>
+                    <p className="text-[11px] text-on-surface-variant mt-1">clôturés</p>
+                  </button>
+                </div>
+
+                {/* Inbox list */}
+                <div className="bg-white rounded-2xl border border-secondary/10 overflow-hidden shadow-sm">
+                  {filteredMessages.length === 0 ? (
+                    <div className="text-center py-16 text-sm text-on-surface-variant flex flex-col items-center gap-2">
+                      <Mail className="w-10 h-10 text-on-surface-variant/30" />
+                      <span>Aucun message trouvé.</span>
+                    </div>
+                  ) : (
+                    filteredMessages.map(msg => {
+                      const parts = parseMessageParts(msg);
+                      const status = messageStatusInfo(msg.status);
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex flex-col lg:flex-row lg:items-center gap-3 p-4 border-b border-gray-100 transition-colors ${msg.isUnread ? 'bg-primary/5' : 'hover:bg-surface-container-low/50'}`}
+                        >
+                          <div className="flex items-center gap-3 lg:w-72 lg:shrink-0 min-w-0">
+                            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
+                              {msg.initials}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-xs font-bold text-on-surface truncate">{msg.sender}</p>
+                                {msg.isUnread && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
+                              </div>
+                              <p className="text-[10px] text-on-surface-variant truncate">{parts.email || msg.email || '—'}</p>
+                            </div>
+                          </div>
+                          <div className="lg:w-56 lg:shrink-0 min-w-0">
+                            <p className="text-xs font-semibold text-on-surface truncate">{parts.subject}</p>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] text-on-surface-variant line-clamp-1">{parts.body || msg.content}</p>
+                          </div>
+                          <div className="flex lg:flex-col lg:items-end items-center gap-2 lg:w-28 lg:shrink-0">
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${status.cls}`}>{status.label}</span>
+                            <span className="text-[10px] text-on-surface-variant">{formatMessageDate(msg)}</span>
+                          </div>
+                          <div className="flex items-center gap-0.5 lg:shrink-0">
+                            <button
+                              onClick={() => openMessageDetail(msg)}
+                              className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
+                              title="Voir"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => openReplyModal(msg)}
+                              className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
+                              title="Répondre"
+                            >
+                              <Send className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setMessageStatus(msg, 'done')}
+                              className="p-1.5 text-on-surface-variant hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                              title="Marquer comme traité"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => archiveMessage(msg)}
+                              className="p-1.5 text-on-surface-variant hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                              title="Archiver"
+                            >
+                              <Archive className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleArchiveMessage(msg.id, msg.sender)}
+                              className="p-1.5 text-on-surface-variant hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </motion.div>
+            )}
+
             {/* 7. REFERENCES VIEW */}
             {activeTab === 'references' && (
               <motion.div
@@ -4281,6 +4731,231 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* MODAL: PROGRAMME FORM (ADD/EDIT) */}
+      <AnimatePresence>
+        {programmeFormOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setProgrammeFormOpen(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="relative w-full max-w-lg bg-white border border-outline-variant rounded-xl shadow-2xl z-10 overflow-hidden"
+            >
+              <div className="flex justify-between items-center bg-orange-600 text-white px-6 py-4">
+                <h4 className="font-headline font-bold text-sm flex items-center gap-2">
+                  <CalendarIcon className="w-4 h-4" />
+                  {editingProgrammeId ? 'Modifier le Programme' : 'Nouveau Programme'}
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setProgrammeFormOpen(false)}
+                  className="p-1 hover:bg-white/10 rounded-full text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveProgramme} className="p-6 space-y-4">
+                <div>
+                  <label className="text-[11px] font-bold text-on-surface block mb-1">Titre du programme *</label>
+                  <input
+                    type="text"
+                    value={progTitle}
+                    onChange={e => setProgTitle(e.target.value)}
+                    placeholder="Ex: Séminaire Fiscalité 2026"
+                    className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-on-surface block mb-1">Description</label>
+                  <textarea
+                    value={progDescription}
+                    onChange={e => setProgDescription(e.target.value)}
+                    rows={2}
+                    placeholder="Description du programme…"
+                    className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-on-surface block mb-1">Date *</label>
+                  <input
+                    type="date"
+                    value={progDate}
+                    onChange={e => setProgDate(e.target.value)}
+                    className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-on-surface block mb-1">Heure de début *</label>
+                    <input
+                      type="time"
+                      value={progStartTime}
+                      onChange={e => setProgStartTime(e.target.value)}
+                      className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-on-surface block mb-1">Heure de fin *</label>
+                    <input
+                      type="time"
+                      value={progEndTime}
+                      onChange={e => setProgEndTime(e.target.value)}
+                      className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-on-surface block mb-1">Type de programme *</label>
+                  <select
+                    value={progType}
+                    onChange={e => setProgType(e.target.value)}
+                    className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
+                  >
+                    <option value="Formation">Formation</option>
+                    <option value="Séminaire">Séminaire</option>
+                    <option value="Atelier">Atelier</option>
+                    <option value="Conférence">Conférence</option>
+                    <option value="Réunion">Réunion</option>
+                    <option value="Autre">Autre</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-on-surface block mb-1">Notes <span className="font-normal text-on-surface-variant">(optionnel)</span></label>
+                  <textarea
+                    value={progNotes}
+                    onChange={e => setProgNotes(e.target.value)}
+                    rows={2}
+                    placeholder="Notes ou informations complémentaires…"
+                    className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3 border-t border-secondary/10">
+                  <button
+                    type="button"
+                    onClick={() => setProgrammeFormOpen(false)}
+                    className="px-4 py-2 text-xs font-bold text-on-surface-variant border border-outline-variant rounded-lg hover:bg-surface-container transition-colors cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-xs font-bold bg-orange-600 text-white hover:bg-orange-700 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    {editingProgrammeId ? 'Enregistrer' : 'Ajouter'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: PROGRAMME VIEW */}
+      <AnimatePresence>
+        {viewingProgramme && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setViewingProgramme(null)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="relative w-full max-w-md bg-white border border-outline-variant rounded-xl shadow-2xl z-10 overflow-hidden"
+            >
+              <div className="flex justify-between items-center bg-orange-600 text-white px-6 py-4">
+                <h4 className="font-headline font-bold text-sm flex items-center gap-2">
+                  <CalendarIcon className="w-4 h-4" />
+                  Programme
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setViewingProgramme(null)}
+                  className="p-1 hover:bg-white/10 rounded-full text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
+                    {viewingProgramme.type}
+                  </span>
+                  <h5 className="font-headline font-bold text-on-surface text-sm">{viewingProgramme.title}</h5>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <p className="text-on-surface flex items-center gap-2">
+                    <CalendarIcon className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                    {new Date(`${viewingProgramme.date}T00:00:00`).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                  <p className="text-on-surface flex items-center gap-2">
+                    <Clock className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                    {viewingProgramme.startTime} - {viewingProgramme.endTime}
+                  </p>
+                </div>
+
+                {viewingProgramme.description && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Description</p>
+                    <p className="text-xs text-on-surface leading-relaxed">{viewingProgramme.description}</p>
+                  </div>
+                )}
+
+                {viewingProgramme.notes && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Notes</p>
+                    <p className="text-xs text-on-surface leading-relaxed bg-surface-container-low rounded-lg p-3">{viewingProgramme.notes}</p>
+                  </div>
+                )}
+
+                <div className="pt-4 flex justify-end gap-3 border-t border-secondary/10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openEditProgramme(viewingProgramme);
+                      setViewingProgramme(null);
+                    }}
+                    className="px-4 py-2 text-xs font-bold border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Modifier
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteProgramme(viewingProgramme.id, viewingProgramme.title)}
+                    className="px-4 py-2 text-xs font-bold border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Supprimer
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* MODAL: REFERENCES ADD/EDIT */}
       <AnimatePresence>
         {isRefModalOpen && (
@@ -4664,6 +5339,235 @@ export default function App() {
                     className="px-5 py-2.5 text-xs font-bold bg-secondary text-white rounded-xl hover:bg-secondary/80 transition-all cursor-pointer"
                   >
                     {editingParam ? 'Enregistrer' : 'Ajouter'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: MESSAGE DETAIL */}
+      <AnimatePresence>
+        {messageDetailOpen && activeMessageDetail && (() => {
+          const parts = parseMessageParts(activeMessageDetail);
+          const status = messageStatusInfo(activeMessageDetail.status);
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                onClick={() => setMessageDetailOpen(false)}
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-2xl z-10"
+              >
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-base shrink-0">
+                      {activeMessageDetail.initials}
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-headline text-lg font-bold text-primary truncate">{activeMessageDetail.sender}</h4>
+                      <p className="text-xs text-on-surface-variant truncate">{parts.email || activeMessageDetail.email || '—'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border whitespace-nowrap ${status.cls}`}>{status.label}</span>
+                    <button
+                      onClick={() => setMessageDetailOpen(false)}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-100 pt-4">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <p className="text-sm font-bold text-on-surface">{parts.subject}</p>
+                    <span className="text-[10px] text-on-surface-variant whitespace-nowrap">{formatMessageDate(activeMessageDetail)}</span>
+                  </div>
+                  <div className="bg-surface-container-low rounded-xl p-4 text-sm text-on-surface leading-relaxed whitespace-pre-wrap min-h-32">
+                    {parts.body || activeMessageDetail.content}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-3 pt-5">
+                  <button
+                    onClick={() => {
+                      archiveMessage(activeMessageDetail);
+                      setMessageDetailOpen(false);
+                    }}
+                    className="px-4 py-2.5 text-xs font-bold text-amber-700 border border-amber-200 rounded-xl hover:bg-amber-50 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Archive className="w-3.5 h-3.5" /> Archiver
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleArchiveMessage(activeMessageDetail.id, activeMessageDetail.sender);
+                      setMessageDetailOpen(false);
+                    }}
+                    className="px-4 py-2.5 text-xs font-bold text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Supprimer
+                  </button>
+                  <button
+                    onClick={() => openMessageDetailWithReply(activeMessageDetail)}
+                    className="px-4 py-2.5 text-xs font-bold text-on-surface-variant border border-outline-variant rounded-xl hover:bg-surface-container transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Send className="w-3.5 h-3.5" /> Répondre par email
+                  </button>
+                  {activeMessageDetail.status !== 'done' && (
+                    <button
+                      onClick={() => setMessageStatus(activeMessageDetail, 'done')}
+                      className="px-4 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Marquer comme traité
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      openNewAppointment(activeMessageDetail);
+                      setMessageDetailOpen(false);
+                    }}
+                    className="px-4 py-2.5 text-xs font-bold bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <CalendarIcon className="w-3.5 h-3.5" /> Planifier un rendez-vous
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* MODAL: PLANIFIER UN RENDEZ-VOUS */}
+      <AnimatePresence>
+        {appointmentModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setAppointmentModalOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-2xl z-10"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h4 className="font-headline text-lg font-bold text-primary">Planifier un rendez-vous</h4>
+                <button
+                  onClick={() => setAppointmentModalOpen(false)}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveAppointment} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Client</label>
+                    <input
+                      type="text"
+                      value={newApptClient}
+                      onChange={e => setNewApptClient(e.target.value)}
+                      placeholder="Nom du client"
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Email</label>
+                    <input
+                      type="email"
+                      value={newApptEmail}
+                      onChange={e => setNewApptEmail(e.target.value)}
+                      placeholder="email@exemple.com"
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Service</label>
+                    <input
+                      type="text"
+                      value={newApptService}
+                      onChange={e => setNewApptService(e.target.value)}
+                      placeholder="Ex: Conseil en stratégie"
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Date</label>
+                    <input
+                      type="date"
+                      value={newApptDate}
+                      onChange={e => setNewApptDate(e.target.value)}
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Heure</label>
+                    <input
+                      type="time"
+                      value={newApptTime}
+                      onChange={e => setNewApptTime(e.target.value)}
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Durée</label>
+                    <select
+                      value={newApptDuration}
+                      onChange={e => setNewApptDuration(e.target.value)}
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all bg-white cursor-pointer"
+                    >
+                      <option value="15">15 minutes</option>
+                      <option value="30">30 minutes</option>
+                      <option value="45">45 minutes</option>
+                      <option value="60">1 heure</option>
+                      <option value="90">1h30</option>
+                      <option value="120">2 heures</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Notes (optionnel)</label>
+                  <textarea
+                    rows={3}
+                    value={newApptNotes}
+                    onChange={e => setNewApptNotes(e.target.value)}
+                    placeholder="Notes concernant le rendez-vous..."
+                    className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setAppointmentModalOpen(false)}
+                    className="px-5 py-2.5 text-xs font-bold text-on-surface-variant border border-outline-variant rounded-xl hover:bg-surface-container transition-colors cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 text-xs font-bold bg-primary text-white rounded-xl hover:bg-primary/90 transition-all cursor-pointer"
+                  >
+                    Planifier
                   </button>
                 </div>
               </form>

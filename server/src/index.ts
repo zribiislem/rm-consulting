@@ -19,6 +19,7 @@ import parametersRouter from './routes/parameters.js';
 import jobApplicationsRouter from './routes/job-applications.js';
 import jobOffersRouter from './routes/job-offers.js';
 import authRouter from './routes/auth.js';
+import programsRouter from './routes/programs.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,6 +46,7 @@ app.use('/api/auth', authRouter);
 
 app.use('/api/job-applications', jobApplicationsRouter);
 app.use('/api/job-offers', jobOffersRouter);
+app.use('/api/programs', programsRouter);
 
 const PORT = process.env.PORT || 3001;
 
