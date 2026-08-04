@@ -3,9 +3,15 @@ import Mission from '../models/Mission.js';
 
 const router = Router();
 
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const missions = await Mission.find();
+    const { search } = req.query;
+    const filter: Record<string, unknown> = {};
+    if (search && typeof search === 'string') {
+      const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.$or = [{ title: regex }, { client: regex }, { department: regex }, { status: regex }];
+    }
+    const missions = await Mission.find(filter).sort({ createdAt: -1 });
     res.json(missions);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching missions', error });

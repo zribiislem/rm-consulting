@@ -26,7 +26,7 @@ export default function Navbar({ onBookConsultation, onOpenLogin }: NavbarProps)
     { name: 'À propos', href: '#about', action: 'about' },
     { name: 'Départements', href: '#departments', action: 'departments' },
     { name: 'Relation Client', href: '#references', action: 'references' },
-    { name: 'Recrutement', href: '#job-application', action: 'job' },
+    { name: 'Offres d\'Emploi', href: '#/offres', action: 'offers' },
     { name: 'Contact', href: '#contact', action: 'contact' },
     { name: 'Rendez-vous', href: '#contact', action: 'rdv' },
   ];

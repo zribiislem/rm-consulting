@@ -54,6 +54,14 @@ export interface IJobApplication extends Document {
   experience: string;
   address: string;
   motivationMessage: string;
+  dateOfBirth?: string;
+  gender?: string;
+  nationality?: string;
+  city?: string;
+  diploma?: string;
+  lastPosition?: string;
+  availability?: string;
+  source?: string;
   attachments: Types.ObjectId[];
   status: ApplicationStatus;
   statusHistory: IStatusHistoryEntry[];
@@ -111,6 +119,14 @@ const JobApplicationSchema = new Schema<IJobApplication>({
   experience: { type: String, default: '' },
   address: { type: String, default: '' },
   motivationMessage: { type: String, default: '' },
+  dateOfBirth: { type: String, default: '' },
+  gender: { type: String, default: '' },
+  nationality: { type: String, default: '' },
+  city: { type: String, default: '' },
+  diploma: { type: String, default: '' },
+  lastPosition: { type: String, default: '' },
+  availability: { type: String, default: '' },
+  source: { type: String, default: '' },
   attachments: [{ type: Schema.Types.ObjectId, ref: 'Attachment' }],
   status: {
     type: String,

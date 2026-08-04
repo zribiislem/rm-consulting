@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
 import MapPicker from './MapPicker.js';
@@ -39,7 +39,21 @@ import {
   Filter,
   Download,
   Archive,
-  ArchiveRestore
+  ArchiveRestore,
+  BriefcaseBusiness,
+  Copy,
+  Power,
+  MapPin,
+  GraduationCap,
+  CalendarClock,
+  ListChecks,
+  Target,
+  Sparkles,
+  Layers,
+  UsersRound,
+  Eye,
+  ExternalLink,
+  Loader2
 } from 'lucide-react';
 
 // Interfaces
@@ -195,11 +209,58 @@ const formatTimeAmPm = (time?: string): string => {
   return `${hour12}:${String(minutes).padStart(2, '0')} ${period}`;
 };
 
+const OFFER_DEPARTMENTS = [
+  'Expertise Comptable',
+  'Audit',
+  'Fiscalité',
+  'Conseil',
+  'Administratif',
+  'Autre',
+];
+
+const OFFER_CONTRACTS = ['CDI', 'CDD', 'Stage', 'Alternance', 'Freelance'];
+
+const OFFER_STATUS_LABELS: Record<string, string> = {
+  draft: 'Brouillon',
+  published: 'Publiée',
+  closed: 'Fermée',
+};
+
+// Badge couleur pour chaque statut d'offre
+const offerStatusInfo = (status: string): { label: string; cls: string } => {
+  switch (status) {
+    case 'published':
+      return { label: 'Publiée', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+    case 'closed':
+      return { label: 'Fermée', cls: 'bg-gray-100 text-gray-600 border-gray-200' };
+    default:
+      return { label: 'Brouillon', cls: 'bg-amber-100 text-amber-700 border-amber-200' };
+  }
+};
+
+// Couleur du badge du type de contrat
+const contractBadgeCls = (contract: string): string => {
+  switch (contract) {
+    case 'CDI':
+      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    case 'CDD':
+      return 'bg-blue-50 text-blue-700 border-blue-200';
+    case 'Stage':
+      return 'bg-purple-50 text-purple-700 border-purple-200';
+    case 'Alternance':
+      return 'bg-amber-50 text-amber-700 border-amber-200';
+    case 'Freelance':
+      return 'bg-rose-50 text-rose-700 border-rose-200';
+    default:
+      return 'bg-gray-50 text-gray-600 border-gray-200';
+  }
+};
+
 export default function App() {
   const [isAuthChecked, setIsAuthChecked] = useState(false);
 
   // Navigation active tab
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'references' | 'recruitment'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'references' | 'recruitment' | 'offers'>('dashboard');
 
   // Departments dynamic state
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -311,10 +372,19 @@ export default function App() {
     education: string;
     experience?: string;
     address?: string;
+    city?: string;
+    diploma?: string;
+    lastPosition?: string;
+    availability?: string;
+    dateOfBirth?: string;
+    gender?: string;
+    nationality?: string;
+    source?: string;
     motivationMessage?: string;
     attachments?: JobAttachment[];
     notes?: JobNote[];
     interview?: JobInterview;
+    jobOffer?: { _id: string; title: string; department: string; location: string; contractType: string; status?: string } | null;
     status: 'new' | 'analyzing' | 'interview' | 'accepted' | 'rejected';
     createdAt: string;
   }
@@ -339,10 +409,64 @@ export default function App() {
   const [paramKey, setParamKey] = useState('');
   const [paramValue, setParamValue] = useState('');
 
+  // Job offers state (module "Gestion des Offres d'Emploi")
+  interface JobOffer {
+    _id: string;
+    title: string;
+    department: string;
+    contractType: string;
+    location: string;
+    description: string;
+    missions?: string[];
+    skills?: string[];
+    profile?: string;
+    educationLevel?: string;
+    requiredExperience?: string;
+    benefits?: string[];
+    status: 'draft' | 'published' | 'closed';
+    publishedAt?: string;
+    applicationDeadline?: string;
+    openPositions?: number;
+    createdAt: string;
+  }
+  const [offers, setOffers] = useState<JobOffer[]>([]);
+  const [offerSearch, setOfferSearch] = useState('');
+  const [offerDeptFilter, setOfferDeptFilter] = useState('Tous les départements');
+  const [offerContractFilter, setOfferContractFilter] = useState('Tous les contrats');
+  const [offerStatusFilter, setOfferStatusFilter] = useState('Tous les statuts');
+
+  const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
+  const [isOffersSearching, setIsOffersSearching] = useState(false);
+  const [editingOffer, setEditingOffer] = useState<JobOffer | null>(null);
+  const [offerTitle, setOfferTitle] = useState('');
+  const [offerDepartment, setOfferDepartment] = useState('Expertise Comptable');
+  const [offerContractType, setOfferContractType] = useState('CDI');
+  const [offerLocation, setOfferLocation] = useState('');
+  const [offerEducationLevel, setOfferEducationLevel] = useState('');
+  const [offerRequiredExperience, setOfferRequiredExperience] = useState('');
+  const [offerSkillsText, setOfferSkillsText] = useState('');
+  const [offerDescription, setOfferDescription] = useState('');
+  const [offerMissionsText, setOfferMissionsText] = useState('');
+  const [offerProfile, setOfferProfile] = useState('');
+  const [offerBenefitsText, setOfferBenefitsText] = useState('');
+  const [offerPublishedAt, setOfferPublishedAt] = useState('');
+  const [offerDeadline, setOfferDeadline] = useState('');
+  const [offerStatus, setOfferStatus] = useState<'draft' | 'published' | 'closed'>('draft');
+  const [offerOpenPositions, setOfferOpenPositions] = useState<string>('');
+  const [offerFormErrors, setOfferFormErrors] = useState<Record<string, string>>({});
+
+  const [selectedOffer, setSelectedOffer] = useState<JobOffer | null>(null);
+  const [isOfferDeleteOpen, setIsOfferDeleteOpen] = useState(false);
+  const [offerToDelete, setOfferToDelete] = useState<JobOffer | null>(null);
+
   // Candidates view state (interface "Gestion des Candidatures")
   const [searchQuery, setSearchQuery] = useState('');
+  const [isAppsSearching, setIsAppsSearching] = useState(false);
   const [roleFilter, setRoleFilter] = useState('Tous les postes');
   const [expFilter, setExpFilter] = useState('Toutes');
+  const [offerFilter, setOfferFilter] = useState('Toutes les offres');
+
+  const [isMissionsSearching, setIsMissionsSearching] = useState(false);
 
   // Interview planning form state
   const [interviewDate, setInterviewDate] = useState('');
@@ -375,7 +499,7 @@ export default function App() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [deptRes, missionRes, msgRes, apptRes, availRes, refRes, paramRes, jobRes, archivedRes] = await Promise.all([
+        const [deptRes, missionRes, msgRes, apptRes, availRes, refRes, paramRes, jobRes, archivedRes, offerRes] = await Promise.all([
           fetch(`${API_URL}/departments`),
           fetch(`${API_URL}/missions`),
           fetch(`${API_URL}/messages`),
@@ -384,7 +508,8 @@ export default function App() {
           fetch(`${API_URL}/references`),
           fetch(`${API_URL}/parameters`),
           authedFetch(`${API_URL}/job-applications`),
-          authedFetch(`${API_URL}/job-applications?archived=true`)
+          authedFetch(`${API_URL}/job-applications?archived=true`),
+          authedFetch(`${API_URL}/job-offers`)
         ]);
         const depts = await deptRes.json();
         const missionsData = await missionRes.json();
@@ -395,6 +520,7 @@ export default function App() {
         const params = await paramRes.json();
         const jobs = await jobRes.json();
         const archived = await archivedRes.json();
+        const offerData = await offerRes.json();
         setDepartments(depts.map((d: any) => ({ ...d, id: d._id })));
         setMissions(missionsData.map((m: any) => ({ ...m, id: m._id })));
         setMessages(msgs.map((m: any) => ({ ...m, id: m._id })));
@@ -404,12 +530,96 @@ export default function App() {
         setParameters(params);
         setJobApps(jobs);
         setArchivedApps(archived);
+        setOffers(offerData);
       } catch (err) {
         console.error('Failed to fetch data from API:', err);
       }
     };
     fetchData();
   }, []);
+
+  // ---------------------------------------------------------------
+  // Recherches dynamiques : interrogation live du serveur (debounce),
+  // résultats mis à jour automatiquement pendant la frappe.
+  // ---------------------------------------------------------------
+  const skipAppsFirstRun = useRef(true);
+  const skipOffersFirstRun = useRef(true);
+  const skipMissionsFirstRun = useRef(true);
+
+  // Candidatures : recherche serveur en direct (mots clés)
+  useEffect(() => {
+    if (skipAppsFirstRun.current) {
+      skipAppsFirstRun.current = false;
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsAppsSearching(true);
+      try {
+        const params = new URLSearchParams();
+        if (searchQuery.trim()) params.set('search', searchQuery.trim());
+        const [res, archRes] = await Promise.all([
+          authedFetch(`${API_URL}/job-applications?${params.toString()}`),
+          authedFetch(`${API_URL}/job-applications?archived=true${params.toString() ? '&' + params.toString() : ''}`),
+        ]);
+        const data = await res.json();
+        const archivedData = await archRes.json();
+        setJobApps(data);
+        setArchivedApps(archivedData);
+      } catch (err) {
+        console.error('Recherche candidatures échouée:', err);
+      } finally {
+        setIsAppsSearching(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Offres : recherche serveur en direct (mots clés + filtres)
+  useEffect(() => {
+    if (skipOffersFirstRun.current) {
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsOffersSearching(true);
+      try {
+        const params = new URLSearchParams();
+        if (offerSearch.trim()) params.set('search', offerSearch.trim());
+        if (offerDeptFilter !== 'Tous les départements') params.set('department', offerDeptFilter);
+        if (offerContractFilter !== 'Tous les contrats') params.set('contractType', offerContractFilter);
+        if (offerStatusFilter !== 'Tous les statuts') params.set('status', offerStatusFilter);
+        const res = await authedFetch(`${API_URL}/job-offers?${params.toString()}`);
+        const data = await res.json();
+        setOffers(data);
+      } catch (err) {
+        console.error('Recherche offres échouée:', err);
+      } finally {
+        setIsOffersSearching(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [offerSearch, offerDeptFilter, offerContractFilter, offerStatusFilter]);
+
+  // Missions : recherche serveur en direct (mots clés)
+  useEffect(() => {
+    if (skipMissionsFirstRun.current) {
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsMissionsSearching(true);
+      try {
+        const params = new URLSearchParams();
+        if (missionSearch.trim()) params.set('search', missionSearch.trim());
+        const res = await fetch(`${API_URL}/missions?${params.toString()}`);
+        const data = await res.json();
+        setMissions(data.map((m: any) => ({ ...m, id: m._id })));
+      } catch (err) {
+        console.error('Recherche missions échouée:', err);
+      } finally {
+        setIsMissionsSearching(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [missionSearch]);
 
   // Dashboard calendar state
   const today = new Date();
@@ -961,6 +1171,13 @@ export default function App() {
 
       const matchesRole = roleFilter === 'Tous les postes' || a.position === roleFilter;
 
+      // Filtre par offre d'emploi (offre liée ou candidature spontanée)
+      const appOfferId = a.jobOffer?._id || a.jobOffer || null;
+      const matchesOffer =
+        offerFilter === 'Toutes les offres' ||
+        (offerFilter === '__spontaneous__' && !appOfferId) ||
+        (offerFilter !== '__spontaneous__' && appOfferId === offerFilter);
+
       const years = parseExpYears(a.experience);
       let matchesExp = true;
       if (expFilter === '0-2 ans') {
@@ -971,14 +1188,24 @@ export default function App() {
         matchesExp = years > 5;
       }
 
-      return matchesSearch && matchesRole && matchesExp;
+      return matchesSearch && matchesRole && matchesExp && matchesOffer;
     });
-  }, [jobApps, searchQuery, roleFilter, expFilter]);
+  }, [jobApps, searchQuery, roleFilter, expFilter, offerFilter]);
 
   // Liste des postes distincts pour le filtre
   const positionsList = useMemo(
     () => [...new Set(jobApps.map((a: any) => a.position).filter(Boolean))],
     [jobApps]
+  );
+
+  // Offres avec compteur de candidatures (pour le filtre par offre)
+  const offersWithCounts = useMemo(
+    () =>
+      offers.map((o) => ({
+        ...o,
+        count: jobApps.filter((a: any) => (a.jobOffer?._id || a.jobOffer) === o._id).length,
+      })),
+    [offers, jobApps]
   );
 
   // Export Excel (.xlsx) de la liste des candidats filtrés (respecte recherche + filtres actifs)
@@ -993,9 +1220,17 @@ export default function App() {
       'Email': app.email || '',
       'Téléphone': app.phone || '',
       'Poste': app.position || '',
+      'Offre liée': app.jobOffer?.title || '',
+      'Date de naissance': app.dateOfBirth || '',
+      'Sexe': app.gender || '',
+      'Nationalité': app.nationality || '',
+      'Ville': app.city || app.address || '',
       'Expérience': app.experience || '',
       'Études & Diplômes': app.education || '',
-      'Ville': app.address || '',
+      'Diplôme': app.diploma || '',
+      'Dernier poste occupé': app.lastPosition || '',
+      'Disponibilité': app.availability || '',
+      'Connaît le cabinet via': app.source || '',
       'Date de dépôt': new Date(app.createdAt).toLocaleDateString('fr-FR'),
       'Statut': candidateStatusInfo(app.status).label,
       'Date de prise de poste': app.startDate
@@ -1005,8 +1240,10 @@ export default function App() {
 
     const ws = XLSX.utils.json_to_sheet(rows);
     ws['!cols'] = [
-      { wch: 22 }, { wch: 30 }, { wch: 16 }, { wch: 30 }, { wch: 22 },
-      { wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 22 },
+      { wch: 22 }, { wch: 30 }, { wch: 16 }, { wch: 30 }, { wch: 30 },
+      { wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 22 },
+      { wch: 28 }, { wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 22 },
+      { wch: 14 }, { wch: 14 }, { wch: 22 },
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Candidats');
@@ -1127,6 +1364,228 @@ export default function App() {
     }
   };
 
+  // ----- Gestion des Offres d'Emploi -----
+
+  // Nombre de candidatures reçues par offre (hors corbeille)
+  const offerCandidatesCount = useMemo(() => {
+    const counts: Record<string, number> = {};
+    jobApps.forEach((a: any) => {
+      const offerId = a.jobOffer?._id || a.jobOffer;
+      if (offerId) counts[offerId] = (counts[offerId] || 0) + 1;
+    });
+    return counts;
+  }, [jobApps]);
+
+  // Offres filtrées (recherche + département + contrat + statut)
+  const filteredOffers = useMemo(() => {
+    const q = offerSearch.toLowerCase().trim();
+    return offers.filter((o) => {
+      const matchesSearch =
+        !q ||
+        o.title.toLowerCase().includes(q) ||
+        (o.location || '').toLowerCase().includes(q) ||
+        (o.description || '').toLowerCase().includes(q);
+      const matchesDept = offerDeptFilter === 'Tous les départements' || o.department === offerDeptFilter;
+      const matchesContract = offerContractFilter === 'Tous les contrats' || o.contractType === offerContractFilter;
+      const matchesStatus = offerStatusFilter === 'Tous les statuts' || o.status === offerStatusFilter;
+      return matchesSearch && matchesDept && matchesContract && matchesStatus;
+    });
+  }, [offers, offerSearch, offerDeptFilter, offerContractFilter, offerStatusFilter]);
+
+  const offerStats = useMemo(() => {
+    const published = offers.filter((o) => o.status === 'published').length;
+    const drafts = offers.filter((o) => o.status === 'draft').length;
+    const closed = offers.filter((o) => o.status === 'closed').length;
+    const totalCandidatures = jobApps.length;
+    const perOffer = offers
+      .map((o) => ({ offer: o, count: offerCandidatesCount[o._id] || 0 }))
+      .sort((a, b) => b.count - a.count);
+    const topOffer = perOffer[0] && perOffer[0].count > 0 ? perOffer[0] : null;
+    return { published, drafts, closed, totalCandidatures, perOffer, topOffer };
+  }, [offers, offerCandidatesCount, jobApps]);
+
+  const resetOfferForm = () => {
+    setEditingOffer(null);
+    setOfferTitle('');
+    setOfferDepartment('Expertise Comptable');
+    setOfferContractType('CDI');
+    setOfferLocation('');
+    setOfferEducationLevel('');
+    setOfferRequiredExperience('');
+    setOfferSkillsText('');
+    setOfferDescription('');
+    setOfferMissionsText('');
+    setOfferProfile('');
+    setOfferBenefitsText('');
+    setOfferPublishedAt('');
+    setOfferDeadline('');
+    setOfferStatus('draft');
+    setOfferOpenPositions('');
+    setOfferFormErrors({});
+  };
+
+  const openOfferModal = (offer: JobOffer | null) => {
+    resetOfferForm();
+    if (offer) {
+      setEditingOffer(offer);
+      setOfferTitle(offer.title);
+      setOfferDepartment(offer.department);
+      setOfferContractType(offer.contractType);
+      setOfferLocation(offer.location);
+      setOfferEducationLevel(offer.educationLevel || '');
+      setOfferRequiredExperience(offer.requiredExperience || '');
+      setOfferSkillsText((offer.skills || []).join('\n'));
+      setOfferDescription(offer.description);
+      setOfferMissionsText((offer.missions || []).join('\n'));
+      setOfferProfile(offer.profile || '');
+      setOfferBenefitsText((offer.benefits || []).join('\n'));
+      setOfferPublishedAt(offer.publishedAt ? offer.publishedAt.slice(0, 10) : '');
+      setOfferDeadline(offer.applicationDeadline ? offer.applicationDeadline.slice(0, 10) : '');
+      setOfferStatus(offer.status);
+      setOfferOpenPositions(offer.openPositions != null ? String(offer.openPositions) : '');
+    }
+    setIsOfferModalOpen(true);
+  };
+
+  // Convertit un texte ligne-par-ligne en tableau propre
+  const textToList = (text: string): string[] =>
+    text
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+  const handleOfferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const errs: Record<string, string> = {};
+    if (!offerTitle.trim()) errs.title = 'Le titre est requis';
+    if (!offerDepartment.trim()) errs.department = 'Le département est requis';
+    if (!offerContractType.trim()) errs.contract = 'Le type de contrat est requis';
+    if (!offerLocation.trim()) errs.location = 'La localisation est requise';
+    if (!offerDescription.trim()) errs.description = 'La description est requise';
+    if (textToList(offerSkillsText).length === 0) errs.skills = 'Au moins une compétence est requise';
+    setOfferFormErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      addToast('Veuillez corriger les champs signalés.', 'info');
+      return;
+    }
+
+    const payload = {
+      title: offerTitle.trim(),
+      department: offerDepartment.trim(),
+      contractType: offerContractType.trim(),
+      location: offerLocation.trim(),
+      description: offerDescription.trim(),
+      skills: textToList(offerSkillsText),
+      missions: textToList(offerMissionsText),
+      profile: offerProfile.trim(),
+      educationLevel: offerEducationLevel.trim(),
+      requiredExperience: offerRequiredExperience.trim(),
+      benefits: textToList(offerBenefitsText),
+      status: offerStatus,
+      publishedAt: offerPublishedAt ? new Date(offerPublishedAt).toISOString() : undefined,
+      applicationDeadline: offerDeadline ? new Date(offerDeadline).toISOString() : undefined,
+      openPositions: offerOpenPositions !== '' ? Number(offerOpenPositions) : undefined,
+    };
+
+    try {
+      const res = editingOffer
+        ? await authedFetch(`${API_URL}/job-offers/${editingOffer._id}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+          })
+        : await authedFetch(`${API_URL}/job-offers`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        addToast(err.message || 'Erreur lors de l\'enregistrement de l\'offre', 'error');
+        return;
+      }
+      const saved = await res.json();
+      if (editingOffer) {
+        setOffers((prev) => prev.map((o) => (o._id === saved._id ? saved : o)));
+        if (selectedOffer?._id === saved._id) setSelectedOffer(saved);
+        addToast(`Offre "${saved.title}" mise à jour`);
+      } else {
+        setOffers((prev) => [saved, ...prev]);
+        addToast(`Offre "${saved.title}" créée`);
+      }
+      setIsOfferModalOpen(false);
+      resetOfferForm();
+    } catch {
+      addToast('Erreur lors de l\'enregistrement de l\'offre', 'error');
+    }
+  };
+
+  // Dupliquer une offre (copie en brouillon avec "(Copie)" dans le titre)
+  const handleDuplicateOffer = async (offer: JobOffer) => {
+    const copy = {
+      ...offer,
+      _id: undefined,
+      title: `${offer.title} (Copie)`,
+      status: 'draft' as const,
+      publishedAt: undefined,
+      createdAt: undefined,
+      updatedAt: undefined,
+    };
+    try {
+      const res = await authedFetch(`${API_URL}/job-offers`, {
+        method: 'POST',
+        body: JSON.stringify(copy),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setOffers((prev) => [saved, ...prev]);
+        addToast(`Offre dupliquée : "${saved.title}"`);
+      } else {
+        addToast('Erreur lors de la duplication', 'error');
+      }
+    } catch {
+      addToast('Erreur lors de la duplication', 'error');
+    }
+  };
+
+  // Activer / désactiver une offre (publiée <-> fermée)
+  const handleToggleOffer = async (offer: JobOffer) => {
+    try {
+      const res = await authedFetch(`${API_URL}/job-offers/${offer._id}/toggle`, { method: 'PATCH' });
+      if (res.ok) {
+        const updated = await res.json();
+        setOffers((prev) => prev.map((o) => (o._id === updated._id ? updated : o)));
+        if (selectedOffer?._id === updated._id) setSelectedOffer(updated);
+        addToast(
+          updated.status === 'published'
+            ? `Offre "${updated.title}" publiée (visible sur le site)`
+            : `Offre "${updated.title}" désactivée`
+        );
+      } else {
+        addToast('Erreur lors de la mise à jour', 'error');
+      }
+    } catch {
+      addToast('Erreur lors de la mise à jour', 'error');
+    }
+  };
+
+  const handleDeleteOffer = async () => {
+    if (!offerToDelete) return;
+    try {
+      const res = await authedFetch(`${API_URL}/job-offers/${offerToDelete._id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setOffers((prev) => prev.filter((o) => o._id !== offerToDelete._id));
+        if (selectedOffer?._id === offerToDelete._id) setSelectedOffer(null);
+        addToast(`Offre "${offerToDelete.title}" supprimée`);
+      } else {
+        addToast('Erreur lors de la suppression', 'error');
+      }
+    } catch {
+      addToast('Erreur lors de la suppression', 'error');
+    }
+    setIsOfferDeleteOpen(false);
+    setOfferToDelete(null);
+  };
+
   if (!isAuthChecked) {
     return (
       <div className="min-h-screen bg-[#f9f9f9] flex items-center justify-center">
@@ -1220,6 +1679,18 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setActiveTab('offers')}
+            className={`w-full flex items-center gap-3 p-3 rounded-lg font-medium transition-all duration-150 ${
+              activeTab === 'offers'
+                ? 'sidebar-active text-white'
+                : 'text-on-surface-variant hover:bg-secondary-container/20 hover:text-secondary'
+            }`}
+          >
+            <BriefcaseBusiness className="w-5 h-5" />
+            <span className="text-sm">Offres d'Emploi</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('recruitment')}
             className={`w-full flex items-center gap-3 p-3 rounded-lg font-medium transition-all duration-150 ${
               activeTab === 'recruitment'
@@ -1227,7 +1698,7 @@ export default function App() {
                 : 'text-on-surface-variant hover:bg-secondary-container/20 hover:text-secondary'
             }`}
           >
-            <Briefcase className="w-5 h-5" />
+            <Users className="w-5 h-5" />
             <span className="text-sm">Recrutement</span>
           </button>
 
@@ -1436,6 +1907,72 @@ export default function App() {
                       <span>Capacité traitée</span>
                       <span>{appointments.length > 0 ? Math.round((appointments.filter(a => a.status === 'confirmed').length / appointments.length) * 100) : 0}%</span>
                     </p>
+                  </div>
+
+                  {/* Card 4: Offres publiées */}
+                  <div className="glass-card p-5 rounded-xl">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <BriefcaseBusiness className="w-5 h-5 text-primary" />
+                      </div>
+                      <button
+                        onClick={() => setActiveTab('offers')}
+                        className="text-[9px] font-bold text-primary bg-primary/5 hover:bg-primary/10 px-2 py-1 rounded-full transition-colors cursor-pointer"
+                      >
+                        GÉRER
+                      </button>
+                    </div>
+                    <p className="text-on-surface-variant text-[13px] font-medium">Offres publiées</p>
+                    <h3 className="font-headline text-2xl font-bold text-primary">{offerStats.published}</h3>
+                    <p className="mt-4 text-[12px] text-on-surface-variant italic">
+                      {offerStats.drafts} brouillon{offerStats.drafts > 1 ? 's' : ''} · {offerStats.closed} fermée{offerStats.closed > 1 ? 's' : ''}
+                    </p>
+                  </div>
+
+                  {/* Card 5: Candidatures reçues */}
+                  <div className="glass-card p-5 rounded-xl">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="p-2 bg-amber-100 rounded-lg">
+                        <UsersRound className="w-5 h-5 text-amber-700" />
+                      </div>
+                      <button
+                        onClick={() => setActiveTab('recruitment')}
+                        className="text-[9px] font-bold text-primary bg-primary/5 hover:bg-primary/10 px-2 py-1 rounded-full transition-colors cursor-pointer"
+                      >
+                        VOIR
+                      </button>
+                    </div>
+                    <p className="text-on-surface-variant text-[13px] font-medium">Candidatures reçues</p>
+                    <h3 className="font-headline text-2xl font-bold text-on-surface">{offerStats.totalCandidatures}</h3>
+                    <p className="mt-4 text-[12px] text-on-surface-variant italic">
+                      {pendingCandidates} en attente de traitement
+                    </p>
+                  </div>
+
+                  {/* Card 6: Offre la plus sollicitée */}
+                  <div className="glass-card p-5 rounded-xl">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="p-2 bg-emerald-100 rounded-lg">
+                        <TrendingUp className="w-5 h-5 text-emerald-600" />
+                      </div>
+                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">TOP OFFRE</span>
+                    </div>
+                    <p className="text-on-surface-variant text-[13px] font-medium">Offre la plus sollicitée</p>
+                    {offerStats.topOffer ? (
+                      <>
+                        <h3 className="font-headline text-lg font-bold text-on-surface mt-0.5 leading-snug">
+                          {offerStats.topOffer.offer.title}
+                        </h3>
+                        <p className="mt-3 text-[12px] text-emerald-600 font-bold">
+                          {offerStats.topOffer.count} candidature{offerStats.topOffer.count > 1 ? 's' : ''}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <h3 className="font-headline text-xl font-bold text-on-surface-variant/60 mt-1">—</h3>
+                        <p className="mt-3 text-[12px] text-on-surface-variant italic">Aucune candidature reçue</p>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -1731,6 +2268,54 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+
+                {/* Offres & Recrutement Widget */}
+                <div className="glass-card rounded-xl p-6">
+                  <div className="flex justify-between items-center mb-6">
+                    <h4 className="font-headline text-base font-bold text-on-surface">Candidatures par Offre</h4>
+                    <button
+                      onClick={() => setActiveTab('offers')}
+                      className="text-[11px] font-bold text-primary bg-primary/5 hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Gérer les offres
+                    </button>
+                  </div>
+
+                  {offerStats.perOffer.filter((p) => p.count > 0).length === 0 ? (
+                    <div className="text-center py-6 text-sm text-on-surface-variant flex flex-col items-center gap-2">
+                      <BriefcaseBusiness className="w-8 h-8 text-on-surface-variant/30" />
+                      <span>Aucune candidature reçue pour le moment.</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {offerStats.perOffer.filter((p) => p.count > 0).slice(0, 6).map(({ offer, count }) => {
+                        const max = offerStats.perOffer[0]?.count || 1;
+                        return (
+                          <button
+                            key={offer._id}
+                            onClick={() => { setSelectedOffer(offer); setActiveTab('offers'); }}
+                            className="w-full text-left group"
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-xs font-bold text-on-surface group-hover:text-primary transition-colors truncate pr-3">
+                                {offer.title}
+                              </span>
+                              <span className="text-xs font-bold text-primary shrink-0">
+                                {count} candidature{count > 1 ? 's' : ''}
+                              </span>
+                            </div>
+                            <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-primary to-secondary rounded-full transition-all duration-700"
+                                style={{ width: `${Math.round((count / max) * 100)}%` }}
+                              />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </motion.div>
             )}
 
@@ -1931,6 +2516,9 @@ export default function App() {
                     onChange={(e) => setMissionSearch(e.target.value)}
                     className="bg-transparent border-none outline-none text-sm w-full text-on-surface placeholder:text-on-surface-variant/50"
                   />
+                  {isMissionsSearching && (
+                    <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
+                  )}
                   {missionSearch && (
                     <button onClick={() => setMissionSearch('')} className="p-1 hover:bg-surface-container rounded-full text-on-surface-variant">
                       <X className="w-4 h-4" />
@@ -2204,6 +2792,312 @@ export default function App() {
               </motion.div>
             )}
 
+            {/* OFFERS VIEW */}
+            {activeTab === 'offers' && (
+              <motion.div
+                key="offers"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-8"
+              >
+                {/* Header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-headline text-2xl font-bold text-primary">Gestion des Offres d'Emploi</h3>
+                    <p className="text-xs text-on-surface-variant">
+                      Créez, publiez et suivez vos offres. Chaque modification est immédiatement visible sur le site.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <a
+                      href={`${siteOrigin()}/#/offres`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2.5 border border-secondary/30 text-secondary hover:bg-secondary/5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all"
+                    >
+                      <Eye className="w-4 h-4" />
+                      Voir sur le site
+                    </a>
+                    <button
+                      onClick={() => openOfferModal(null)}
+                      className="px-4 py-2.5 bg-primary text-white hover:bg-primary-container rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md active:scale-95"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Nouvelle Offre
+                    </button>
+                  </div>
+                </div>
+
+                {/* KPI Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="glass-card p-5 rounded-2xl shadow-sm relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 bg-primary/10 text-primary rounded-lg">
+                        <BriefcaseBusiness className="w-5 h-5" />
+                      </span>
+                      <span className="text-[10px] font-bold text-on-surface-variant bg-surface-container-low px-2 py-1 rounded-full">Total</span>
+                    </div>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres créées</p>
+                    <h3 className="font-headline text-3xl font-extrabold text-primary mt-1">{offers.length}</h3>
+                  </div>
+                  <div className="glass-card p-5 rounded-2xl shadow-sm relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 bg-emerald-100 text-emerald-700 rounded-lg">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </span>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">Actives</span>
+                    </div>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres publiées</p>
+                    <h3 className="font-headline text-3xl font-extrabold text-emerald-600 mt-1">{offerStats.published}</h3>
+                  </div>
+                  <div className="glass-card p-5 rounded-2xl shadow-sm relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 bg-amber-100 text-amber-700 rounded-lg">
+                        <Pencil className="w-5 h-5" />
+                      </span>
+                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-full">Brouillons</span>
+                    </div>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">En préparation</p>
+                    <h3 className="font-headline text-3xl font-extrabold text-amber-600 mt-1">{offerStats.drafts}</h3>
+                  </div>
+                  <div className="glass-card p-5 rounded-2xl shadow-sm relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 bg-gray-100 text-gray-600 rounded-lg">
+                        <Layers className="w-5 h-5" />
+                      </span>
+                      <span className="text-[10px] font-bold text-gray-600 bg-gray-50 px-2 py-1 rounded-full">Terminées</span>
+                    </div>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres fermées</p>
+                    <h3 className="font-headline text-3xl font-extrabold text-gray-600 mt-1">{offerStats.closed}</h3>
+                  </div>
+                </div>
+
+                {/* Toolbar */}
+                <div className="bg-white rounded-2xl shadow-sm border border-secondary/10 overflow-hidden">
+                  <div className="p-5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          value={offerSearch}
+                          onChange={(e) => setOfferSearch(e.target.value)}
+                          placeholder="Rechercher une offre..."
+                          className="w-64 pl-9 pr-9 py-2 bg-surface-container-low border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none"
+                        />
+                        {isOffersSearching && (
+                          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary animate-spin" />
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 px-3 py-2 bg-surface-container-low border border-gray-200 rounded-lg">
+                        <span className="text-[10px] font-bold text-on-surface-variant">Département:</span>
+                        <select
+                          value={offerDeptFilter}
+                          onChange={(e) => setOfferDeptFilter(e.target.value)}
+                          className="bg-transparent border-none p-0 text-sm focus:ring-0 text-primary font-medium cursor-pointer outline-none"
+                        >
+                          <option>Tous les départements</option>
+                          {OFFER_DEPARTMENTS.map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-2 px-3 py-2 bg-surface-container-low border border-gray-200 rounded-lg">
+                        <span className="text-[10px] font-bold text-on-surface-variant">Contrat:</span>
+                        <select
+                          value={offerContractFilter}
+                          onChange={(e) => setOfferContractFilter(e.target.value)}
+                          className="bg-transparent border-none p-0 text-sm focus:ring-0 text-primary font-medium cursor-pointer outline-none"
+                        >
+                          <option>Tous les contrats</option>
+                          {OFFER_CONTRACTS.map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-2 px-3 py-2 bg-surface-container-low border border-gray-200 rounded-lg">
+                        <span className="text-[10px] font-bold text-on-surface-variant">Statut:</span>
+                        <select
+                          value={offerStatusFilter}
+                          onChange={(e) => setOfferStatusFilter(e.target.value)}
+                          className="bg-transparent border-none p-0 text-sm focus:ring-0 text-primary font-medium cursor-pointer outline-none"
+                        >
+                          <option>Tous les statuts</option>
+                          <option value="draft">Brouillon</option>
+                          <option value="published">Publiée</option>
+                          <option value="closed">Fermée</option>
+                        </select>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setOfferSearch('');
+                          setOfferDeptFilter('Tous les départements');
+                          setOfferContractFilter('Tous les contrats');
+                          setOfferStatusFilter('Tous les statuts');
+                          addToast('Filtres réinitialisés', 'info');
+                        }}
+                        className="p-2 text-on-surface-variant hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
+                        title="Réinitialiser les filtres"
+                      >
+                        <Filter className="w-5 h-5" />
+                      </button>
+                    </div>
+                    <span className="text-xs text-on-surface-variant font-medium">
+                      {filteredOffers.length} offre{filteredOffers.length > 1 ? 's' : ''} affichée{filteredOffers.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+
+                  {/* Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-surface-container-low/60">
+                          <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100">Offre</th>
+                          <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100">Contrat</th>
+                          <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100">Lieu</th>
+                          <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100">Publication</th>
+                          <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100">Expiration</th>
+                          <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100">Statut</th>
+                          <th className="px-6 py-4 text-[11px] font-bold text-primary uppercase tracking-wider border-b border-gray-100 text-center">Candidatures</th>
+                          <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {filteredOffers.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                              <BriefcaseBusiness className="w-10 h-10 text-gray-300 mb-2 mx-auto" />
+                              <p className="text-sm font-medium">
+                                {offers.length === 0 ? 'Aucune offre créée pour le moment.' : 'Aucune offre ne correspond à vos filtres.'}
+                              </p>
+                              <button
+                                onClick={() => openOfferModal(null)}
+                                className="mt-4 px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                              >
+                                <Plus className="w-4 h-4" /> Créer une offre
+                              </button>
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredOffers.map((offer) => {
+                            const info = offerStatusInfo(offer.status);
+                            const count = offerCandidatesCount[offer._id] || 0;
+                            return (
+                              <tr key={offer._id} className="transition-all group hover:bg-gray-50/70">
+                                <td className="px-6 py-5">
+                                  <div className="flex items-center gap-4">
+                                    <div className="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                                      <BriefcaseBusiness className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-bold text-on-surface group-hover:text-primary transition-colors">{offer.title}</p>
+                                      <p className="text-xs text-on-surface-variant mt-0.5">{offer.department}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-5">
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${contractBadgeCls(offer.contractType)}`}>
+                                    {offer.contractType}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-5">
+                                  <span className="flex items-center gap-1.5 text-sm text-on-surface-variant">
+                                    <MapPin className="w-4 h-4 text-on-surface-variant/60" />
+                                    {offer.location}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-5">
+                                  <span className="text-sm text-on-surface-variant font-medium">
+                                    {offer.publishedAt ? new Date(offer.publishedAt).toLocaleDateString('fr-FR') : '—'}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-5">
+                                  {offer.applicationDeadline ? (
+                                    <span className={`text-sm font-medium ${new Date(offer.applicationDeadline) < new Date() ? 'text-error' : 'text-on-surface-variant'}`}>
+                                      {new Date(offer.applicationDeadline).toLocaleDateString('fr-FR')}
+                                    </span>
+                                  ) : (
+                                    <span className="text-sm text-on-surface-variant/50">Sans limite</span>
+                                  )}
+                                </td>
+                                <td className="px-6 py-5">
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${info.cls}`}>
+                                    {info.label}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-5 text-center">
+                                  <button
+                                    onClick={() => setSelectedOffer(offer)}
+                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+                                      count > 0
+                                        ? 'bg-primary/10 text-primary border-primary/20 hover:bg-primary hover:text-white'
+                                        : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'
+                                    }`}
+                                    title="Voir les candidatures de cette offre"
+                                  >
+                                    <UsersRound className="w-3.5 h-3.5" />
+                                    {count}
+                                  </button>
+                                </td>
+                                <td className="px-6 py-5">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      onClick={() => setSelectedOffer(offer)}
+                                      className="p-2 hover:bg-primary/5 rounded-lg text-primary transition-colors"
+                                      title="Voir l'offre et ses candidatures"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => openOfferModal(offer)}
+                                      className="p-2 hover:bg-primary/5 rounded-lg text-on-surface-variant hover:text-primary transition-colors"
+                                      title="Modifier"
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDuplicateOffer(offer)}
+                                      className="p-2 hover:bg-primary/5 rounded-lg text-on-surface-variant hover:text-primary transition-colors"
+                                      title="Dupliquer"
+                                    >
+                                      <Copy className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleToggleOffer(offer)}
+                                      className={`p-2 rounded-lg transition-colors ${
+                                        offer.status === 'published'
+                                          ? 'text-amber-600 hover:bg-amber-50'
+                                          : 'text-emerald-600 hover:bg-emerald-50'
+                                      }`}
+                                      title={offer.status === 'published' ? 'Désactiver (fermer l\'offre)' : 'Activer (publier l\'offre)'}
+                                    >
+                                      <Power className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => { setOfferToDelete(offer); setIsOfferDeleteOpen(true); }}
+                                      className="p-2 hover:bg-red-50 rounded-lg text-rose-600 transition-colors"
+                                      title="Supprimer"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
             {/* 5. SETTINGS VIEW */}
             {activeTab === 'recruitment' && (
               <motion.div
@@ -2306,6 +3200,34 @@ export default function App() {
                     {/* Toolbar */}
                     <div className="p-5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
                       <div className="flex flex-wrap items-center gap-3">
+                        <div
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
+                            offerFilter !== 'Toutes les offres'
+                              ? 'bg-primary/5 border-primary/40 ring-2 ring-primary/20'
+                              : 'bg-surface-container-low border-gray-200'
+                          }`}
+                        >
+                          <BriefcaseBusiness
+                            className={`w-4 h-4 ${offerFilter !== 'Toutes les offres' ? 'text-primary' : 'text-on-surface-variant'}`}
+                          />
+                          <span className="text-[10px] font-bold text-on-surface-variant">Offre:</span>
+                          <select
+                            value={offerFilter}
+                            onChange={(e) => setOfferFilter(e.target.value)}
+                            className="bg-transparent border-none p-0 text-sm focus:ring-0 font-medium cursor-pointer outline-none max-w-[240px] ${
+                              offerFilter !== 'Toutes les offres' ? 'text-primary font-bold' : 'text-primary'
+                            }"
+                          >
+                            <option value="Toutes les offres">Toutes les offres</option>
+                            {offersWithCounts.map((o) => (
+                              <option key={o._id} value={o._id}>
+                                {o.title} · {o.department} ({o.count})
+                              </option>
+                            ))}
+                            <option value="__spontaneous__">Candidatures spontanées</option>
+                          </select>
+                        </div>
+
                         <div className="flex items-center gap-2 px-3 py-2 bg-surface-container-low border border-gray-200 rounded-lg">
                           <span className="text-[10px] font-bold text-on-surface-variant">Poste:</span>
                           <select
@@ -2341,8 +3263,11 @@ export default function App() {
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder="Rechercher un candidat..."
-                            className="w-64 pl-9 pr-4 py-2 bg-surface-container-low border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none"
+                            className="w-64 pl-9 pr-9 py-2 bg-surface-container-low border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none"
                           />
+                          {isAppsSearching && (
+                            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary animate-spin" />
+                          )}
                         </div>
                       </div>
 
@@ -2378,6 +3303,7 @@ export default function App() {
                           onClick={() => {
                             setRoleFilter('Tous les postes');
                             setExpFilter('Toutes');
+                            setOfferFilter('Toutes les offres');
                             setSearchQuery('');
                             addToast('Filtres réinitialisés', 'info');
                           }}
@@ -2395,6 +3321,68 @@ export default function App() {
                         </button>
                       </div>
                     </div>
+
+                    {/* Bandeau "filtre actif" — visible dès qu'un filtre est appliqué */}
+                    {(offerFilter !== 'Toutes les offres' || roleFilter !== 'Tous les postes' || expFilter !== 'Toutes' || searchQuery) && (
+                      <div className="flex flex-wrap items-center gap-2 px-5 py-3 bg-primary/5 border-b border-primary/20">
+                        <Filter className="w-4 h-4 text-primary shrink-0" />
+                        <span className="text-xs font-bold text-primary">Filtres actifs :</span>
+                        {offerFilter !== 'Toutes les offres' && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary text-white text-xs font-bold shadow-sm">
+                            <BriefcaseBusiness className="w-3.5 h-3.5" />
+                            {offerFilter === '__spontaneous__'
+                              ? 'Candidatures spontanées'
+                              : (offers.find((o) => o._id === offerFilter)?.title || 'Offre sélectionnée')}
+                            <button
+                              onClick={() => setOfferFilter('Toutes les offres')}
+                              className="ml-0.5 hover:bg-white/25 rounded-full p-0.5 cursor-pointer"
+                              title="Retirer ce filtre"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </span>
+                        )}
+                        {roleFilter !== 'Tous les postes' && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary/15 border border-secondary/30 text-secondary text-xs font-bold">
+                            {roleFilter}
+                            <button
+                              onClick={() => setRoleFilter('Tous les postes')}
+                              className="ml-0.5 hover:bg-secondary/20 rounded-full p-0.5 cursor-pointer"
+                              title="Retirer ce filtre"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        )}
+                        {expFilter !== 'Toutes' && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary/15 border border-secondary/30 text-secondary text-xs font-bold">
+                            {expFilter}
+                            <button
+                              onClick={() => setExpFilter('Toutes')}
+                              className="ml-0.5 hover:bg-secondary/20 rounded-full p-0.5 cursor-pointer"
+                              title="Retirer ce filtre"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        )}
+                        {searchQuery && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary/15 border border-secondary/30 text-secondary text-xs font-bold">
+                            « {searchQuery} »
+                            <button
+                              onClick={() => setSearchQuery('')}
+                              className="ml-0.5 hover:bg-secondary/20 rounded-full p-0.5 cursor-pointer"
+                              title="Retirer ce filtre"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        )}
+                        <span className="ml-auto text-xs font-bold text-primary">
+                          {filteredApps.length} candidature{filteredApps.length > 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Table */}
                     <div className="overflow-x-auto">
@@ -2449,6 +3437,11 @@ export default function App() {
                                     <td className="px-6 py-5">
                                       <div className="flex flex-col">
                                         <span className="text-on-surface font-medium text-sm">{app.position}</span>
+                                        {app.jobOffer?.title && (
+                                          <span className="text-[10px] font-bold text-primary mt-0.5">
+                                            {app.jobOffer.title} · {app.jobOffer.contractType}
+                                          </span>
+                                        )}
                                         <span className="text-xs text-on-surface-variant mt-0.5">{app.experience || 'Expérience non spécifiée'}</span>
                                       </div>
                                     </td>
@@ -2612,6 +3605,12 @@ export default function App() {
                           </div>
                           <h5 className="font-headline text-lg font-bold text-on-surface">{selectedApp.firstName} {selectedApp.lastName}</h5>
                           <p className="text-primary font-semibold text-sm mt-0.5">{selectedApp.position}</p>
+                          {selectedApp.jobOffer?.title && (
+                            <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-bold text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full">
+                              <BriefcaseBusiness className="w-3 h-3" />
+                              {selectedApp.jobOffer.title} · {selectedApp.jobOffer.department}
+                            </span>
+                          )}
 
                           <div className="flex gap-2 mt-4 w-full">
                             <button
@@ -2926,6 +3925,9 @@ export default function App() {
                             <div className="bg-white p-3 rounded-xl border border-gray-200/50">
                               <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Études &amp; Diplômes</p>
                               <p className="text-sm font-semibold text-on-surface">{selectedApp.education}</p>
+                              {selectedApp.diploma && (
+                                <p className="text-xs text-on-surface-variant mt-1">{selectedApp.diploma}</p>
+                              )}
                             </div>
 
                             <div className="bg-white p-3 rounded-xl border border-gray-200/50">
@@ -2940,8 +3942,50 @@ export default function App() {
 
                             <div className="bg-white p-3 rounded-xl border border-gray-200/50">
                               <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Ville</p>
-                              <p className="text-sm font-semibold text-on-surface">{selectedApp.address || 'Non spécifiée'}</p>
+                              <p className="text-sm font-semibold text-on-surface">{selectedApp.city || selectedApp.address || 'Non spécifiée'}</p>
                             </div>
+
+                            {selectedApp.dateOfBirth && (
+                              <div className="bg-white p-3 rounded-xl border border-gray-200/50">
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Date de naissance</p>
+                                <p className="text-sm font-semibold text-on-surface">{selectedApp.dateOfBirth}</p>
+                              </div>
+                            )}
+
+                            {selectedApp.gender && (
+                              <div className="bg-white p-3 rounded-xl border border-gray-200/50">
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Sexe</p>
+                                <p className="text-sm font-semibold text-on-surface">{selectedApp.gender}</p>
+                              </div>
+                            )}
+
+                            {selectedApp.nationality && (
+                              <div className="bg-white p-3 rounded-xl border border-gray-200/50">
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Nationalité</p>
+                                <p className="text-sm font-semibold text-on-surface">{selectedApp.nationality}</p>
+                              </div>
+                            )}
+
+                            {selectedApp.lastPosition && (
+                              <div className="bg-white p-3 rounded-xl border border-gray-200/50">
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Dernier poste occupé</p>
+                                <p className="text-sm font-semibold text-on-surface">{selectedApp.lastPosition}</p>
+                              </div>
+                            )}
+
+                            {selectedApp.availability && (
+                              <div className="bg-white p-3 rounded-xl border border-gray-200/50">
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Disponibilité</p>
+                                <p className="text-sm font-semibold text-on-surface">{selectedApp.availability}</p>
+                              </div>
+                            )}
+
+                            {selectedApp.source && (
+                              <div className="bg-white p-3 rounded-xl border border-gray-200/50">
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Connaît le cabinet via</p>
+                                <p className="text-sm font-semibold text-on-surface">{selectedApp.source}</p>
+                              </div>
+                            )}
                           </div>
 
                           {(selectedApp.attachments || []).length > 0 && (
@@ -4669,6 +5713,556 @@ export default function App() {
               </form>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Offer form modal (create / edit) */}
+      <AnimatePresence>
+        {isOfferModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setIsOfferModalOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl z-10 max-h-[92vh] flex flex-col"
+            >
+              <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
+                <div>
+                  <h4 className="font-headline text-lg font-bold text-primary">
+                    {editingOffer ? 'Modifier l\'offre d\'emploi' : 'Nouvelle offre d\'emploi'}
+                  </h4>
+                  <p className="text-[11px] text-on-surface-variant">Les champs marqués d'un * sont obligatoires.</p>
+                </div>
+                <button
+                  onClick={() => setIsOfferModalOpen(false)}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleOfferSubmit} className="overflow-y-auto custom-scrollbar flex-1">
+                <div className="p-6 space-y-5">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                      Intitulé du poste <span className="text-error">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={offerTitle}
+                      onChange={(e) => setOfferTitle(e.target.value)}
+                      placeholder="Ex : Collaborateur comptable"
+                      className={`w-full px-4 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all ${
+                        offerFormErrors.title ? 'border-red-400' : 'border-gray-200'
+                      }`}
+                    />
+                    {offerFormErrors.title && <p className="text-xs text-red-500 mt-1">{offerFormErrors.title}</p>}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                        Département <span className="text-error">*</span>
+                      </label>
+                      <select
+                        value={offerDepartment}
+                        onChange={(e) => setOfferDepartment(e.target.value)}
+                        className={`w-full px-4 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all bg-white ${
+                          offerFormErrors.department ? 'border-red-400' : 'border-gray-200'
+                        }`}
+                      >
+                        {OFFER_DEPARTMENTS.map((d) => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                        Type de contrat <span className="text-error">*</span>
+                      </label>
+                      <select
+                        value={offerContractType}
+                        onChange={(e) => setOfferContractType(e.target.value)}
+                        className={`w-full px-4 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all bg-white ${
+                          offerFormErrors.contract ? 'border-red-400' : 'border-gray-200'
+                        }`}
+                      >
+                        {OFFER_CONTRACTS.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                        Lieu <span className="text-error">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={offerLocation}
+                        onChange={(e) => setOfferLocation(e.target.value)}
+                        placeholder="Ex : Tunis"
+                        className={`w-full px-4 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all ${
+                          offerFormErrors.location ? 'border-red-400' : 'border-gray-200'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                        Niveau d'étude requis
+                      </label>
+                      <input
+                        type="text"
+                        value={offerEducationLevel}
+                        onChange={(e) => setOfferEducationLevel(e.target.value)}
+                        placeholder="Ex : Master en comptabilité"
+                        className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                        Expérience requise
+                      </label>
+                      <input
+                        type="text"
+                        value={offerRequiredExperience}
+                        onChange={(e) => setOfferRequiredExperience(e.target.value)}
+                        placeholder="Ex : 2 à 5 ans"
+                        className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                        Nombre de postes
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={offerOpenPositions}
+                        onChange={(e) => setOfferOpenPositions(e.target.value)}
+                        placeholder="Ex : 2"
+                        className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                      Compétences recherchées <span className="text-error">*</span>
+                      <span className="normal-case font-semibold text-gray-400"> (une par ligne)</span>
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={offerSkillsText}
+                      onChange={(e) => setOfferSkillsText(e.target.value)}
+                      placeholder={'Excel avancé\nMaîtrise des normes comptables\nEsprit d\'analyse'}
+                      className={`w-full px-4 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none ${
+                        offerFormErrors.skills ? 'border-red-400' : 'border-gray-200'
+                      }`}
+                    />
+                    {offerFormErrors.skills && <p className="text-xs text-red-500 mt-1">{offerFormErrors.skills}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                      Description détaillée du poste <span className="text-error">*</span>
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={offerDescription}
+                      onChange={(e) => setOfferDescription(e.target.value)}
+                      placeholder="Décrivez le contexte du poste, le cabinet et les responsabilités..."
+                      className={`w-full px-4 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none ${
+                        offerFormErrors.description ? 'border-red-400' : 'border-gray-200'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                      Missions principales
+                      <span className="normal-case font-semibold text-gray-400"> (une par ligne)</span>
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={offerMissionsText}
+                      onChange={(e) => setOfferMissionsText(e.target.value)}
+                      placeholder={'Tenue et suivi de la comptabilité\nPréparation des états financiers'}
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                      Profil recherché
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={offerProfile}
+                      onChange={(e) => setOfferProfile(e.target.value)}
+                      placeholder="Décrivez le profil idéal : formation, qualités, atouts..."
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                      Avantages
+                      <span className="normal-case font-semibold text-gray-400"> (une par ligne, facultatif)</span>
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={offerBenefitsText}
+                      onChange={(e) => setOfferBenefitsText(e.target.value)}
+                      placeholder={'Mutuelle groupe\nFormation continue'}
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                        Date de publication
+                      </label>
+                      <input
+                        type="date"
+                        value={offerPublishedAt}
+                        onChange={(e) => setOfferPublishedAt(e.target.value)}
+                        className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                      />
+                      <p className="text-[10px] text-on-surface-variant mt-1">Automatique lors de la publication.</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
+                        Date d'expiration
+                      </label>
+                      <input
+                        type="date"
+                        value={offerDeadline}
+                        min={new Date().toISOString().split('T')[0]}
+                        onChange={(e) => setOfferDeadline(e.target.value)}
+                        className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                      />
+                      <p className="text-[10px] text-on-surface-variant mt-1">Facultative — offre ouverte si vide.</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Statut</label>
+                      <select
+                        value={offerStatus}
+                        onChange={(e) => setOfferStatus(e.target.value as 'draft' | 'published' | 'closed')}
+                        className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all bg-white"
+                      >
+                        <option value="draft">Brouillon</option>
+                        <option value="published">Publiée</option>
+                        <option value="closed">Fermée</option>
+                      </select>
+                      {offerStatus === 'published' && (
+                        <p className="text-[10px] text-emerald-600 mt-1 font-semibold">
+                          Visible immédiatement sur le site (#/offres)
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-surface-container-low/40 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsOfferModalOpen(false)}
+                    className="px-5 py-2.5 text-xs font-bold text-on-surface-variant border border-outline-variant rounded-xl hover:bg-surface-container transition-colors cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 text-xs font-bold bg-primary text-white rounded-xl hover:bg-primary-container transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    {editingOffer ? 'Enregistrer les modifications' : 'Créer l\'offre'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Offer detail modal (Vue 2 : offre + candidatures reçues) */}
+      <AnimatePresence>
+        {selectedOffer && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setSelectedOffer(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl z-10 max-h-[92vh] flex flex-col"
+            >
+              <div className="flex items-start justify-between px-6 py-5 border-b border-gray-100 shrink-0 gap-4">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${offerStatusInfo(selectedOffer.status).cls}`}>
+                      {offerStatusInfo(selectedOffer.status).label}
+                    </span>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${contractBadgeCls(selectedOffer.contractType)}`}>
+                      {selectedOffer.contractType}
+                    </span>
+                    {selectedOffer.openPositions != null && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border bg-blue-50 text-blue-700 border-blue-200">
+                        {selectedOffer.openPositions} poste{selectedOffer.openPositions > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="font-headline text-xl font-bold text-on-surface">{selectedOffer.title}</h4>
+                  <p className="text-xs text-on-surface-variant mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="inline-flex items-center gap-1"><Building2 className="w-3.5 h-3.5" /> {selectedOffer.department}</span>
+                    <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {selectedOffer.location}</span>
+                    <span className="inline-flex items-center gap-1">
+                      <CalendarClock className="w-3.5 h-3.5" />
+                      Publiée le {selectedOffer.publishedAt ? new Date(selectedOffer.publishedAt).toLocaleDateString('fr-FR') : '—'}
+                    </span>
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <a
+                    href={`${siteOrigin()}/#/offres/${selectedOffer._id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2 text-primary hover:bg-primary/5 rounded-lg transition-colors"
+                    title="Voir l'offre sur le site"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                  <button
+                    onClick={() => openOfferModal(selectedOffer)}
+                    className="p-2 text-on-surface-variant hover:text-primary hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Modifier"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setSelectedOffer(null)}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-y-auto custom-scrollbar flex-1">
+                <div className="p-6 space-y-6">
+                  {/* Détails de l'offre */}
+                  <div className="space-y-5">
+                    {selectedOffer.requiredExperience || selectedOffer.educationLevel ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {selectedOffer.educationLevel && (
+                          <div className="bg-surface-container-low/60 p-3 rounded-xl border border-secondary/10">
+                            <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1 flex items-center gap-1">
+                              <GraduationCap className="w-3.5 h-3.5" /> Niveau d'étude
+                            </p>
+                            <p className="text-sm font-semibold text-on-surface">{selectedOffer.educationLevel}</p>
+                          </div>
+                        )}
+                        {selectedOffer.requiredExperience && (
+                          <div className="bg-surface-container-low/60 p-3 rounded-xl border border-secondary/10">
+                            <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1 flex items-center gap-1">
+                              <Target className="w-3.5 h-3.5" /> Expérience requise
+                            </p>
+                            <p className="text-sm font-semibold text-on-surface">{selectedOffer.requiredExperience}</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+
+                    <div>
+                      <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Description du poste</p>
+                      <p className="text-sm text-on-surface leading-relaxed">{selectedOffer.description}</p>
+                    </div>
+
+                    {(selectedOffer.missions || []).length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-2 flex items-center gap-1">
+                          <ListChecks className="w-3.5 h-3.5" /> Missions principales
+                        </p>
+                        <ul className="space-y-1.5">
+                          {selectedOffer.missions.map((m, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm text-on-surface">
+                              <span className="text-emerald-600 font-bold shrink-0 mt-0.5">✓</span>
+                              {m}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {(selectedOffer.skills || []).length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Compétences recherchées</p>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedOffer.skills.map((s, i) => (
+                            <span key={i} className="px-3 py-1 bg-primary/5 text-primary border border-primary/15 rounded-full text-xs font-bold">
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedOffer.profile && (
+                      <div>
+                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Profil recherché</p>
+                        <p className="text-sm text-on-surface leading-relaxed">{selectedOffer.profile}</p>
+                      </div>
+                    )}
+
+                    {(selectedOffer.benefits || []).length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-2 flex items-center gap-1">
+                          <Sparkles className="w-3.5 h-3.5" /> Avantages
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedOffer.benefits.map((b, i) => (
+                            <span key={i} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold">
+                              {b}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Candidatures reçues pour cette offre (Vue 2) */}
+                  <div className="border-t border-gray-100 pt-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h5 className="font-headline text-sm font-bold text-on-surface flex items-center gap-2">
+                        <UsersRound className="w-4 h-4 text-primary" />
+                        Candidatures reçues
+                      </h5>
+                      <span className="px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-bold">
+                        {(offerCandidatesCount[selectedOffer._id] || 0)} candidature{(offerCandidatesCount[selectedOffer._id] || 0) > 1 ? 's' : ''}
+                      </span>
+                    </div>
+
+                    {(() => {
+                      const apps = jobApps.filter((a: any) => (a.jobOffer?._id || a.jobOffer) === selectedOffer._id);
+                      if (apps.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-on-surface-variant bg-surface-container-low/40 rounded-xl border border-dashed border-secondary/20">
+                            <UsersRound className="w-8 h-8 mx-auto mb-2 text-on-surface-variant/40" />
+                            <p className="text-sm font-medium">Aucune candidature reçue pour cette offre.</p>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="space-y-2">
+                          {apps.map((app: any) => {
+                            const info = candidateStatusInfo(app.status);
+                            const cvAtt = (app.attachments || []).find((a: any) => a.type === 'cv');
+                            return (
+                              <div key={app._id} className="flex items-center gap-4 p-3 bg-surface-container-low/50 border border-gray-100 rounded-xl hover:border-primary/20 hover:bg-white transition-all">
+                                <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
+                                  {app.firstName?.[0]}{app.lastName?.[0]}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-bold text-on-surface truncate">{app.firstName} {app.lastName}</p>
+                                  <p className="text-xs text-on-surface-variant truncate">
+                                    {app.email} — {new Date(app.createdAt).toLocaleDateString('fr-FR')}
+                                  </p>
+                                </div>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${info.cls}`}>
+                                  {info.label}
+                                </span>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {cvAtt && (
+                                    <a
+                                      href={attachmentDownloadUrl(app, cvAtt)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-2 text-on-surface-variant hover:text-primary hover:bg-primary/5 rounded-lg transition-colors"
+                                      title="Voir le CV"
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                    </a>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      setSelectedOffer(null);
+                                      setSelectedApp(app);
+                                      setShowArchived(false);
+                                      setActiveTab('recruitment');
+                                    }}
+                                    className="px-3 py-1.5 bg-primary/5 hover:bg-primary text-primary hover:text-white rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                                    title="Ouvrir la candidature"
+                                  >
+                                    Voir
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Offer delete confirmation */}
+      <AnimatePresence>
+        {isOfferDeleteOpen && offerToDelete && (
+          <>
+            <div className="fixed inset-0 bg-black/40 z-50" onClick={() => { setIsOfferDeleteOpen(false); setOfferToDelete(null); }} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            >
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 text-center">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Trash2 className="w-6 h-6 text-red-500" />
+                </div>
+                <h3 className="font-headline font-bold text-lg text-on-surface mb-2">Supprimer l'offre</h3>
+                <p className="text-sm text-on-surface-variant mb-6">
+                  Voulez-vous vraiment supprimer l'offre <strong className="text-on-surface">"{offerToDelete.title}"</strong> ?
+                  Cette action est irréversible.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setIsOfferDeleteOpen(false); setOfferToDelete(null); }}
+                    className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold text-on-surface hover:bg-gray-50 transition-all cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={handleDeleteOffer}
+                    className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold transition-all cursor-pointer"
+                  >
+                    Supprimer
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 

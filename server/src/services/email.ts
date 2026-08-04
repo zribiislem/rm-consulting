@@ -107,7 +107,7 @@ interface SimpleJobApp {
   position: string;
 }
 
-export async function sendJobConfirmation(to: string, firstName: string): Promise<void> {
+export async function sendJobConfirmation(to: string, firstName: string, position?: string): Promise<void> {
   console.log(`[Recruitment] Confirmation email for ${to}`);
   const transporter = createTransporter();
   if (!transporter) { return; }
@@ -122,9 +122,8 @@ export async function sendJobConfirmation(to: string, firstName: string): Promis
           <p style="color: #1a1c1c; font-size: 15px; margin: 0 0 16px;">Bonjour <strong>${esc(firstName)}</strong>,</p>
           <p style="color: #554249; font-size: 14px; margin: 0 0 16px;">
             Nous vous remercions pour l'intérêt que vous portez à RM Consulting.
-          </p>
-          <p style="color: #554249; font-size: 14px; margin: 0 0 16px;">
-            Votre candidature a bien été reçue par notre équipe RH. Nous l'étudierons avec la plus grande attention et vous recontacterons si votre profil correspond à nos besoins.
+            ${position ? `Votre candidature pour le poste de <strong>${esc(position)}</strong> a bien été reçue par notre équipe RH.` : 'Votre candidature a bien été reçue par notre équipe RH.'}
+            Nous l'étudierons avec la plus grande attention et vous recontacterons si votre profil correspond à nos besoins.
           </p>
           <div style="background: #f3eef0; border-radius: 8px; padding: 16px; margin: 16px 0;">
             <p style="color: #6c0042; font-size: 12px; font-weight: 700; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 1px;">Prochaine étape</p>

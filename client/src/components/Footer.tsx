@@ -42,6 +42,9 @@ export default function Footer({ onOpenLogin }: FooterProps) {
               <a href="#services" className="hover:text-secondary-fixed transition-colors">Catalogue Services</a>
             </li>
             <li>
+              <a href="#/offres" className="hover:text-secondary-fixed transition-colors">Offres d'Emploi</a>
+            </li>
+            <li>
               <a href="#contact" className="hover:text-secondary-fixed transition-colors">Prendre RDV</a>
             </li>
           </ul>

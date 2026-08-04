@@ -53,7 +53,7 @@ const upload = multer({
       cb(new Error('Formats acceptés : PDF, DOC, DOCX uniquement'));
     }
   },
-  limits: { fileSize: maxFileSize, files: 7 },
+  limits: { fileSize: maxFileSize, files: 12 },
 });
 
 const router = Router();
@@ -81,6 +81,14 @@ const validateApplication = [
   body('experience').trim().notEmpty().withMessage('Les années d\'expérience sont requises').customSanitizer(sanitize),
   body('address').optional({ values: 'falsy' }).trim().customSanitizer(sanitize),
   body('motivationMessage').optional({ values: 'falsy' }).trim().customSanitizer(sanitize),
+  body('dateOfBirth').optional({ values: 'falsy' }).trim().customSanitizer(sanitize),
+  body('gender').optional({ values: 'falsy' }).trim().customSanitizer(sanitize),
+  body('nationality').optional({ values: 'falsy' }).trim().customSanitizer(sanitize),
+  body('city').optional({ values: 'falsy' }).trim().customSanitizer(sanitize),
+  body('diploma').optional({ values: 'falsy' }).trim().customSanitizer(sanitize),
+  body('lastPosition').optional({ values: 'falsy' }).trim().customSanitizer(sanitize),
+  body('availability').optional({ values: 'falsy' }).trim().customSanitizer(sanitize),
+  body('source').optional({ values: 'falsy' }).trim().customSanitizer(sanitize),
   body('jobOfferId').optional({ values: 'falsy' }).isMongoId().withMessage('Offre d\'emploi invalide'),
 ];
 
@@ -101,7 +109,7 @@ const removeUploadedFiles = (files: { [fieldname: string]: Express.Multer.File[]
 const populates = () => [
   { path: 'candidate', select: 'lastName firstName email phone address education experience createdAt' },
   { path: 'attachments' },
-  { path: 'jobOffer', select: 'title department location contractType' },
+  { path: 'jobOffer', select: 'title department location contractType status' },
 ];
 
 /* -------------------------------------------------------------------------
@@ -184,7 +192,9 @@ router.get('/stats', authenticate, async (_req: AuthRequest, res: Response) => {
 router.post('/',
   upload.fields([
     { name: 'cv', maxCount: 1 },
+    { name: 'coverLetter', maxCount: 1 },
     { name: 'certificates', maxCount: 5 },
+    { name: 'otherFiles', maxCount: 5 },
   ]),
   async (req: Request, res: Response) => {
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
@@ -200,7 +210,9 @@ router.post('/',
       }
 
       const cvFile = files?.['cv']?.[0];
+      const coverLetterFile = files?.['coverLetter']?.[0];
       const certFiles = files?.['certificates'] || [];
+      const otherFiles = files?.['otherFiles'] || [];
 
       if (!cvFile) {
         removeUploadedFiles(files);
@@ -217,6 +229,16 @@ router.post('/',
         size: cvFile.size,
         mimeType: cvFile.mimetype,
       });
+      if (coverLetterFile) {
+        attachments.push({
+          filename: coverLetterFile.filename,
+          originalName: coverLetterFile.originalname,
+          url: '/uploads/applications/' + coverLetterFile.filename,
+          type: 'coverLetter',
+          size: coverLetterFile.size,
+          mimeType: coverLetterFile.mimetype,
+        });
+      }
       for (const cert of certFiles) {
         attachments.push({
           filename: cert.filename,
@@ -225,6 +247,16 @@ router.post('/',
           type: 'certificate',
           size: cert.size,
           mimeType: cert.mimetype,
+        });
+      }
+      for (const other of otherFiles) {
+        attachments.push({
+          filename: other.filename,
+          originalName: other.originalname,
+          url: '/uploads/applications/' + other.filename,
+          type: 'certificate',
+          size: other.size,
+          mimeType: other.mimetype,
         });
       }
 
@@ -271,6 +303,14 @@ router.post('/',
         experience: req.body.experience || '',
         address: req.body.address || '',
         motivationMessage: req.body.motivationMessage || '',
+        dateOfBirth: req.body.dateOfBirth || '',
+        gender: req.body.gender || '',
+        nationality: req.body.nationality || '',
+        city: req.body.city || '',
+        diploma: req.body.diploma || '',
+        lastPosition: req.body.lastPosition || '',
+        availability: req.body.availability || '',
+        source: req.body.source || '',
         attachments: savedAttachments.map((a) => a._id),
         status: 'new',
         statusHistory: [{ status: 'new', changedAt: new Date() }],
@@ -280,7 +320,7 @@ router.post('/',
       await application.save();
 
       // 5. Notifications par email (en arrière-plan, sans bloquer la réponse)
-      sendJobConfirmation(application.email, application.firstName).catch(() => {});
+      sendJobConfirmation(application.email, application.firstName, application.position).catch(() => {});
       const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
       if (adminEmail) {
         sendNewApplicationAlert(adminEmail, application).catch(() => {});
