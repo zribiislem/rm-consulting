@@ -60,12 +60,16 @@ export default function ContactSection() {
   const [selectedDateSlots, setSelectedDateSlots] = useState<string[]>([]);
   const [bookedSlotsForDate, setBookedSlotsForDate] = useState<string[]>([]);
 
-  // Fetch available dates
-  useEffect(() => {
+  // Fetch available dates (bookedSlots are computed by the server from existing appointments)
+  const refreshAvailableDates = () => {
     fetch('/api/available-dates')
       .then((r) => r.json())
       .then((data: any) => setAvailableDates(Array.isArray(data) ? data : []))
       .catch(() => {});
+  };
+
+  useEffect(() => {
+    refreshAvailableDates();
   }, []);
 
   // Update available time slots when date is selected
@@ -127,7 +131,7 @@ export default function ContactSection() {
 
     try {
       if (activeTab === 'rdv') {
-        await fetch('/api/appointments', {
+        const res = await fetch('/api/appointments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -139,6 +143,20 @@ export default function ContactSection() {
             details: message.trim(),
           }),
         });
+        if (!res.ok) {
+          let serverMsg = 'Ce créneau vient d\'être réservé. Veuillez en choisir un autre.';
+          try {
+            const err = await res.json();
+            if (err && err.message) serverMsg = err.message;
+          } catch {
+            // ignore parsing errors
+          }
+          setValidationError(serverMsg);
+          refreshAvailableDates();
+          setIsSubmitting(false);
+          return;
+        }
+        setBookedSlotsForDate(prev => prev.includes(rdvTime) ? prev : [...prev, rdvTime]);
       } else {
         const nameParts = fullName.trim().split(' ');
         const initials = nameParts.length >= 2
@@ -161,7 +179,9 @@ export default function ContactSection() {
         });
       }
     } catch {
-      // fallback
+      setValidationError('Une erreur est survenue lors de l\'envoi. Veuillez réessayer.');
+      setIsSubmitting(false);
+      return;
     }
 
     setIsSubmitting(false);

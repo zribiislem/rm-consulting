@@ -67,11 +67,20 @@
 }
 
 @utility custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 30, 90, 0.35) transparent;
   &::-webkit-scrollbar {
     width: 4px;
+    height: 4px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
   }
   &::-webkit-scrollbar-thumb {
-    background: #dac0c8;
+    background: rgba(139, 30, 90, 0.35);
     border-radius: 10px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(108, 0, 66, 0.55);
   }
 }

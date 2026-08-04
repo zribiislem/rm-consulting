@@ -22,7 +22,9 @@ router.get('/', async (_req: Request, res: Response) => {
     });
 
     const result = dates.map(d => {
-      const slots = generateSlots(d.startTime, d.endTime);
+      const slots = d.timeSlots && d.timeSlots.length > 0
+        ? d.timeSlots
+        : generateSlots(d.startTime, d.endTime);
       return {
         _id: d._id,
         date: d.date,

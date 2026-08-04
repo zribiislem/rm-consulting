@@ -24,7 +24,6 @@ import {
   CheckCircle2,
   Clock,
   Send,
-  MessageSquare,
   Building2,
   Award,
   Globe,
@@ -61,7 +60,7 @@ interface Mission {
   id: string;
   title: string;
   client: string;
-  department: 'Audit Légal' | 'Conseil' | 'Comptabilité' | 'Juridique' | 'Fiscalité';
+  department: 'Audit LÃ©gal' | 'Conseil' | 'ComptabilitÃ©' | 'Juridique' | 'FiscalitÃ©';
   status: string;
   progression: number;
 }
@@ -77,6 +76,9 @@ interface Message {
   isUnread: boolean;
   parentId?: string;
   email?: string;
+  status: 'new' | 'processing' | 'done';
+  archived?: boolean;
+  createdAt?: string;
 }
 
 interface Department {
@@ -99,7 +101,7 @@ const siteOrigin = (): string => {
     const stored = localStorage.getItem('rm_site_origin');
     if (stored) return stored;
   } catch {
-    // localStorage unavailable (sandboxed iframe) — fall through to default
+    // localStorage unavailable (sandboxed iframe) â€” fall through to default
   }
   return `${window.location.protocol}//${getHostname()}:3000`;
 };
@@ -148,7 +150,7 @@ const authHeaders = (json = true): Record<string, string> => {
 const authedFetch = (url: string, init: RequestInit = {}): Promise<Response> =>
   fetch(url, { ...init, headers: { ...authHeaders(!!init.body), ...(init.headers || {}) } });
 
-// Échappe le contenu candidat avant insertion dans le document HTML du PDF exporté
+// Ã‰chappe le contenu candidat avant insertion dans le document HTML du PDF exportÃ©
 const escHtml = (value: unknown): string =>
   String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -174,7 +176,7 @@ const getDeptIcon = (id: string) => {
   }
 };
 
-// Estimation du nombre d'années d'expérience à partir de la chaîne libre (ex: "4 ans d'expérience")
+// Estimation du nombre d'annÃ©es d'expÃ©rience Ã  partir de la chaÃ®ne libre (ex: "4 ans d'expÃ©rience")
 const parseExpYears = (exp?: string): number => {
   if (!exp) return 0;
   const match = exp.match(/(\d+([.,]\d+)?)\s*ans?/i);
@@ -182,7 +184,7 @@ const parseExpYears = (exp?: string): number => {
   return /junior|stage/i.test(exp) ? 0.5 : 0;
 };
 
-// Libellé + classes de couleur pour chaque statut de candidature
+// LibellÃ© + classes de couleur pour chaque statut de candidature
 const candidateStatusInfo = (status: string): { label: string; cls: string } => {
   switch (status) {
     case 'new':
@@ -192,9 +194,9 @@ const candidateStatusInfo = (status: string): { label: string; cls: string } => 
     case 'interview':
       return { label: 'Entretien', cls: 'bg-purple-100 text-purple-700 border-purple-200' };
     case 'accepted':
-      return { label: 'Accepté', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+      return { label: 'AcceptÃ©', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
     default:
-      return { label: 'Refusé', cls: 'bg-rose-100 text-rose-700 border-rose-200' };
+      return { label: 'RefusÃ©', cls: 'bg-rose-100 text-rose-700 border-rose-200' };
   }
 };
 
@@ -212,7 +214,7 @@ const formatTimeAmPm = (time?: string): string => {
 const OFFER_DEPARTMENTS = [
   'Expertise Comptable',
   'Audit',
-  'Fiscalité',
+  'FiscalitÃ©',
   'Conseil',
   'Administratif',
   'Autre',
@@ -222,17 +224,17 @@ const OFFER_CONTRACTS = ['CDI', 'CDD', 'Stage', 'Alternance', 'Freelance'];
 
 const OFFER_STATUS_LABELS: Record<string, string> = {
   draft: 'Brouillon',
-  published: 'Publiée',
-  closed: 'Fermée',
+  published: 'PubliÃ©e',
+  closed: 'FermÃ©e',
 };
 
 // Badge couleur pour chaque statut d'offre
 const offerStatusInfo = (status: string): { label: string; cls: string } => {
   switch (status) {
     case 'published':
-      return { label: 'Publiée', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+      return { label: 'PubliÃ©e', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
     case 'closed':
-      return { label: 'Fermée', cls: 'bg-gray-100 text-gray-600 border-gray-200' };
+      return { label: 'FermÃ©e', cls: 'bg-gray-100 text-gray-600 border-gray-200' };
     default:
       return { label: 'Brouillon', cls: 'bg-amber-100 text-amber-700 border-amber-200' };
   }
@@ -256,11 +258,64 @@ const contractBadgeCls = (contract: string): string => {
   }
 };
 
+// LibellÃ© + classes de couleur pour chaque statut de message
+const messageStatusInfo = (status: string): { label: string; cls: string } => {
+  switch (status) {
+    case 'processing':
+      return { label: 'En cours', cls: 'bg-amber-100 text-amber-700 border-amber-200' };
+    case 'done':
+      return { label: 'TraitÃ©', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+    default:
+      return { label: 'Nouveau', cls: 'bg-blue-100 text-blue-700 border-blue-200' };
+  }
+};
+
+// Date de rÃ©ception lisible d'un message (crÃ©Ã© en base) sinon son heure
+const formatMessageDate = (msg: Message): string => {
+  if (msg.createdAt) {
+    try {
+      return new Date(msg.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch { /* fall through */ }
+  }
+  return msg.time || '';
+};
+
+// Extrait le sujet, l'email et le corps d'un message au format "[Sujet]\n\nEmail: x\n\nTexte"
+const parseMessageParts = (msg: Message): { subject: string; email: string; body: string } => {
+  const content = msg.content || '';
+  const subjectMatch = content.match(/^\[(.+?)\]/);
+  const subject = subjectMatch ? subjectMatch[1] : (msg.role === 'Client' ? 'Demande de contact' : '');
+  const emailMatch = content.match(/Email:\s*(.+)/);
+  const email = emailMatch ? emailMatch[1].trim() : (msg.email || '');
+  const body = content
+    .replace(/^\[.+?\]/, '')
+    .replace(/Email:\s*.+/, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return { subject, email, body };
+};
+
 export default function App() {
   const [isAuthChecked, setIsAuthChecked] = useState(false);
 
-  // Navigation active tab
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'references' | 'recruitment' | 'offers'>('dashboard');
+// Navigation active tab (persisted so refresh keeps the current page)
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'missions' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'messages' | 'references' | 'recruitment' | 'offers'>(() => {
+    try {
+      const saved = localStorage.getItem('rm_admin_active_tab');
+      const valid = ['dashboard', 'missions', 'reporting', 'settings', 'departments', 'appointments', 'messages', 'references', 'recruitment', 'offers'];
+      return (saved && valid.includes(saved) ? saved : 'dashboard') as 'dashboard' | 'missions' | 'reporting' | 'settings' | 'departments' | 'appointments' | 'messages' | 'references' | 'recruitment' | 'offers';
+    } catch {
+      return 'dashboard';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rm_admin_active_tab', activeTab);
+    } catch {
+      // ignore storage errors
+    }
+  }, [activeTab]);
 
   // Departments dynamic state
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -287,6 +342,11 @@ export default function App() {
   // Messages state
   const [messages, setMessages] = useState<Message[]>([]);
 
+  // Messages inbox state
+  const [messageFilter, setMessageFilter] = useState<'all' | 'unread' | 'processing' | 'done'>('all');
+  const [messageDetailOpen, setMessageDetailOpen] = useState(false);
+  const [activeMessageDetail, setActiveMessageDetail] = useState<Message | null>(null);
+
   // Appointments state
   interface AppointmentData {
     _id: string;
@@ -299,6 +359,7 @@ export default function App() {
     status: 'pending' | 'confirmed' | 'cancelled' | 'rescheduled';
     rescheduledDate: string;
     rescheduledTimeSlot: string;
+    duration?: string;
   }
   interface AvailableDateData {
     _id: string;
@@ -312,6 +373,16 @@ export default function App() {
   const [availableDatesList, setAvailableDatesList] = useState<AvailableDateData[]>([]);
   const [availCalMonth, setAvailCalMonth] = useState(new Date().getMonth());
   const [availCalYear, setAvailCalYear] = useState(new Date().getFullYear());
+
+  // Appointment creation state
+  const [appointmentModalOpen, setAppointmentModalOpen] = useState(false);
+  const [newApptClient, setNewApptClient] = useState('');
+  const [newApptEmail, setNewApptEmail] = useState('');
+  const [newApptService, setNewApptService] = useState('');
+  const [newApptDate, setNewApptDate] = useState('');
+  const [newApptTime, setNewApptTime] = useState('09:00');
+  const [newApptDuration, setNewApptDuration] = useState('30');
+  const [newApptNotes, setNewApptNotes] = useState('');
 
   const [timeSlotModalOpen, setTimeSlotModalOpen] = useState(false);
   const [timeSlotDateStr, setTimeSlotDateStr] = useState('');
@@ -431,7 +502,7 @@ export default function App() {
   }
   const [offers, setOffers] = useState<JobOffer[]>([]);
   const [offerSearch, setOfferSearch] = useState('');
-  const [offerDeptFilter, setOfferDeptFilter] = useState('Tous les départements');
+  const [offerDeptFilter, setOfferDeptFilter] = useState('Tous les dÃ©partements');
   const [offerContractFilter, setOfferContractFilter] = useState('Tous les contrats');
   const [offerStatusFilter, setOfferStatusFilter] = useState('Tous les statuts');
 
@@ -497,9 +568,10 @@ export default function App() {
 
   // Fetch data from API on mount
   useEffect(() => {
+    if (!isAuthChecked) return;
     const fetchData = async () => {
       try {
-        const [deptRes, missionRes, msgRes, apptRes, availRes, refRes, paramRes, jobRes, archivedRes, offerRes] = await Promise.all([
+        const [deptRes, missionRes, msgRes, apptRes, availRes, refRes, paramRes, jobRes, archivedRes, offerRes, progRes] = await Promise.all([
           fetch(`${API_URL}/departments`),
           fetch(`${API_URL}/missions`),
           fetch(`${API_URL}/messages`),
@@ -509,7 +581,8 @@ export default function App() {
           fetch(`${API_URL}/parameters`),
           authedFetch(`${API_URL}/job-applications`),
           authedFetch(`${API_URL}/job-applications?archived=true`),
-          authedFetch(`${API_URL}/job-offers`)
+          authedFetch(`${API_URL}/job-offers`),
+          authedFetch(`${API_URL}/programs`)
         ]);
         const depts = await deptRes.json();
         const missionsData = await missionRes.json();
@@ -521,6 +594,7 @@ export default function App() {
         const jobs = await jobRes.json();
         const archived = await archivedRes.json();
         const offerData = await offerRes.json();
+        const progs = await progRes.json();
         setDepartments(depts.map((d: any) => ({ ...d, id: d._id })));
         setMissions(missionsData.map((m: any) => ({ ...m, id: m._id })));
         setMessages(msgs.map((m: any) => ({ ...m, id: m._id })));
@@ -528,25 +602,26 @@ export default function App() {
         setAvailableDatesList(avails);
         setReferences(refs);
         setParameters(params);
-        setJobApps(jobs);
-        setArchivedApps(archived);
+        setJobApps(Array.isArray(jobs) ? jobs : []);
+        setArchivedApps(Array.isArray(archived) ? archived : []);
         setOffers(offerData);
+        setProgrammes(Array.isArray(progs) ? progs.map((p: any) => ({ ...p, id: p._id })) : []);
       } catch (err) {
         console.error('Failed to fetch data from API:', err);
       }
     };
     fetchData();
-  }, []);
+  }, [isAuthChecked]);
 
   // ---------------------------------------------------------------
   // Recherches dynamiques : interrogation live du serveur (debounce),
-  // résultats mis à jour automatiquement pendant la frappe.
+  // rÃ©sultats mis Ã  jour automatiquement pendant la frappe.
   // ---------------------------------------------------------------
   const skipAppsFirstRun = useRef(true);
   const skipOffersFirstRun = useRef(true);
   const skipMissionsFirstRun = useRef(true);
 
-  // Candidatures : recherche serveur en direct (mots clés)
+  // Candidatures : recherche serveur en direct (mots clÃ©s)
   useEffect(() => {
     if (skipAppsFirstRun.current) {
       skipAppsFirstRun.current = false;
@@ -566,7 +641,7 @@ export default function App() {
         setJobApps(data);
         setArchivedApps(archivedData);
       } catch (err) {
-        console.error('Recherche candidatures échouée:', err);
+        console.error('Recherche candidatures Ã©chouÃ©e:', err);
       } finally {
         setIsAppsSearching(false);
       }
@@ -574,7 +649,7 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Offres : recherche serveur en direct (mots clés + filtres)
+  // Offres : recherche serveur en direct (mots clÃ©s + filtres)
   useEffect(() => {
     if (skipOffersFirstRun.current) {
       return;
@@ -584,14 +659,14 @@ export default function App() {
       try {
         const params = new URLSearchParams();
         if (offerSearch.trim()) params.set('search', offerSearch.trim());
-        if (offerDeptFilter !== 'Tous les départements') params.set('department', offerDeptFilter);
+        if (offerDeptFilter !== 'Tous les dÃ©partements') params.set('department', offerDeptFilter);
         if (offerContractFilter !== 'Tous les contrats') params.set('contractType', offerContractFilter);
         if (offerStatusFilter !== 'Tous les statuts') params.set('status', offerStatusFilter);
         const res = await authedFetch(`${API_URL}/job-offers?${params.toString()}`);
         const data = await res.json();
         setOffers(data);
       } catch (err) {
-        console.error('Recherche offres échouée:', err);
+        console.error('Recherche offres Ã©chouÃ©e:', err);
       } finally {
         setIsOffersSearching(false);
       }
@@ -599,7 +674,7 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [offerSearch, offerDeptFilter, offerContractFilter, offerStatusFilter]);
 
-  // Missions : recherche serveur en direct (mots clés)
+  // Missions : recherche serveur en direct (mots clÃ©s)
   useEffect(() => {
     if (skipMissionsFirstRun.current) {
       return;
@@ -613,7 +688,7 @@ export default function App() {
         const data = await res.json();
         setMissions(data.map((m: any) => ({ ...m, id: m._id })));
       } catch (err) {
-        console.error('Recherche missions échouée:', err);
+        console.error('Recherche missions Ã©chouÃ©e:', err);
       } finally {
         setIsMissionsSearching(false);
       }
@@ -627,6 +702,114 @@ export default function App() {
   const [calYear, setCalYear] = useState(today.getFullYear());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
+  // Programmes state (synced with MongoDB via /api/programs)
+  interface ProgrammeData {
+    id: string;
+    title: string;
+    description: string;
+    date: string; // YYYY-MM-DD
+    startTime: string;
+    endTime: string;
+    type: string;
+    notes: string;
+  }
+  const [programmes, setProgrammes] = useState<ProgrammeData[]>([]);
+
+  // Programme form modal state
+  const [programmeFormOpen, setProgrammeFormOpen] = useState(false);
+  const [editingProgrammeId, setEditingProgrammeId] = useState<string | null>(null);
+  const [progTitle, setProgTitle] = useState('');
+  const [progDescription, setProgDescription] = useState('');
+  const [progDate, setProgDate] = useState('');
+  const [progStartTime, setProgStartTime] = useState('09:00');
+  const [progEndTime, setProgEndTime] = useState('12:00');
+  const [progType, setProgType] = useState('Formation');
+  const [progNotes, setProgNotes] = useState('');
+
+  // Programme view modal state
+  const [viewingProgramme, setViewingProgramme] = useState<ProgrammeData | null>(null);
+
+  const toDateInputValue = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const openNewProgramme = () => {
+    setEditingProgrammeId(null);
+    setProgTitle('');
+    setProgDescription('');
+    setProgDate(selectedDay ? `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}` : toDateInputValue(new Date()));
+    setProgStartTime('09:00');
+    setProgEndTime('12:00');
+    setProgType('Formation');
+    setProgNotes('');
+    setProgrammeFormOpen(true);
+  };
+
+  const openEditProgramme = (p: ProgrammeData) => {
+    setEditingProgrammeId(p.id);
+    setProgTitle(p.title);
+    setProgDescription(p.description);
+    setProgDate(p.date);
+    setProgStartTime(p.startTime);
+    setProgEndTime(p.endTime);
+    setProgType(p.type);
+    setProgNotes(p.notes);
+    setProgrammeFormOpen(true);
+  };
+
+  const handleSaveProgramme = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!progTitle.trim() || !progDate || !progStartTime || !progEndTime || !progType.trim()) {
+      addToast('Veuillez remplir le titre, la date, les heures et le type.', 'info');
+      return;
+    }
+    const payload = {
+      title: progTitle.trim(),
+      description: progDescription.trim(),
+      date: progDate,
+      startTime: progStartTime,
+      endTime: progEndTime,
+      type: progType,
+      notes: progNotes.trim(),
+    };
+    if (editingProgrammeId) {
+      const res = await authedFetch(`${API_URL}/programs/${editingProgrammeId}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setProgrammes(prev => prev.map(p => p.id === editingProgrammeId ? { ...updated, id: updated._id } : p));
+        addToast(`Programme "${progTitle.trim()}" mis Ã  jour.`);
+      } else {
+        addToast('Erreur lors de la mise Ã  jour du programme.', 'error');
+      }
+    } else {
+      const res = await authedFetch(`${API_URL}/programs`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setProgrammes(prev => [...prev, { ...created, id: created._id }]);
+        addToast(`Programme "${progTitle.trim()}" ajoutÃ©.`);
+      } else {
+        addToast('Erreur lors de l\'ajout du programme.', 'error');
+      }
+    }
+    setProgrammeFormOpen(false);
+  };
+
+  const handleDeleteProgramme = async (id: string, title: string) => {
+    const res = await authedFetch(`${API_URL}/programs/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      setProgrammes(prev => prev.filter(p => p.id !== id));
+      addToast(`Programme "${title}" supprimÃ©.`, 'info');
+    } else {
+      addToast('Erreur lors de la suppression du programme.', 'error');
+    }
+    if (viewingProgramme && viewingProgramme.id === id) setViewingProgramme(null);
+  };
+
   // Build appointments map grouped by day for the current calendar month
   const appointmentsByDay: Record<number, AppointmentData[]> = {};
   appointments.forEach((appt) => {
@@ -635,6 +818,17 @@ export default function App() {
       const day = d.getDate();
       if (!appointmentsByDay[day]) appointmentsByDay[day] = [];
       appointmentsByDay[day].push(appt);
+    }
+  });
+
+  // Build programmes map grouped by day for the current calendar month
+  const programmesByDay: Record<number, ProgrammeData[]> = {};
+  programmes.forEach((p) => {
+    const d = new Date(`${p.date}T00:00:00`);
+    if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
+      const day = d.getDate();
+      if (!programmesByDay[day]) programmesByDay[day] = [];
+      programmesByDay[day].push(p);
     }
   });
 
@@ -672,8 +866,8 @@ export default function App() {
   // New Mission form state
   const [newMissionTitle, setNewMissionTitle] = useState('');
   const [newMissionClient, setNewMissionClient] = useState('');
-  const [newMissionDept, setNewMissionDept] = useState<'Audit Légal' | 'Conseil' | 'Comptabilité' | 'Juridique' | 'Fiscalité'>('Audit Légal');
-  const [newMissionStatus, setNewMissionStatus] = useState('EN PRÉPARATION');
+  const [newMissionDept, setNewMissionDept] = useState<'Audit LÃ©gal' | 'Conseil' | 'ComptabilitÃ©' | 'Juridique' | 'FiscalitÃ©'>('Audit LÃ©gal');
+  const [newMissionStatus, setNewMissionStatus] = useState('EN PRÃ‰PARATION');
   const [newMissionProg, setNewMissionProg] = useState(10);
 
   // Notifications alerts
@@ -728,6 +922,13 @@ export default function App() {
   const activeMissionsCount = missions.length + 21; // Mock constant added to make it matches the original "24"
   const unreadMessagesCount = messages.filter((m) => m.isUnread && m.sender !== 'Rezgui Mihoub' && !m.parentId).length;
 
+  // BoÃ®te de rÃ©ception Messages (hors messages archivÃ©s)
+  const clientInboxMessages = messages.filter(m => m.sender !== 'Rezgui Mihoub' && !m.parentId && !m.archived);
+  const newMessagesCount = clientInboxMessages.filter(m => m.status === 'new' || m.isUnread).length;
+  const filteredMessages = messageFilter === 'all' ? clientInboxMessages
+    : messageFilter === 'unread' ? clientInboxMessages.filter(m => m.isUnread)
+    : clientInboxMessages.filter(m => m.status === messageFilter);
+
   // Handle Nouvelle Mission
   const handleCreateMission = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -751,15 +952,15 @@ export default function App() {
       const newM = await res.json();
       setMissions([{ ...newM, id: newM._id }, ...missions]);
       setIsNewMissionOpen(false);
-      addToast(`Mission "${newMissionTitle}" créée avec succès !`);
+      addToast(`Mission "${newMissionTitle}" crÃ©Ã©e avec succÃ¨s !`);
     } catch (err) {
-      addToast('Erreur lors de la création de la mission.', 'info');
+      addToast('Erreur lors de la crÃ©ation de la mission.', 'info');
     }
 
     setNewMissionTitle('');
     setNewMissionClient('');
-    setNewMissionDept('Audit Légal');
-    setNewMissionStatus('EN PRÉPARATION');
+    setNewMissionDept('Audit LÃ©gal');
+    setNewMissionStatus('EN PRÃ‰PARATION');
     setNewMissionProg(10);
   };
 
@@ -771,7 +972,113 @@ export default function App() {
       console.error('Failed to delete message:', err);
     }
     setMessages((prev) => prev.filter((m) => m.id !== id));
-    addToast(`Message de ${senderName} supprimé.`, 'info');
+    addToast(`Message de ${senderName} supprimÃ©.`, 'info');
+  };
+
+  // Archiver un message (retirÃ© de la boÃ®te de rÃ©ception, sans suppression)
+  const archiveMessage = async (msg: Message) => {
+    try {
+      await fetch(`${API_URL}/messages/${msg.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: true }),
+      }).catch(() => {});
+    } catch { /* ignore */ }
+    setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+    addToast(`Message de ${msg.sender} archivÃ©.`, 'info');
+  };
+
+  // Mettre Ã  jour le statut d'un message (nouveau / en cours / traitÃ©)
+  const setMessageStatus = async (msg: Message, status: 'new' | 'processing' | 'done') => {
+    const isUnread = status === 'new';
+    try {
+      await fetch(`${API_URL}/messages/${msg.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, isUnread }),
+      }).catch(() => {});
+    } catch { /* ignore */ }
+    setMessages(prev => prev.map(m => (m.id === msg.id ? { ...m, status, isUnread } : m)));
+    if (activeMessageDetail?.id === msg.id) {
+      setActiveMessageDetail({ ...activeMessageDetail, status, isUnread });
+    }
+    addToast(
+      status === 'done'
+        ? 'Message marquÃ© comme traitÃ©.'
+        : status === 'processing'
+        ? 'Message marquÃ© en cours de traitement.'
+        : 'Message remis comme nouveau.',
+      'info'
+    );
+  };
+
+  // Messages inbox handlers
+  const openMessageDetail = (msg: Message) => {
+    setActiveMessageDetail(msg);
+    setMessageDetailOpen(true);
+  };
+
+  const openMessageDetailWithReply = (msg: Message) => {
+    openReplyModal(msg);
+    setMessageDetailOpen(false);
+  };
+
+  // Appointment creation handlers (Planifier un rendez-vous)
+  const addMinutes = (time: string, mins: number): string => {
+    const [h, m] = time.split(':').map(Number);
+    const total = (h || 0) * 60 + (m || 0) + mins;
+    const nh = Math.floor(total / 60) % 24;
+    const nm = total % 60;
+    return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
+  };
+
+  const openNewAppointment = (prefill?: Message) => {
+    const parts = prefill ? parseMessageParts(prefill) : { subject: '', email: '', body: '' };
+    setNewApptClient(prefill ? prefill.sender : '');
+    setNewApptEmail(parts.email);
+    setNewApptService(parts.subject === 'Demande de contact' ? '' : parts.subject);
+    setNewApptDate(new Date().toISOString().split('T')[0]);
+    setNewApptTime('09:00');
+    setNewApptDuration('30');
+    setNewApptNotes(parts.body || '');
+    setAppointmentModalOpen(true);
+  };
+
+  const handleSaveAppointment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newApptClient.trim() || !newApptEmail.trim() || !newApptDate || !newApptTime) {
+      addToast('Veuillez renseigner le client, l\'email, la date et l\'heure.', 'info');
+      return;
+    }
+    const duration = Math.max(15, Math.min(240, Number(newApptDuration) || 30));
+    const timeSlot = `${newApptTime} - ${addMinutes(newApptTime, duration)}`;
+    try {
+      const res = await fetch(`${API_URL}/appointments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientName: newApptClient.trim(),
+          email: newApptEmail.trim(),
+          subject: newApptService.trim(),
+          date: newApptDate,
+          timeSlot,
+          duration: String(duration),
+          details: newApptNotes.trim(),
+          status: 'pending',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        addToast(err.message || 'Erreur lors de la crÃ©ation.', 'info');
+        return;
+      }
+      const created = await res.json();
+      setAppointments(prev => [created, ...prev]);
+      addToast(`Rendez-vous avec ${newApptClient.trim()} planifiÃ©.`);
+      setAppointmentModalOpen(false);
+    } catch {
+      addToast('Erreur lors de l\'enregistrement.', 'error');
+    }
   };
 
   // Open Reply Modal
@@ -808,7 +1115,7 @@ export default function App() {
 
     const replyData = {
       sender: 'Rezgui Mihoub',
-      role: 'Expert-Comptable | Associé Gérant',
+      role: 'Expert-Comptable | AssociÃ© GÃ©rant',
       initials: 'MA',
       time: timeStr,
       content: replyText.trim(),
@@ -824,28 +1131,28 @@ export default function App() {
       });
       const saved = await res.json();
       setMessages((prev) => [{ ...saved, id: saved._id }, ...prev]);
-      addToast(`Réponse envoyée à ${activeReplyMessage.sender}.`);
+      addToast(`RÃ©ponse envoyÃ©e Ã  ${activeReplyMessage.sender}.`);
     } catch {
-      addToast(`Réponse envoyée à ${activeReplyMessage.sender}.`);
+      addToast(`RÃ©ponse envoyÃ©e Ã  ${activeReplyMessage.sender}.`);
     }
 
     // Send email to client
     if (clientEmail) {
-      const subject = originalMsg?.content?.match(/\[(.+?)\]/)?.[1] || 'Réponse RM Consulting';
+      const subject = originalMsg?.content?.match(/\[(.+?)\]/)?.[1] || 'RÃ©ponse RM Consulting';
       try {
         await fetch(`${API_URL}/send-email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             to: clientEmail,
-            subject: `Re: ${subject} — RM Consulting`,
+            subject: `Re: ${subject} â€” RM Consulting`,
             text: replyText.trim(),
             senderName: 'Rezgui Mihoub',
           })
         });
-        addToast(`Email envoyé à ${clientEmail}`);
+        addToast(`Email envoyÃ© Ã  ${clientEmail}`);
       } catch {
-        addToast('Email non envoyé (vérifiez la configuration SMTP)', 'info');
+        addToast('Email non envoyÃ© (vÃ©rifiez la configuration SMTP)', 'info');
       }
     }
 
@@ -864,7 +1171,7 @@ export default function App() {
     e.preventDefault();
     if (!deptContactMessage.trim() || !selectedDeptForContact) return;
 
-    addToast(`Message transmis à ${selectedDeptForContact.head.split(' (')[0]} avec succès.`);
+    addToast(`Message transmis Ã  ${selectedDeptForContact.head.split(' (')[0]} avec succÃ¨s.`);
     setIsDeptContactOpen(false);
 
     const senderName = selectedDeptForContact.head.split(' (')[0];
@@ -877,9 +1184,10 @@ export default function App() {
         sender: senderName,
         role: `Responsable - ${selectedDeptForContact.name}`,
         initials: initials,
-        time: 'À l\'instant',
-        content: `Bonjour, j'ai bien reçu votre demande concernant le pôle "${selectedDeptForContact.name}". Je l'étudie dès à présent et reviens vers vous très vite.`,
-        isUnread: true
+        time: 'Ã€ l\'instant',
+        content: `Bonjour, j'ai bien reÃ§u votre demande concernant le pÃ´le "${selectedDeptForContact.name}". Je l'Ã©tudie dÃ¨s Ã  prÃ©sent et reviens vers vous trÃ¨s vite.`,
+        isUnread: true,
+        status: 'new'
       };
 
       try {
@@ -936,7 +1244,7 @@ export default function App() {
       console.error('Failed to delete department:', err);
     }
     setDepartments(prev => prev.filter(d => d.id !== deptId));
-    addToast(`Le département "${deptToDelete.name}" a été supprimé.`, 'info');
+    addToast(`Le dÃ©partement "${deptToDelete.name}" a Ã©tÃ© supprimÃ©.`, 'info');
   };
 
   // References CRUD handlers
@@ -966,7 +1274,7 @@ export default function App() {
     try {
       await fetch(`${API_URL}/references/${refId}`, { method: 'DELETE' });
       setReferences(prev => prev.filter(r => r._id !== refId));
-      addToast(`"${refToDelete.name}" a été supprimé.`, 'info');
+      addToast(`"${refToDelete.name}" a Ã©tÃ© supprimÃ©.`, 'info');
     } catch {
       addToast('Erreur lors de la suppression.', 'error');
     }
@@ -1001,7 +1309,7 @@ export default function App() {
         }
         const updated = await res.json();
         setReferences(prev => prev.map(r => r._id === editingRef._id ? updated : r));
-        addToast('Référence modifiée.', 'info');
+        addToast('RÃ©fÃ©rence modifiÃ©e.', 'info');
       } else {
         const res = await fetch(`${API_URL}/references`, {
           method: 'POST',
@@ -1013,7 +1321,7 @@ export default function App() {
         }
         const created = await res.json();
         setReferences(prev => [...prev, created]);
-        addToast('Référence ajoutée.', 'info');
+        addToast('RÃ©fÃ©rence ajoutÃ©e.', 'info');
       }
       setIsRefModalOpen(false);
     } catch {
@@ -1042,7 +1350,7 @@ export default function App() {
     try {
       await fetch(`${API_URL}/parameters/${paramId}`, { method: 'DELETE' });
       setParameters(prev => prev.filter(p => p._id !== paramId));
-      addToast(`"${paramToDelete.key}" supprimé.`, 'info');
+      addToast(`"${paramToDelete.key}" supprimÃ©.`, 'info');
     } catch {
       addToast('Erreur lors de la suppression.', 'info');
     }
@@ -1064,7 +1372,7 @@ export default function App() {
         if (!res.ok) { addToast('Erreur lors de la modification.', 'info'); return; }
         const updated = await res.json();
         setParameters(prev => prev.map(p => p._id === editingParam._id ? updated : p));
-        addToast('Paramètre modifié.', 'info');
+        addToast('ParamÃ¨tre modifiÃ©.', 'info');
       } else {
         const res = await fetch(`${API_URL}/parameters`, {
           method: 'POST',
@@ -1074,7 +1382,7 @@ export default function App() {
         if (!res.ok) { addToast('Erreur lors de l\'ajout.', 'info'); return; }
         const created = await res.json();
         setParameters(prev => [...prev, created]);
-        addToast('Paramètre ajouté.', 'info');
+        addToast('ParamÃ¨tre ajoutÃ©.', 'info');
       }
       setIsParamModalOpen(false);
     } catch {
@@ -1116,14 +1424,14 @@ export default function App() {
         });
         if (!res.ok) {
           const err = await res.json();
-          addToast(err.message || 'Erreur lors de la modification du département.', 'info');
+          addToast(err.message || 'Erreur lors de la modification du dÃ©partement.', 'info');
           return;
         }
         const updated = await res.json();
         setDepartments(prev =>
           prev.map(d => d.id === editingDept.id ? { ...updated, id: updated._id } : d)
         );
-        addToast(`Le département "${deptName}" a été modifié avec succès.`);
+        addToast(`Le dÃ©partement "${deptName}" a Ã©tÃ© modifiÃ© avec succÃ¨s.`);
       } else {
         const res = await fetch(`${API_URL}/departments`, {
           method: 'POST',
@@ -1131,15 +1439,15 @@ export default function App() {
         });
         if (!res.ok) {
           const err = await res.json();
-          addToast(err.message || 'Erreur lors de la création du département.', 'info');
+          addToast(err.message || 'Erreur lors de la crÃ©ation du dÃ©partement.', 'info');
           return;
         }
         const created = await res.json();
         setDepartments(prev => [...prev, { ...created, id: created._id }]);
-        addToast(`Le département "${deptName}" a été créé avec succès.`);
+        addToast(`Le dÃ©partement "${deptName}" a Ã©tÃ© crÃ©Ã© avec succÃ¨s.`);
       }
     } catch (err) {
-      addToast('Erreur lors de la sauvegarde du département.', 'info');
+      addToast('Erreur lors de la sauvegarde du dÃ©partement.', 'info');
     }
 
     setIsDeptModalOpen(false);
@@ -1158,7 +1466,7 @@ export default function App() {
   const acceptedCandidates = jobApps.filter((a: any) => a.status === 'accepted').length;
   const rejectedCandidates = jobApps.filter((a: any) => a.status === 'rejected').length;
 
-  // Filtered candidates (recherche + poste + expérience)
+  // Filtered candidates (recherche + poste + expÃ©rience)
   const filteredApps = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return jobApps.filter((a: any) => {
@@ -1171,7 +1479,7 @@ export default function App() {
 
       const matchesRole = roleFilter === 'Tous les postes' || a.position === roleFilter;
 
-      // Filtre par offre d'emploi (offre liée ou candidature spontanée)
+      // Filtre par offre d'emploi (offre liÃ©e ou candidature spontanÃ©e)
       const appOfferId = a.jobOffer?._id || a.jobOffer || null;
       const matchesOffer =
         offerFilter === 'Toutes les offres' ||
@@ -1208,30 +1516,30 @@ export default function App() {
     [offers, jobApps]
   );
 
-  // Export Excel (.xlsx) de la liste des candidats filtrés (respecte recherche + filtres actifs)
+  // Export Excel (.xlsx) de la liste des candidats filtrÃ©s (respecte recherche + filtres actifs)
   const exportCandidatesXLSX = () => {
     if (filteredApps.length === 0) {
-      addToast('Aucun candidat à exporter', 'info');
+      addToast('Aucun candidat Ã  exporter', 'info');
       return;
     }
 
     const rows = filteredApps.map((app: any) => ({
       'Nom complet': `${app.firstName || ''} ${app.lastName || ''}`,
       'Email': app.email || '',
-      'Téléphone': app.phone || '',
+      'TÃ©lÃ©phone': app.phone || '',
       'Poste': app.position || '',
-      'Offre liée': app.jobOffer?.title || '',
+      'Offre liÃ©e': app.jobOffer?.title || '',
       'Date de naissance': app.dateOfBirth || '',
       'Sexe': app.gender || '',
-      'Nationalité': app.nationality || '',
+      'NationalitÃ©': app.nationality || '',
       'Ville': app.city || app.address || '',
-      'Expérience': app.experience || '',
-      'Études & Diplômes': app.education || '',
-      'Diplôme': app.diploma || '',
-      'Dernier poste occupé': app.lastPosition || '',
-      'Disponibilité': app.availability || '',
-      'Connaît le cabinet via': app.source || '',
-      'Date de dépôt': new Date(app.createdAt).toLocaleDateString('fr-FR'),
+      'ExpÃ©rience': app.experience || '',
+      'Ã‰tudes & DiplÃ´mes': app.education || '',
+      'DiplÃ´me': app.diploma || '',
+      'Dernier poste occupÃ©': app.lastPosition || '',
+      'DisponibilitÃ©': app.availability || '',
+      'ConnaÃ®t le cabinet via': app.source || '',
+      'Date de dÃ©pÃ´t': new Date(app.createdAt).toLocaleDateString('fr-FR'),
       'Statut': candidateStatusInfo(app.status).label,
       'Date de prise de poste': app.startDate
         ? `${new Date(`${app.startDate}T00:00:00`).toLocaleDateString('fr-FR')}${app.startTime ? ` ${formatTimeAmPm(app.startTime)}` : ''}`
@@ -1248,10 +1556,10 @@ export default function App() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Candidats');
     XLSX.writeFile(wb, `candidatures_${new Date().toISOString().split('T')[0]}.xlsx`);
-    addToast(`${filteredApps.length} candidat${filteredApps.length > 1 ? 's' : ''} exporté${filteredApps.length > 1 ? 's' : ''} (Excel)`);
+    addToast(`${filteredApps.length} candidat${filteredApps.length > 1 ? 's' : ''} exportÃ©${filteredApps.length > 1 ? 's' : ''} (Excel)`);
   };
 
-  // URL sécurisée de téléchargement d'une pièce jointe
+  // URL sÃ©curisÃ©e de tÃ©lÃ©chargement d'une piÃ¨ce jointe
   const attachmentDownloadUrl = (app: any, att: any): string =>
     att._id
       ? `${API_URL}/job-applications/${app._id}/attachments/${att._id}?token=${encodeURIComponent(safeGetToken() || '')}`
@@ -1265,7 +1573,7 @@ export default function App() {
         const restored = archivedApps.find((a: any) => a._id === appId);
         setArchivedApps((prev: any[]) => prev.filter((a: any) => a._id !== appId));
         if (restored) setJobApps((prev: any[]) => [restored, ...prev]);
-        addToast('Candidature restaurée');
+        addToast('Candidature restaurÃ©e');
       } else {
         addToast('Erreur lors de la restauration', 'info');
       }
@@ -1274,14 +1582,14 @@ export default function App() {
     }
   };
 
-  // Ouverture de la confirmation : archivage (actifs) ou suppression définitive (corbeille)
+  // Ouverture de la confirmation : archivage (actifs) ou suppression dÃ©finitive (corbeille)
   const openDeleteConfirm = (appId: string, mode: 'archive' | 'permanent') => {
     setAppToDelete(appId);
     setDeleteMode(mode);
     setIsDeleteConfirmOpen(true);
   };
 
-  // Invitation à un entretien (statut -> interview)
+  // Invitation Ã  un entretien (statut -> interview)
   const handleInviteInterview = async (app: any) => {
     if (!app) return;
     try {
@@ -1293,14 +1601,14 @@ export default function App() {
         const updated = await res.json();
         setJobApps((prev: any[]) => prev.map((a: any) => (a._id === app._id ? updated : a)));
         if (selectedApp?._id === app._id) setSelectedApp(updated);
-        addToast(`Invitation envoyée à ${app.firstName} ${app.lastName}`);
+        addToast(`Invitation envoyÃ©e Ã  ${app.firstName} ${app.lastName}`);
       }
     } catch {
       addToast('Erreur lors de l\'envoi de l\'invitation', 'info');
     }
   };
 
-  // Pré-remplir le formulaire de planification avec les données déjà enregistrées
+  // PrÃ©-remplir le formulaire de planification avec les donnÃ©es dÃ©jÃ  enregistrÃ©es
   useEffect(() => {
     if (!selectedApp) return;
     setInterviewDate(selectedApp.interview?.date || '');
@@ -1325,7 +1633,7 @@ export default function App() {
       return;
     }
     if (interviewType === 'en_ligne' && !interviewLink.trim()) {
-      addToast('Le lien de la réunion est obligatoire.', 'info');
+      addToast('Le lien de la rÃ©union est obligatoire.', 'info');
       return;
     }
 
@@ -1350,8 +1658,8 @@ export default function App() {
         setSelectedApp(updated);
         addToast(
           sendInterviewEmail
-            ? `Entretien planifié et convocation envoyée à ${selectedApp.firstName} ${selectedApp.lastName}`
-            : `Entretien planifié pour ${selectedApp.firstName} ${selectedApp.lastName}`
+            ? `Entretien planifiÃ© et convocation envoyÃ©e Ã  ${selectedApp.firstName} ${selectedApp.lastName}`
+            : `Entretien planifiÃ© pour ${selectedApp.firstName} ${selectedApp.lastName}`
         );
       } else {
         const err = await res.json().catch(() => ({}));
@@ -1366,7 +1674,7 @@ export default function App() {
 
   // ----- Gestion des Offres d'Emploi -----
 
-  // Nombre de candidatures reçues par offre (hors corbeille)
+  // Nombre de candidatures reÃ§ues par offre (hors corbeille)
   const offerCandidatesCount = useMemo(() => {
     const counts: Record<string, number> = {};
     jobApps.forEach((a: any) => {
@@ -1376,7 +1684,7 @@ export default function App() {
     return counts;
   }, [jobApps]);
 
-  // Offres filtrées (recherche + département + contrat + statut)
+  // Offres filtrÃ©es (recherche + dÃ©partement + contrat + statut)
   const filteredOffers = useMemo(() => {
     const q = offerSearch.toLowerCase().trim();
     return offers.filter((o) => {
@@ -1385,7 +1693,7 @@ export default function App() {
         o.title.toLowerCase().includes(q) ||
         (o.location || '').toLowerCase().includes(q) ||
         (o.description || '').toLowerCase().includes(q);
-      const matchesDept = offerDeptFilter === 'Tous les départements' || o.department === offerDeptFilter;
+      const matchesDept = offerDeptFilter === 'Tous les dÃ©partements' || o.department === offerDeptFilter;
       const matchesContract = offerContractFilter === 'Tous les contrats' || o.contractType === offerContractFilter;
       const matchesStatus = offerStatusFilter === 'Tous les statuts' || o.status === offerStatusFilter;
       return matchesSearch && matchesDept && matchesContract && matchesStatus;
@@ -1458,14 +1766,14 @@ export default function App() {
     e.preventDefault();
     const errs: Record<string, string> = {};
     if (!offerTitle.trim()) errs.title = 'Le titre est requis';
-    if (!offerDepartment.trim()) errs.department = 'Le département est requis';
+    if (!offerDepartment.trim()) errs.department = 'Le dÃ©partement est requis';
     if (!offerContractType.trim()) errs.contract = 'Le type de contrat est requis';
     if (!offerLocation.trim()) errs.location = 'La localisation est requise';
     if (!offerDescription.trim()) errs.description = 'La description est requise';
-    if (textToList(offerSkillsText).length === 0) errs.skills = 'Au moins une compétence est requise';
+    if (textToList(offerSkillsText).length === 0) errs.skills = 'Au moins une compÃ©tence est requise';
     setOfferFormErrors(errs);
     if (Object.keys(errs).length > 0) {
-      addToast('Veuillez corriger les champs signalés.', 'info');
+      addToast('Veuillez corriger les champs signalÃ©s.', 'info');
       return;
     }
 
@@ -1507,10 +1815,10 @@ export default function App() {
       if (editingOffer) {
         setOffers((prev) => prev.map((o) => (o._id === saved._id ? saved : o)));
         if (selectedOffer?._id === saved._id) setSelectedOffer(saved);
-        addToast(`Offre "${saved.title}" mise à jour`);
+        addToast(`Offre "${saved.title}" mise Ã  jour`);
       } else {
         setOffers((prev) => [saved, ...prev]);
-        addToast(`Offre "${saved.title}" créée`);
+        addToast(`Offre "${saved.title}" crÃ©Ã©e`);
       }
       setIsOfferModalOpen(false);
       resetOfferForm();
@@ -1538,7 +1846,7 @@ export default function App() {
       if (res.ok) {
         const saved = await res.json();
         setOffers((prev) => [saved, ...prev]);
-        addToast(`Offre dupliquée : "${saved.title}"`);
+        addToast(`Offre dupliquÃ©e : "${saved.title}"`);
       } else {
         addToast('Erreur lors de la duplication', 'error');
       }
@@ -1547,7 +1855,7 @@ export default function App() {
     }
   };
 
-  // Activer / désactiver une offre (publiée <-> fermée)
+  // Activer / dÃ©sactiver une offre (publiÃ©e <-> fermÃ©e)
   const handleToggleOffer = async (offer: JobOffer) => {
     try {
       const res = await authedFetch(`${API_URL}/job-offers/${offer._id}/toggle`, { method: 'PATCH' });
@@ -1557,14 +1865,14 @@ export default function App() {
         if (selectedOffer?._id === updated._id) setSelectedOffer(updated);
         addToast(
           updated.status === 'published'
-            ? `Offre "${updated.title}" publiée (visible sur le site)`
-            : `Offre "${updated.title}" désactivée`
+            ? `Offre "${updated.title}" publiÃ©e (visible sur le site)`
+            : `Offre "${updated.title}" dÃ©sactivÃ©e`
         );
       } else {
-        addToast('Erreur lors de la mise à jour', 'error');
+        addToast('Erreur lors de la mise Ã  jour', 'error');
       }
     } catch {
-      addToast('Erreur lors de la mise à jour', 'error');
+      addToast('Erreur lors de la mise Ã  jour', 'error');
     }
   };
 
@@ -1575,7 +1883,7 @@ export default function App() {
       if (res.ok) {
         setOffers((prev) => prev.filter((o) => o._id !== offerToDelete._id));
         if (selectedOffer?._id === offerToDelete._id) setSelectedOffer(null);
-        addToast(`Offre "${offerToDelete.title}" supprimée`);
+        addToast(`Offre "${offerToDelete.title}" supprimÃ©e`);
       } else {
         addToast('Erreur lors de la suppression', 'error');
       }
@@ -1591,7 +1899,7 @@ export default function App() {
       <div className="min-h-screen bg-[#f9f9f9] flex items-center justify-center">
         <div className="text-center space-y-3">
           <div className="w-10 h-10 border-4 border-[#6c0042] border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-[#554249]">Vérification de l'authentification...</p>
+          <p className="text-sm text-[#554249]">VÃ©rification de l'authentification...</p>
         </div>
       </div>
     );
@@ -1659,7 +1967,7 @@ export default function App() {
             }`}
           >
             <Building2 className="w-5 h-5" />
-            <span className="text-sm">Départements</span>
+            <span className="text-sm">DÃ©partements</span>
           </button>
 
           {/* NOTE: "Documents" and "Missions" have been strictly removed per user request. */}
@@ -1691,6 +1999,23 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setActiveTab('messages')}
+            className={`w-full flex items-center gap-3 p-3 rounded-lg font-medium transition-all duration-150 ${
+              activeTab === 'messages'
+                ? 'sidebar-active text-white'
+                : 'text-on-surface-variant hover:bg-secondary-container/20 hover:text-secondary'
+            }`}
+          >
+            <Mail className="w-5 h-5" />
+            <span className="text-sm">Messages</span>
+            {unreadMessagesCount > 0 && (
+              <span className="ml-auto px-1.5 py-0.5 bg-error text-white text-[9px] font-bold rounded-full">
+                {unreadMessagesCount}
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab('recruitment')}
             className={`w-full flex items-center gap-3 p-3 rounded-lg font-medium transition-all duration-150 ${
               activeTab === 'recruitment'
@@ -1711,7 +2036,7 @@ export default function App() {
             }`}
           >
             <ClipboardList className="w-5 h-5" />
-            <span className="text-sm">Nos Références</span>
+            <span className="text-sm">Nos RÃ©fÃ©rences</span>
           </button>
 
           {/* NOTE: "Reporting" has been strictly removed per user request. */}
@@ -1725,7 +2050,7 @@ export default function App() {
             }`}
           >
             <Settings className="w-5 h-5" />
-            <span className="text-sm">Paramètres</span>
+            <span className="text-sm">ParamÃ¨tres</span>
           </button>
         </nav>
 
@@ -1737,7 +2062,7 @@ export default function App() {
             className="w-full text-left text-on-surface-variant hover:text-error flex items-center gap-3 p-2 rounded-lg text-sm transition-colors cursor-pointer"
           >
             <LogOut className="w-5 h-5 text-on-surface-variant" />
-            <span>Déconnexion</span>
+            <span>DÃ©connexion</span>
           </button>
         </div>
       </aside>
@@ -1749,7 +2074,7 @@ export default function App() {
         <header className="sticky top-0 bg-surface/95 backdrop-blur-md border-b border-secondary/20 h-16 flex items-center justify-between px-8 z-30 shadow-sm">
           <div>
             <h2 className="font-headline text-lg font-semibold text-on-surface">Bonjour, Rezgui</h2>
-            <p className="text-[11px] text-on-surface-variant">Voici le récapitulatif de RM Consulting pour aujourd'hui.</p>
+            <p className="text-[11px] text-on-surface-variant">Voici le rÃ©capitulatif de RM Consulting pour aujourd'hui.</p>
           </div>
 
           <div className="flex items-center gap-6">
@@ -1826,7 +2151,7 @@ export default function App() {
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
                 <p className="text-xs font-semibold text-on-surface">R. Mihoub</p>
-                <p className="text-[10px] text-on-surface-variant">Expert-Comptable | Associé Gérant</p>
+                <p className="text-[10px] text-on-surface-variant">Expert-Comptable | AssociÃ© GÃ©rant</p>
               </div>
               <img
                 className="w-10 h-10 rounded-full object-cover border-2 border-primary/20"
@@ -1865,7 +2190,7 @@ export default function App() {
                     <p className="text-on-surface-variant text-[13px] font-medium">Nouveaux Messages</p>
                     <h3 className="font-headline text-2xl font-bold text-on-surface">{messages.length}</h3>
                     <p className="mt-4 text-[12px] text-on-surface-variant italic">
-                      {unreadMessagesCount} non lus à traiter
+                      {unreadMessagesCount} non lus Ã  traiter
                     </p>
                   </div>
 
@@ -1883,7 +2208,7 @@ export default function App() {
                     <p className="text-on-surface-variant text-[13px] font-medium">Dates Disponibles</p>
                     <h3 className="font-headline text-2xl font-bold text-emerald-600">{availableDatesList.length}</h3>
                     <p className="mt-4 text-[12px] text-on-surface-variant italic">
-                      {availableDatesList.length > 0 ? `${availableDatesList.length} date(s) ouverte(s) aux réservations` : 'Aucune date programmée'}
+                      {availableDatesList.length > 0 ? `${availableDatesList.length} date(s) ouverte(s) aux rÃ©servations` : 'Aucune date programmÃ©e'}
                     </p>
                   </div>
 
@@ -1904,12 +2229,12 @@ export default function App() {
                       <div className="bg-secondary h-full" style={{ width: `${appointments.length > 0 ? Math.round((appointments.filter(a => a.status === 'confirmed').length / appointments.length) * 100) : 0}%` }}></div>
                     </div>
                     <p className="mt-2 text-[11px] text-on-surface-variant flex justify-between">
-                      <span>Capacité traitée</span>
+                      <span>CapacitÃ© traitÃ©e</span>
                       <span>{appointments.length > 0 ? Math.round((appointments.filter(a => a.status === 'confirmed').length / appointments.length) * 100) : 0}%</span>
                     </p>
                   </div>
 
-                  {/* Card 4: Offres publiées */}
+                  {/* Card 4: Offres publiÃ©es */}
                   <div className="glass-card p-5 rounded-xl">
                     <div className="flex justify-between items-start mb-4">
                       <div className="p-2 bg-primary/10 rounded-lg">
@@ -1919,17 +2244,17 @@ export default function App() {
                         onClick={() => setActiveTab('offers')}
                         className="text-[9px] font-bold text-primary bg-primary/5 hover:bg-primary/10 px-2 py-1 rounded-full transition-colors cursor-pointer"
                       >
-                        GÉRER
+                        GÃ‰RER
                       </button>
                     </div>
-                    <p className="text-on-surface-variant text-[13px] font-medium">Offres publiées</p>
+                    <p className="text-on-surface-variant text-[13px] font-medium">Offres publiÃ©es</p>
                     <h3 className="font-headline text-2xl font-bold text-primary">{offerStats.published}</h3>
                     <p className="mt-4 text-[12px] text-on-surface-variant italic">
-                      {offerStats.drafts} brouillon{offerStats.drafts > 1 ? 's' : ''} · {offerStats.closed} fermée{offerStats.closed > 1 ? 's' : ''}
+                      {offerStats.drafts} brouillon{offerStats.drafts > 1 ? 's' : ''} Â· {offerStats.closed} fermÃ©e{offerStats.closed > 1 ? 's' : ''}
                     </p>
                   </div>
 
-                  {/* Card 5: Candidatures reçues */}
+                  {/* Card 5: Candidatures reÃ§ues */}
                   <div className="glass-card p-5 rounded-xl">
                     <div className="flex justify-between items-start mb-4">
                       <div className="p-2 bg-amber-100 rounded-lg">
@@ -1942,14 +2267,14 @@ export default function App() {
                         VOIR
                       </button>
                     </div>
-                    <p className="text-on-surface-variant text-[13px] font-medium">Candidatures reçues</p>
+                    <p className="text-on-surface-variant text-[13px] font-medium">Candidatures reÃ§ues</p>
                     <h3 className="font-headline text-2xl font-bold text-on-surface">{offerStats.totalCandidatures}</h3>
                     <p className="mt-4 text-[12px] text-on-surface-variant italic">
                       {pendingCandidates} en attente de traitement
                     </p>
                   </div>
 
-                  {/* Card 6: Offre la plus sollicitée */}
+                  {/* Card 6: Offre la plus sollicitÃ©e */}
                   <div className="glass-card p-5 rounded-xl">
                     <div className="flex justify-between items-start mb-4">
                       <div className="p-2 bg-emerald-100 rounded-lg">
@@ -1957,7 +2282,7 @@ export default function App() {
                       </div>
                       <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">TOP OFFRE</span>
                     </div>
-                    <p className="text-on-surface-variant text-[13px] font-medium">Offre la plus sollicitée</p>
+                    <p className="text-on-surface-variant text-[13px] font-medium">Offre la plus sollicitÃ©e</p>
                     {offerStats.topOffer ? (
                       <>
                         <h3 className="font-headline text-lg font-bold text-on-surface mt-0.5 leading-snug">
@@ -1969,8 +2294,8 @@ export default function App() {
                       </>
                     ) : (
                       <>
-                        <h3 className="font-headline text-xl font-bold text-on-surface-variant/60 mt-1">—</h3>
-                        <p className="mt-3 text-[12px] text-on-surface-variant italic">Aucune candidature reçue</p>
+                        <h3 className="font-headline text-xl font-bold text-on-surface-variant/60 mt-1">â€”</h3>
+                        <p className="mt-3 text-[12px] text-on-surface-variant italic">Aucune candidature reÃ§ue</p>
                       </>
                     )}
                   </div>
@@ -1978,85 +2303,18 @@ export default function App() {
 
                 {/* Dashboard Widgets Row */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Messages Section */}
-                  <div className="glass-card rounded-xl flex flex-col">
-                    <div className="p-6 border-b border-secondary/10">
-                      <h4 className="font-headline text-base font-bold text-on-surface">Derniers Messages</h4>
-                    </div>
-
-                    <div className="flex-1 p-4 space-y-4 overflow-y-auto max-h-[350px] custom-scrollbar">
-                      <AnimatePresence initial={false}>
-                        {(() => {
-                          const clientMessages = messages.filter(m => m.sender !== 'Rezgui Mihoub' && !m.parentId).sort((a, b) => (a.isUnread === b.isUnread ? 0 : a.isUnread ? -1 : 1));
-                          return clientMessages.length === 0 ? (
-                            <div className="text-center py-8 text-sm text-on-surface-variant flex flex-col items-center gap-2">
-                              <MessageSquare className="w-8 h-8 text-on-surface-variant/30" />
-                              <span>Aucun message à traiter</span>
-                            </div>
-                          ) : (
-                            <>
-                            {clientMessages.map((msg) => (
-                            <motion.div
-                              key={msg.id}
-                              initial={{ opacity: 0, height: 0 }}
-                              animate={{ opacity: 1, height: 'auto' }}
-                              exit={{ opacity: 0, height: 0 }}
-                              className={`flex gap-3 p-3 rounded-lg transition-colors border ${msg.isUnread ? 'bg-surface-container-low/60 border-secondary/20' : 'bg-transparent border-transparent'} hover:bg-surface-container-low hover:border-secondary/10`}
-                            >
-                              {msg.avatarUrl ? (
-                                <img
-                                  className="w-10 h-10 rounded-full object-cover shrink-0 border border-secondary/10"
-                                  alt={msg.sender}
-                                  src={msg.avatarUrl}
-                                />
-                              ) : (
-                                <div className="w-10 h-10 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center font-bold text-sm shrink-0">
-                                  {msg.initials}
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex justify-between items-start">
-                                  <div>
-                                    <div className="flex items-center gap-1.5">
-                                      {msg.isUnread && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
-                                      <p className={`text-xs font-bold text-on-surface truncate ${msg.isUnread ? '' : 'opacity-70'}`}>{msg.sender}</p>
-                                    </div>
-                                    <p className="text-[9px] text-on-surface-variant">{msg.role}</p>
-                                  </div>
-                                  <span className="text-[10px] text-on-surface-variant">{msg.time}</span>
-                                </div>
-                                <p className="text-xs text-on-surface-variant line-clamp-2 mt-1 mb-2">
-                                  {msg.content}
-                                </p>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => openReplyModal(msg)}
-                                    className="px-2.5 py-1 bg-primary text-on-primary text-[10px] font-bold rounded hover:bg-primary/90 transition-colors cursor-pointer"
-                                  >
-                                    Répondre
-                                  </button>
-                <button
-                  onClick={() => handleArchiveMessage(msg.id, msg.sender)}
-                  className="px-2.5 py-1 border border-red-300 text-red-600 text-[10px] font-bold rounded hover:bg-red-50 transition-colors cursor-pointer"
-                >
-                  Supprimer
-                </button>
-                                </div>
-                              </div>
-                            </motion.div>
-                          ))}
-                          </>
-                          );
-                        })()}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-
                   {/* Appointment Calendar Widget */}
-                  <div className="glass-card rounded-xl p-6">
+                  <div className="glass-card rounded-xl p-6 lg:col-span-2">
                     <div className="flex justify-between items-center mb-6">
                       <h4 className="font-headline text-base font-bold text-on-surface">Calendrier des Rendez-vous</h4>
                       <div className="flex gap-2 items-center">
+                        <button
+                          onClick={openNewProgramme}
+                          className="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm hover:bg-orange-700 active:scale-95"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Programme
+                        </button>
                         <button
                           onClick={() => {
                             if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); }
@@ -2067,7 +2325,7 @@ export default function App() {
                           <ChevronLeft className="w-4 h-4 text-on-surface-variant" />
                         </button>
                         <span className="text-xs font-bold text-on-surface">
-                          {['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][calMonth]} {calYear}
+                          {['Janvier','FÃ©vrier','Mars','Avril','Mai','Juin','Juillet','AoÃ»t','Septembre','Octobre','Novembre','DÃ©cembre'][calMonth]} {calYear}
                         </span>
                         <button
                           onClick={() => {
@@ -2093,10 +2351,13 @@ export default function App() {
                         const day = i + 1;
                         const hasAppointments = appointmentsByDay[day] && appointmentsByDay[day].length > 0;
                         const isAvailableDate = availableDatesSetByDay.has(`${day}`);
+                        const hasProgrammes = programmesByDay[day] && programmesByDay[day].length > 0;
                         return (
                           <button
                             key={day}
-                            onClick={() => setSelectedDay(selectedDay === day ? null : day)}
+                            onClick={() => {
+                              setSelectedDay(selectedDay === day ? null : day);
+                            }}
                             className={`p-2 text-xs font-semibold rounded-lg relative cursor-pointer ${
                               selectedDay === day
                                 ? 'bg-primary text-white shadow-sm'
@@ -2106,17 +2367,18 @@ export default function App() {
                             }`}
                           >
                             {day}
-                            {isAvailableDate && selectedDay !== day && (
-                              <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-emerald-500 rounded-full" />
-                            )}
-                            {hasAppointments && !isAvailableDate && selectedDay !== day && (
-                              <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-secondary rounded-full" />
-                            )}
-                            {hasAppointments && isAvailableDate && selectedDay !== day && (
-                              <>
-                                <span className="absolute bottom-0.5 left-[calc(50%-4px)] w-1 h-1 bg-emerald-500 rounded-full" />
-                                <span className="absolute bottom-0.5 left-[calc(50%+2px)] w-1 h-1 bg-secondary rounded-full" />
-                              </>
+                            {selectedDay !== day && (
+                              <span className="absolute bottom-0.5 left-0 right-0 flex justify-center gap-[2px]">
+                                {isAvailableDate && (
+                                  <span className="w-1 h-1 bg-emerald-500 rounded-full" />
+                                )}
+                                {hasAppointments && (
+                                  <span className="w-1 h-1 bg-secondary rounded-full" />
+                                )}
+                                {hasProgrammes && (
+                                  <span className="w-1 h-1 bg-orange-500 rounded-full" />
+                                )}
+                              </span>
                             )}
                           </button>
                         );
@@ -2124,7 +2386,7 @@ export default function App() {
                     </div>
 
                     {/* Legend */}
-                    <div className="flex items-center justify-center gap-4 mb-4">
+                    <div className="flex items-center justify-center gap-4 mb-4 flex-wrap">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-emerald-500" />
                         <span className="text-[9px] text-on-surface-variant font-medium">Date disponible</span>
@@ -2133,47 +2395,101 @@ export default function App() {
                         <span className="w-2 h-2 rounded-full bg-secondary" />
                         <span className="text-[9px] text-on-surface-variant font-medium">Rendez-vous</span>
                       </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-purple-500" />
+                        <span className="text-[9px] text-on-surface-variant font-medium">Entretien</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-orange-500" />
+                        <span className="text-[9px] text-on-surface-variant font-medium">Programme</span>
+                      </div>
                     </div>
 
-                    <div className="space-y-3">
+                    <div className="space-y-2 max-h-[150px] overflow-y-auto custom-scrollbar pr-1">
                       <AnimatePresence mode="wait">
-                        {selectedDay && appointmentsByDay[selectedDay] ? (
-                          appointmentsByDay[selectedDay].map((appt) => (
-                            <motion.div
-                              key={appt._id}
-                              initial={{ opacity: 0, x: -10 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              exit={{ opacity: 0, x: 10 }}
-                              className={`flex items-center gap-4 p-3 rounded-lg border-l-4 ${
-                                appt.status === 'confirmed'
-                                  ? 'bg-emerald-50 border-emerald-500'
-                                  : appt.status === 'cancelled'
-                                  ? 'bg-gray-50 border-gray-400 opacity-60'
-                                  : 'bg-primary/5 border-primary'
-                              }`}
-                            >
-                              <div className="text-center shrink-0 min-w-12">
-                                <p className="text-[10px] font-bold text-primary uppercase">Jour {selectedDay}</p>
-                                <p className="font-bold text-sm text-on-surface">{appt.timeSlot}</p>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <p className="text-xs font-bold text-on-surface truncate">{appt.subject}</p>
-                                  <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
-                                    appt.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
-                                    appt.status === 'cancelled' ? 'bg-gray-100 text-gray-500' :
-                                    appt.status === 'rescheduled' ? 'bg-blue-100 text-blue-700' :
-                                    'bg-amber-100 text-amber-700'
-                                  }`}>
-                                    {appt.status === 'confirmed' ? 'CONFIRMÉ' : appt.status === 'cancelled' ? 'ANNULÉ' : appt.status === 'rescheduled' ? 'REPORTÉ' : 'EN ATTENTE'}
-                                  </span>
+                        {selectedDay && ((appointmentsByDay[selectedDay] && appointmentsByDay[selectedDay].length > 0) || (programmesByDay[selectedDay] && programmesByDay[selectedDay].length > 0)) ? (
+                          <>
+                            {(appointmentsByDay[selectedDay] || []).map((appt) => (
+                              <motion.div
+                                key={appt._id}
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 10 }}
+                                className={`flex items-center gap-3 px-2 py-1 rounded-lg border-l-4 ${
+                                  appt.status === 'confirmed'
+                                    ? 'bg-emerald-50 border-emerald-500'
+                                    : appt.status === 'cancelled'
+                                    ? 'bg-gray-50 border-gray-400 opacity-60'
+                                    : 'bg-primary/5 border-primary'
+                                }`}
+                              >
+                                <div className="text-center shrink-0 min-w-12">
+                                  <p className="text-[9px] font-bold text-primary uppercase">Jour {selectedDay}</p>
+                                  <p className="font-bold text-xs text-on-surface">{appt.timeSlot}</p>
                                 </div>
-                                <p className="text-[11px] text-on-surface-variant mt-0.5">
-                                  {appt.clientName} — {appt.email}
-                                </p>
-                              </div>
-                            </motion.div>
-                          ))
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-[11px] font-bold text-on-surface truncate">{appt.subject}</p>
+                                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                                      appt.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
+                                      appt.status === 'cancelled' ? 'bg-gray-100 text-gray-500' :
+                                      appt.status === 'rescheduled' ? 'bg-blue-100 text-blue-700' :
+                                      'bg-amber-100 text-amber-700'
+                                    }`}>
+                                      {appt.status === 'confirmed' ? 'CONFIRMÃ‰' : appt.status === 'cancelled' ? 'ANNULÃ‰' : appt.status === 'rescheduled' ? 'REPORTÃ‰' : 'EN ATTENTE'}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-on-surface-variant truncate">
+                                    {appt.clientName} â€” {appt.email}
+                                  </p>
+                                </div>
+                              </motion.div>
+                            ))}
+                            {(programmesByDay[selectedDay] || []).map((p) => (
+                              <motion.div
+                                key={p.id}
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 10 }}
+                                className="flex items-center gap-3 px-2 py-1 rounded-lg border-l-4 border-orange-500 bg-orange-50/70"
+                              >
+                                <div className="text-center shrink-0 min-w-12">
+                                  <p className="text-[9px] font-bold text-orange-600 uppercase">Jour {selectedDay}</p>
+                                  <p className="font-bold text-xs text-on-surface">{p.startTime} - {p.endTime}</p>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full shrink-0 bg-orange-100 text-orange-700">{p.type}</span>
+                                    <p className="text-[11px] font-bold text-on-surface truncate">{p.title}</p>
+                                  </div>
+                                  {p.description && <p className="text-[10px] text-on-surface-variant truncate">{p.description}</p>}
+                                  <div className="flex gap-2 mt-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingProgramme(p)}
+                                      className="text-[9px] text-orange-700 hover:underline font-bold cursor-pointer"
+                                    >
+                                      Voir
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditProgramme(p)}
+                                      className="text-[9px] text-orange-700 hover:underline font-bold cursor-pointer"
+                                    >
+                                      Modifier
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteProgramme(p.id, p.title)}
+                                      className="text-[9px] text-red-600 hover:underline font-bold cursor-pointer"
+                                    >
+                                      Supprimer
+                                    </button>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            ))}
+                          </>
                         ) : (
                           <motion.div
                             key="no-appointment"
@@ -2183,8 +2499,8 @@ export default function App() {
                             className="p-3 text-center text-xs text-on-surface-variant italic bg-surface-container-low rounded-lg"
                           >
                             {selectedDay
-                              ? `Aucun rendez-vous le ${selectedDay} ${['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][calMonth]}.`
-                              : 'Sélectionnez un jour pour voir les rendez-vous.'
+                              ? `Aucun rendez-vous ni programme le ${selectedDay} ${['Janvier','FÃ©vrier','Mars','Avril','Mai','Juin','Juillet','AoÃ»t','Septembre','Octobre','Novembre','DÃ©cembre'][calMonth]}.`
+                              : 'SÃ©lectionnez un jour pour voir les rendez-vous et programmes.'
                             }
                           </motion.div>
                         )}
@@ -2194,7 +2510,7 @@ export default function App() {
 
                   {/* Departments Breakdown */}
                   <div className="glass-card rounded-xl p-6 flex flex-col">
-                    <h4 className="font-headline text-base font-bold text-on-surface mb-6">Répartition par Département</h4>
+                    <h4 className="font-headline text-base font-bold text-on-surface mb-6">RÃ©partition par DÃ©partement</h4>
                     <div className="flex-1 flex flex-col md:flex-row items-center justify-around gap-6 py-2">
                       
                       {/* Donut Chart representation */}
@@ -2229,7 +2545,7 @@ export default function App() {
                             strokeDasharray="15 100"
                             strokeDashoffset="-70"
                           />
-                          {/* Segment 4: Fiscalité (15%) */}
+                          {/* Segment 4: FiscalitÃ© (15%) */}
                           <circle
                             cx="18" cy="18" r="15.915"
                             fill="none"
@@ -2261,7 +2577,7 @@ export default function App() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="w-3 h-3 rounded-full bg-[#ffd8e6]" />
-                          <span className="text-xs font-bold text-on-surface">Fiscalité ({15}%)</span>
+                          <span className="text-xs font-bold text-on-surface">FiscalitÃ© ({15}%)</span>
                         </div>
                       </div>
 
@@ -2277,14 +2593,14 @@ export default function App() {
                       onClick={() => setActiveTab('offers')}
                       className="text-[11px] font-bold text-primary bg-primary/5 hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                     >
-                      Gérer les offres
+                      GÃ©rer les offres
                     </button>
                   </div>
 
                   {offerStats.perOffer.filter((p) => p.count > 0).length === 0 ? (
                     <div className="text-center py-6 text-sm text-on-surface-variant flex flex-col items-center gap-2">
                       <BriefcaseBusiness className="w-8 h-8 text-on-surface-variant/30" />
-                      <span>Aucune candidature reçue pour le moment.</span>
+                      <span>Aucune candidature reÃ§ue pour le moment.</span>
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -2331,9 +2647,9 @@ export default function App() {
                 {/* Header Section */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
-                    <h3 className="font-headline text-2xl font-bold text-primary">Départements d'Expertise</h3>
+                    <h3 className="font-headline text-2xl font-bold text-primary">DÃ©partements d'Expertise</h3>
                     <p className="text-xs text-on-surface-variant">
-                      Découvrez nos pôles de spécialité chez RM Consulting. Des équipes dédiées au service de votre croissance et de votre conformité.
+                      DÃ©couvrez nos pÃ´les de spÃ©cialitÃ© chez RM Consulting. Des Ã©quipes dÃ©diÃ©es au service de votre croissance et de votre conformitÃ©.
                     </p>
                   </div>
                   
@@ -2343,13 +2659,13 @@ export default function App() {
                       className="px-4 py-2.5 bg-primary text-white hover:bg-primary-container rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md active:scale-95"
                     >
                       <Plus className="w-4 h-4" />
-                      Nouveau Département
+                      Nouveau DÃ©partement
                     </button>
 
                     {/* Quick stats board */}
                     <div className="flex gap-4 bg-white/60 p-3 rounded-xl border border-secondary/15 shadow-sm">
                       <div className="text-center px-3 border-r border-secondary/10">
-                        <p className="text-[10px] text-on-surface-variant font-medium uppercase tracking-wider">Pôles</p>
+                        <p className="text-[10px] text-on-surface-variant font-medium uppercase tracking-wider">PÃ´les</p>
                         <p className="text-base font-bold text-primary">{departments.length}</p>
                       </div>
                       <div className="text-center px-3 border-r border-secondary/10">
@@ -2368,8 +2684,8 @@ export default function App() {
                 {departments.length === 0 ? (
                   <div className="glass-card p-12 text-center rounded-2xl border border-dashed border-secondary/20">
                     <Building2 className="w-12 h-12 text-on-surface-variant/40 mx-auto mb-4" />
-                    <p className="text-sm font-semibold text-on-surface">Aucun département trouvé</p>
-                    <p className="text-xs text-on-surface-variant mt-1 mb-4">Ajoutez un nouveau pôle d'expertise pour commencer.</p>
+                    <p className="text-sm font-semibold text-on-surface">Aucun dÃ©partement trouvÃ©</p>
+                    <p className="text-xs text-on-surface-variant mt-1 mb-4">Ajoutez un nouveau pÃ´le d'expertise pour commencer.</p>
                     <button
                       onClick={handleOpenAddDept}
                       className="px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer"
@@ -2408,10 +2724,10 @@ export default function App() {
                               {/* Staff & Projects pills */}
                               <div className="flex flex-col items-end gap-1 text-[10px] font-mono text-on-surface-variant">
                                 <span className="bg-surface-container-low px-2 py-0.5 rounded border border-outline-variant/30">
-                                  👥 {dept.staffCount} Collaborateurs
+                                  ðŸ‘¥ {dept.staffCount} Collaborateurs
                                 </span>
                                 <span className="bg-surface-container-low px-2 py-0.5 rounded border border-outline-variant/30">
-                                  💼 {dept.activeProjects} Projets en cours
+                                  ðŸ’¼ {dept.activeProjects} Projets en cours
                                 </span>
                               </div>
                             </div>
@@ -2428,13 +2744,13 @@ export default function App() {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                   {dept.services.map((service, index) => (
                                     <div key={index} className="flex items-start gap-2 text-xs text-on-surface-variant bg-surface-container-low/40 p-2 rounded-lg border border-secondary/5">
-                                      <div className="text-emerald-600 font-bold shrink-0 mt-0.5">✓</div>
+                                      <div className="text-emerald-600 font-bold shrink-0 mt-0.5">âœ“</div>
                                       <span>{service}</span>
                                     </div>
                                   ))}
                                 </div>
                               ) : (
-                                <p className="text-xs text-on-surface-variant/50 italic">Aucun service défini.</p>
+                                <p className="text-xs text-on-surface-variant/50 italic">Aucun service dÃ©fini.</p>
                               )}
                             </div>
                           </div>
@@ -2495,14 +2811,14 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h3 className="font-headline text-xl font-bold text-on-surface">Registre des Missions</h3>
-                    <p className="text-xs text-on-surface-variant">Gérez et suivez le statut de toutes vos missions actives d'audit et de conseil.</p>
+                    <p className="text-xs text-on-surface-variant">GÃ©rez et suivez le statut de toutes vos missions actives d'audit et de conseil.</p>
                   </div>
                   <button
                     onClick={() => setIsNewMissionOpen(true)}
                     className="bg-primary hover:bg-primary-container text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 cursor-pointer shadow-sm self-start sm:self-center"
                   >
                     <Plus className="w-4 h-4" />
-                    Créer une Mission
+                    CrÃ©er une Mission
                   </button>
                 </div>
 
@@ -2533,7 +2849,7 @@ export default function App() {
                       <thead>
                         <tr className="bg-surface-container-low border-b border-primary/20">
                           <th className="px-6 py-4 text-xs font-bold text-on-surface-variant">Mission / Client</th>
-                          <th className="px-6 py-4 text-xs font-bold text-on-surface-variant">Département</th>
+                          <th className="px-6 py-4 text-xs font-bold text-on-surface-variant">DÃ©partement</th>
                           <th className="px-6 py-4 text-xs font-bold text-on-surface-variant">Statut</th>
                           <th className="px-6 py-4 text-xs font-bold text-on-surface-variant">Progression</th>
                           <th className="px-6 py-4 text-xs font-bold text-on-surface-variant text-right">Actions</th>
@@ -2584,7 +2900,7 @@ export default function App() {
                                   <button
                                     onClick={() => {
                                       setMissions(prev => prev.map(m => m.id === mission.id ? { ...m, progression: Math.min(100, m.progression + 10) } : m));
-                                      addToast(`Progression de "${mission.title}" incrémentée.`);
+                                      addToast(`Progression de "${mission.title}" incrÃ©mentÃ©e.`);
                                     }}
                                     className="px-2.5 py-1 text-xs font-semibold text-primary border border-primary/20 hover:bg-primary/5 rounded transition-all cursor-pointer"
                                   >
@@ -2593,7 +2909,7 @@ export default function App() {
                                   <button
                                     onClick={() => {
                                       setMissions(prev => prev.map(m => m.id === mission.id ? { ...m, status: 'VALIDE', progression: 100 } : m));
-                                      addToast(`Mission "${mission.title}" validée.`);
+                                      addToast(`Mission "${mission.title}" validÃ©e.`);
                                     }}
                                     className="px-2.5 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-all cursor-pointer"
                                   >
@@ -2621,7 +2937,7 @@ export default function App() {
               >
                 <div>
                   <h3 className="font-headline text-xl font-bold text-on-surface">Annuaire des Clients</h3>
-                  <p className="text-xs text-on-surface-variant">Consultez et gérez les comptes de vos clients et leurs interlocuteurs privilégiés.</p>
+                  <p className="text-xs text-on-surface-variant">Consultez et gÃ©rez les comptes de vos clients et leurs interlocuteurs privilÃ©giÃ©s.</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -2635,7 +2951,7 @@ export default function App() {
                         <div>
                           <h4 className="font-bold text-base text-on-surface">TechFlow SAS</h4>
                           <span className="text-[10px] bg-primary-fixed text-on-primary-fixed-variant px-2 py-0.5 rounded-full font-bold uppercase">
-                            Audit Légal
+                            Audit LÃ©gal
                           </span>
                         </div>
                       </div>
@@ -2651,7 +2967,7 @@ export default function App() {
                       </div>
                       <div className="flex justify-between">
                         <span>Chiffre d'Affaires:</span>
-                        <span className="font-semibold text-on-surface">2.4M €</span>
+                        <span className="font-semibold text-on-surface">2.4M â‚¬</span>
                       </div>
                     </div>
                   </div>
@@ -2682,7 +2998,7 @@ export default function App() {
                       </div>
                       <div className="flex justify-between">
                         <span>Chiffre d'Affaires:</span>
-                        <span className="font-semibold text-on-surface">850k €</span>
+                        <span className="font-semibold text-on-surface">850k â‚¬</span>
                       </div>
                     </div>
                   </div>
@@ -2697,7 +3013,7 @@ export default function App() {
                         <div>
                           <h4 className="font-bold text-base text-on-surface">Global Logistics</h4>
                           <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold uppercase">
-                            Comptabilité
+                            ComptabilitÃ©
                           </span>
                         </div>
                       </div>
@@ -2713,7 +3029,7 @@ export default function App() {
                       </div>
                       <div className="flex justify-between">
                         <span>Chiffre d'Affaires:</span>
-                        <span className="font-semibold text-on-surface">12M €</span>
+                        <span className="font-semibold text-on-surface">12M â‚¬</span>
                       </div>
                     </div>
                   </div>
@@ -2732,7 +3048,7 @@ export default function App() {
               >
                 <div>
                   <h3 className="font-headline text-xl font-bold text-on-surface">Analyses &amp; Performance</h3>
-                  <p className="text-xs text-on-surface-variant">Suivi en temps réel des performances de RM Consulting et de la répartition des portefeuilles clients.</p>
+                  <p className="text-xs text-on-surface-variant">Suivi en temps rÃ©el des performances de RM Consulting et de la rÃ©partition des portefeuilles clients.</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2762,7 +3078,7 @@ export default function App() {
 
                       <div>
                         <div className="flex justify-between text-xs font-semibold mb-1">
-                          <span>Fiscalité et Juridique</span>
+                          <span>FiscalitÃ© et Juridique</span>
                           <span>85%</span>
                         </div>
                         <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
@@ -2806,7 +3122,7 @@ export default function App() {
                   <div>
                     <h3 className="font-headline text-2xl font-bold text-primary">Gestion des Offres d'Emploi</h3>
                     <p className="text-xs text-on-surface-variant">
-                      Créez, publiez et suivez vos offres. Chaque modification est immédiatement visible sur le site.
+                      CrÃ©ez, publiez et suivez vos offres. Chaque modification est immÃ©diatement visible sur le site.
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
@@ -2838,7 +3154,7 @@ export default function App() {
                       </span>
                       <span className="text-[10px] font-bold text-on-surface-variant bg-surface-container-low px-2 py-1 rounded-full">Total</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres créées</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres crÃ©Ã©es</p>
                     <h3 className="font-headline text-3xl font-extrabold text-primary mt-1">{offers.length}</h3>
                   </div>
                   <div className="glass-card p-5 rounded-2xl shadow-sm relative overflow-hidden">
@@ -2848,7 +3164,7 @@ export default function App() {
                       </span>
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">Actives</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres publiées</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres publiÃ©es</p>
                     <h3 className="font-headline text-3xl font-extrabold text-emerald-600 mt-1">{offerStats.published}</h3>
                   </div>
                   <div className="glass-card p-5 rounded-2xl shadow-sm relative overflow-hidden">
@@ -2858,7 +3174,7 @@ export default function App() {
                       </span>
                       <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-full">Brouillons</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">En préparation</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">En prÃ©paration</p>
                     <h3 className="font-headline text-3xl font-extrabold text-amber-600 mt-1">{offerStats.drafts}</h3>
                   </div>
                   <div className="glass-card p-5 rounded-2xl shadow-sm relative overflow-hidden">
@@ -2866,9 +3182,9 @@ export default function App() {
                       <span className="p-2 bg-gray-100 text-gray-600 rounded-lg">
                         <Layers className="w-5 h-5" />
                       </span>
-                      <span className="text-[10px] font-bold text-gray-600 bg-gray-50 px-2 py-1 rounded-full">Terminées</span>
+                      <span className="text-[10px] font-bold text-gray-600 bg-gray-50 px-2 py-1 rounded-full">TerminÃ©es</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres fermées</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres fermÃ©es</p>
                     <h3 className="font-headline text-3xl font-extrabold text-gray-600 mt-1">{offerStats.closed}</h3>
                   </div>
                 </div>
@@ -2892,13 +3208,13 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center gap-2 px-3 py-2 bg-surface-container-low border border-gray-200 rounded-lg">
-                        <span className="text-[10px] font-bold text-on-surface-variant">Département:</span>
+                        <span className="text-[10px] font-bold text-on-surface-variant">DÃ©partement:</span>
                         <select
                           value={offerDeptFilter}
                           onChange={(e) => setOfferDeptFilter(e.target.value)}
                           className="bg-transparent border-none p-0 text-sm focus:ring-0 text-primary font-medium cursor-pointer outline-none"
                         >
-                          <option>Tous les départements</option>
+                          <option>Tous les dÃ©partements</option>
                           {OFFER_DEPARTMENTS.map((d) => (
                             <option key={d} value={d}>{d}</option>
                           ))}
@@ -2928,27 +3244,27 @@ export default function App() {
                         >
                           <option>Tous les statuts</option>
                           <option value="draft">Brouillon</option>
-                          <option value="published">Publiée</option>
-                          <option value="closed">Fermée</option>
+                          <option value="published">PubliÃ©e</option>
+                          <option value="closed">FermÃ©e</option>
                         </select>
                       </div>
 
                       <button
                         onClick={() => {
                           setOfferSearch('');
-                          setOfferDeptFilter('Tous les départements');
+                          setOfferDeptFilter('Tous les dÃ©partements');
                           setOfferContractFilter('Tous les contrats');
                           setOfferStatusFilter('Tous les statuts');
-                          addToast('Filtres réinitialisés', 'info');
+                          addToast('Filtres rÃ©initialisÃ©s', 'info');
                         }}
                         className="p-2 text-on-surface-variant hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
-                        title="Réinitialiser les filtres"
+                        title="RÃ©initialiser les filtres"
                       >
                         <Filter className="w-5 h-5" />
                       </button>
                     </div>
                     <span className="text-xs text-on-surface-variant font-medium">
-                      {filteredOffers.length} offre{filteredOffers.length > 1 ? 's' : ''} affichée{filteredOffers.length > 1 ? 's' : ''}
+                      {filteredOffers.length} offre{filteredOffers.length > 1 ? 's' : ''} affichÃ©e{filteredOffers.length > 1 ? 's' : ''}
                     </span>
                   </div>
 
@@ -2973,13 +3289,13 @@ export default function App() {
                             <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                               <BriefcaseBusiness className="w-10 h-10 text-gray-300 mb-2 mx-auto" />
                               <p className="text-sm font-medium">
-                                {offers.length === 0 ? 'Aucune offre créée pour le moment.' : 'Aucune offre ne correspond à vos filtres.'}
+                                {offers.length === 0 ? 'Aucune offre crÃ©Ã©e pour le moment.' : 'Aucune offre ne correspond Ã  vos filtres.'}
                               </p>
                               <button
                                 onClick={() => openOfferModal(null)}
                                 className="mt-4 px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer"
                               >
-                                <Plus className="w-4 h-4" /> Créer une offre
+                                <Plus className="w-4 h-4" /> CrÃ©er une offre
                               </button>
                             </td>
                           </tr>
@@ -3013,7 +3329,7 @@ export default function App() {
                                 </td>
                                 <td className="px-6 py-5">
                                   <span className="text-sm text-on-surface-variant font-medium">
-                                    {offer.publishedAt ? new Date(offer.publishedAt).toLocaleDateString('fr-FR') : '—'}
+                                    {offer.publishedAt ? new Date(offer.publishedAt).toLocaleDateString('fr-FR') : 'â€”'}
                                   </span>
                                 </td>
                                 <td className="px-6 py-5">
@@ -3074,7 +3390,7 @@ export default function App() {
                                           ? 'text-amber-600 hover:bg-amber-50'
                                           : 'text-emerald-600 hover:bg-emerald-50'
                                       }`}
-                                      title={offer.status === 'published' ? 'Désactiver (fermer l\'offre)' : 'Activer (publier l\'offre)'}
+                                      title={offer.status === 'published' ? 'DÃ©sactiver (fermer l\'offre)' : 'Activer (publier l\'offre)'}
                                     >
                                       <Power className="w-4 h-4" />
                                     </button>
@@ -3149,7 +3465,7 @@ export default function App() {
                       <span className="p-2 bg-purple-100 text-purple-700 rounded-lg">
                         <CalendarIcon className="w-5 h-5" />
                       </span>
-                      <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-full">Planifiés</span>
+                      <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-full">PlanifiÃ©s</span>
                     </div>
                     <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Entretiens</p>
                     <h3 className="font-headline text-3xl font-extrabold text-on-surface mt-1">{interviewCandidates}</h3>
@@ -3161,9 +3477,9 @@ export default function App() {
                       <span className="p-2 bg-green-100 text-green-700 rounded-lg">
                         <CheckCircle2 className="w-5 h-5" />
                       </span>
-                      <span className="text-[10px] font-bold text-green-700 bg-green-50 px-2 py-1 rounded-full">Terminé</span>
+                      <span className="text-[10px] font-bold text-green-700 bg-green-50 px-2 py-1 rounded-full">TerminÃ©</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Recrutés</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">RecrutÃ©s</p>
                     <h3 className="font-headline text-3xl font-extrabold text-on-surface mt-1">{acceptedCandidates}</h3>
                   </div>
 
@@ -3173,9 +3489,9 @@ export default function App() {
                       <span className="p-2 bg-rose-100 text-rose-700 rounded-lg">
                         <XCircle className="w-5 h-5" />
                       </span>
-                      <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-1 rounded-full">Refusé</span>
+                      <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-1 rounded-full">RefusÃ©</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Refusés</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">RefusÃ©s</p>
                     <h3 className="font-headline text-3xl font-extrabold text-on-surface mt-1">{rejectedCandidates}</h3>
                   </div>
 
@@ -3185,9 +3501,9 @@ export default function App() {
                       <span className="p-2 bg-gray-100 text-gray-700 rounded-lg">
                         <Trash2 className="w-5 h-5" />
                       </span>
-                      <span className="text-[10px] font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded-full">Archivé</span>
+                      <span className="text-[10px] font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded-full">ArchivÃ©</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Archivés</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">ArchivÃ©s</p>
                     <h3 className="font-headline text-3xl font-extrabold text-on-surface mt-1">
                       {archivedApps.length < 10 ? `0${archivedApps.length}` : archivedApps.length}
                     </h3>
@@ -3221,10 +3537,10 @@ export default function App() {
                             <option value="Toutes les offres">Toutes les offres</option>
                             {offersWithCounts.map((o) => (
                               <option key={o._id} value={o._id}>
-                                {o.title} · {o.department} ({o.count})
+                                {o.title} Â· {o.department} ({o.count})
                               </option>
                             ))}
-                            <option value="__spontaneous__">Candidatures spontanées</option>
+                            <option value="__spontaneous__">Candidatures spontanÃ©es</option>
                           </select>
                         </div>
 
@@ -3243,7 +3559,7 @@ export default function App() {
                         </div>
 
                         <div className="flex items-center gap-2 px-3 py-2 bg-surface-container-low border border-gray-200 rounded-lg">
-                          <span className="text-[10px] font-bold text-on-surface-variant">Expérience:</span>
+                          <span className="text-[10px] font-bold text-on-surface-variant">ExpÃ©rience:</span>
                           <select
                             value={expFilter}
                             onChange={(e) => setExpFilter(e.target.value)}
@@ -3272,7 +3588,7 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {/* Bascule Actifs / Archivés */}
+                        {/* Bascule Actifs / ArchivÃ©s */}
                         <div className="flex items-center gap-1 p-1 bg-surface-container-low border border-gray-200 rounded-lg">
                           <button
                             onClick={() => setShowArchived(false)}
@@ -3290,7 +3606,7 @@ export default function App() {
                             }`}
                           >
                             <Archive className="w-3.5 h-3.5" />
-                            Archivés
+                            ArchivÃ©s
                             <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${
                               showArchived ? 'bg-white/20' : 'bg-gray-200 text-gray-700'
                             }`}>
@@ -3305,24 +3621,24 @@ export default function App() {
                             setExpFilter('Toutes');
                             setOfferFilter('Toutes les offres');
                             setSearchQuery('');
-                            addToast('Filtres réinitialisés', 'info');
+                            addToast('Filtres rÃ©initialisÃ©s', 'info');
                           }}
                           className="p-2 text-on-surface-variant hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
-                          title="Réinitialiser les filtres"
+                          title="RÃ©initialiser les filtres"
                         >
                           <Filter className="w-5 h-5" />
                         </button>
                         <button
                           onClick={exportCandidatesXLSX}
                           className="p-2 text-on-surface-variant hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
-                          title="Télécharger la liste"
+                          title="TÃ©lÃ©charger la liste"
                         >
                           <Download className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
 
-                    {/* Bandeau "filtre actif" — visible dès qu'un filtre est appliqué */}
+                    {/* Bandeau "filtre actif" â€” visible dÃ¨s qu'un filtre est appliquÃ© */}
                     {(offerFilter !== 'Toutes les offres' || roleFilter !== 'Tous les postes' || expFilter !== 'Toutes' || searchQuery) && (
                       <div className="flex flex-wrap items-center gap-2 px-5 py-3 bg-primary/5 border-b border-primary/20">
                         <Filter className="w-4 h-4 text-primary shrink-0" />
@@ -3331,8 +3647,8 @@ export default function App() {
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary text-white text-xs font-bold shadow-sm">
                             <BriefcaseBusiness className="w-3.5 h-3.5" />
                             {offerFilter === '__spontaneous__'
-                              ? 'Candidatures spontanées'
-                              : (offers.find((o) => o._id === offerFilter)?.title || 'Offre sélectionnée')}
+                              ? 'Candidatures spontanÃ©es'
+                              : (offers.find((o) => o._id === offerFilter)?.title || 'Offre sÃ©lectionnÃ©e')}
                             <button
                               onClick={() => setOfferFilter('Toutes les offres')}
                               className="ml-0.5 hover:bg-white/25 rounded-full p-0.5 cursor-pointer"
@@ -3368,7 +3684,7 @@ export default function App() {
                         )}
                         {searchQuery && (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary/15 border border-secondary/30 text-secondary text-xs font-bold">
-                            « {searchQuery} »
+                            Â« {searchQuery} Â»
                             <button
                               onClick={() => setSearchQuery('')}
                               className="ml-0.5 hover:bg-secondary/20 rounded-full p-0.5 cursor-pointer"
@@ -3393,10 +3709,10 @@ export default function App() {
                               Candidat
                             </th>
                             <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100">
-                              Poste &amp; Expérience
+                              Poste &amp; ExpÃ©rience
                             </th>
                             <th className="px-6 py-4 text-[11px] font-bold text-primary uppercase tracking-wider border-b border-gray-100">
-                              Date de Dépôt
+                              Date de DÃ©pÃ´t
                             </th>
                             <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100">
                               Statut
@@ -3412,7 +3728,7 @@ export default function App() {
                               <tr>
                                 <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                                   <Archive className="w-10 h-10 text-gray-300 mb-2 mx-auto" />
-                                  <p className="text-sm font-medium">Aucune candidature archivée.</p>
+                                  <p className="text-sm font-medium">Aucune candidature archivÃ©e.</p>
                                 </td>
                               </tr>
                             ) : (
@@ -3439,10 +3755,10 @@ export default function App() {
                                         <span className="text-on-surface font-medium text-sm">{app.position}</span>
                                         {app.jobOffer?.title && (
                                           <span className="text-[10px] font-bold text-primary mt-0.5">
-                                            {app.jobOffer.title} · {app.jobOffer.contractType}
+                                            {app.jobOffer.title} Â· {app.jobOffer.contractType}
                                           </span>
                                         )}
-                                        <span className="text-xs text-on-surface-variant mt-0.5">{app.experience || 'Expérience non spécifiée'}</span>
+                                        <span className="text-xs text-on-surface-variant mt-0.5">{app.experience || 'ExpÃ©rience non spÃ©cifiÃ©e'}</span>
                                       </div>
                                     </td>
 
@@ -3454,7 +3770,7 @@ export default function App() {
 
                                     <td className="px-6 py-5">
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border bg-gray-100 text-gray-600 border-gray-200">
-                                        Archivé
+                                        ArchivÃ©
                                         {app.deletedAt ? ` le ${new Date(app.deletedAt).toLocaleDateString('fr-FR')}` : ''}
                                       </span>
                                     </td>
@@ -3482,7 +3798,7 @@ export default function App() {
                                         <button
                                           onClick={() => openDeleteConfirm(app._id, 'permanent')}
                                           className="p-2 hover:bg-red-50 rounded-lg text-rose-600 transition-colors"
-                                          title="Supprimer définitivement"
+                                          title="Supprimer dÃ©finitivement"
                                         >
                                           <Trash2 className="w-4 h-4" />
                                         </button>
@@ -3496,7 +3812,7 @@ export default function App() {
                             <tr>
                               <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                                 <Search className="w-10 h-10 text-gray-300 mb-2 mx-auto" />
-                                <p className="text-sm font-medium">Aucun candidat ne correspond à votre recherche.</p>
+                                <p className="text-sm font-medium">Aucun candidat ne correspond Ã  votre recherche.</p>
                               </td>
                             </tr>
                           ) : (
@@ -3529,7 +3845,7 @@ export default function App() {
                                   <td className="px-6 py-5">
                                     <div className="flex flex-col">
                                       <span className="text-on-surface font-medium text-sm">{app.position}</span>
-                                      <span className="text-xs text-on-surface-variant mt-0.5">{app.experience || 'Expérience non spécifiée'}</span>
+                                      <span className="text-xs text-on-surface-variant mt-0.5">{app.experience || 'ExpÃ©rience non spÃ©cifiÃ©e'}</span>
                                     </div>
                                   </td>
 
@@ -3561,7 +3877,7 @@ export default function App() {
                                       <button
                                         onClick={() => setSelectedApp(app)}
                                         className="p-2 hover:bg-primary/5 rounded-lg text-primary transition-colors"
-                                        title="Voir détails"
+                                        title="Voir dÃ©tails"
                                       >
                                         <Search className="w-4 h-4" />
                                       </button>
@@ -3587,7 +3903,7 @@ export default function App() {
                   {!showArchived && selectedApp ? (
                     <div className="w-full xl:w-96 flex flex-col bg-surface-container-low/60 border-t xl:border-t-0 xl:border-l border-gray-200 p-6">
                       <div className="flex items-center justify-between mb-6">
-                        <h4 className="font-headline text-lg font-bold text-on-surface">Détails Candidat</h4>
+                        <h4 className="font-headline text-lg font-bold text-on-surface">DÃ©tails Candidat</h4>
                         <button
                           onClick={() => setSelectedApp(null)}
                           className="p-1 rounded-full hover:bg-gray-200/80 transition-colors text-gray-500"
@@ -3608,7 +3924,7 @@ export default function App() {
                           {selectedApp.jobOffer?.title && (
                             <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-bold text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full">
                               <BriefcaseBusiness className="w-3 h-3" />
-                              {selectedApp.jobOffer.title} · {selectedApp.jobOffer.department}
+                              {selectedApp.jobOffer.title} Â· {selectedApp.jobOffer.department}
                             </span>
                           )}
 
@@ -3646,19 +3962,19 @@ export default function App() {
                                     const updated = await res.json();
                                     setJobApps((prev: any[]) => prev.map((a: any) => (a._id === selectedApp._id ? updated : a)));
                                     setSelectedApp(updated);
-                                    addToast(`Statut mis à jour : ${selectedApp.firstName} ${selectedApp.lastName}`);
+                                    addToast(`Statut mis Ã  jour : ${selectedApp.firstName} ${selectedApp.lastName}`);
                                   }
                                 } catch {
-                                  addToast('Erreur lors de la mise à jour', 'info');
+                                  addToast('Erreur lors de la mise Ã  jour', 'info');
                                 }
                               }}
                               className={`text-xs font-bold px-3 py-2 rounded-lg border w-full cursor-pointer ${candidateStatusInfo(selectedApp.status).cls}`}
                             >
                               <option value="new">Nouveau</option>
                               <option value="analyzing">En cours d'analyse</option>
-                              <option value="interview">Entretien programmé</option>
-                              <option value="accepted">Accepté</option>
-                              <option value="rejected">Refusé</option>
+                              <option value="interview">Entretien programmÃ©</option>
+                              <option value="accepted">AcceptÃ©</option>
+                              <option value="rejected">RefusÃ©</option>
                             </select>
                           </div>
 
@@ -3707,7 +4023,7 @@ export default function App() {
                                         />
                                         {interviewTime && (
                                           <p className="text-[10px] text-on-surface-variant mt-1">
-                                            Affichée au candidat :{' '}
+                                            AffichÃ©e au candidat :{' '}
                                             <span className="font-bold text-primary">{formatTimeAmPm(interviewTime)}</span>
                                           </p>
                                         )}
@@ -3723,7 +4039,7 @@ export default function App() {
                                         onChange={(e) => setInterviewType(e.target.value as 'presentiel' | 'en_ligne')}
                                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none"
                                       >
-                                        <option value="presentiel">Présentiel</option>
+                                        <option value="presentiel">PrÃ©sentiel</option>
                                         <option value="en_ligne">En ligne</option>
                                       </select>
                                     </div>
@@ -3759,7 +4075,7 @@ export default function App() {
                                           className="overflow-hidden"
                                         >
                                           <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
-                                            Lien de la réunion (Teams, Google Meet ou Zoom) <span className="text-error">*</span>
+                                            Lien de la rÃ©union (Teams, Google Meet ou Zoom) <span className="text-error">*</span>
                                           </label>
                                           <input
                                             type="url"
@@ -3780,7 +4096,7 @@ export default function App() {
                                         value={interviewNotes}
                                         onChange={(e) => setInterviewNotes(e.target.value)}
                                         rows={2}
-                                        placeholder="Informations complémentaires pour le candidat..."
+                                        placeholder="Informations complÃ©mentaires pour le candidat..."
                                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none resize-none"
                                       />
                                     </div>
@@ -3820,7 +4136,7 @@ export default function App() {
                             )}
                           </AnimatePresence>
 
-                          {/* Date de prise de poste (visible quand le candidat est accepté) */}
+                          {/* Date de prise de poste (visible quand le candidat est acceptÃ©) */}
                           <AnimatePresence initial={false}>
                             {selectedApp.status === 'accepted' && (
                               <motion.div
@@ -3844,7 +4160,7 @@ export default function App() {
                                     <div className="grid grid-cols-2 gap-3">
                                       <div>
                                         <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
-                                          Date de début <span className="text-error">*</span>
+                                          Date de dÃ©but <span className="text-error">*</span>
                                         </label>
                                         <input
                                           type="date"
@@ -3856,7 +4172,7 @@ export default function App() {
                                       </div>
                                       <div>
                                         <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
-                                          Heure d'arrivée <span className="text-error">*</span>
+                                          Heure d'arrivÃ©e <span className="text-error">*</span>
                                         </label>
                                         <input
                                           type="time"
@@ -3866,7 +4182,7 @@ export default function App() {
                                         />
                                         {startTime && (
                                           <p className="text-[10px] text-on-surface-variant mt-1">
-                                            Affichée au candidat :{' '}
+                                            AffichÃ©e au candidat :{' '}
                                             <span className="font-bold text-primary">{formatTimeAmPm(startTime)}</span>
                                           </p>
                                         )}
@@ -3887,7 +4203,7 @@ export default function App() {
                                             const updated = await res.json();
                                             setJobApps((prev: any[]) => prev.map((a: any) => (a._id === selectedApp._id ? updated : a)));
                                             setSelectedApp(updated);
-                                            addToast('Date de prise de poste enregistrée et envoyée au candidat par email');
+                                            addToast('Date de prise de poste enregistrÃ©e et envoyÃ©e au candidat par email');
                                           }
                                         } catch {
                                           addToast('Erreur lors de l\'enregistrement', 'info');
@@ -3899,7 +4215,7 @@ export default function App() {
                                       Enregistrer et envoyer au candidat
                                     </button>
                                     <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                                      Un seul email d'acceptation sera envoyé au candidat, avec la date et l'heure de prise de poste. Il n'est renvoyé qu'en cas de modification de la date ou de l'heure.
+                                      Un seul email d'acceptation sera envoyÃ© au candidat, avec la date et l'heure de prise de poste. Il n'est renvoyÃ© qu'en cas de modification de la date ou de l'heure.
                                     </p>
                                   </div>
                                 </div>
@@ -3923,7 +4239,7 @@ export default function App() {
 
                           <div className="grid grid-cols-2 gap-3">
                             <div className="bg-white p-3 rounded-xl border border-gray-200/50">
-                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Études &amp; Diplômes</p>
+                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Ã‰tudes &amp; DiplÃ´mes</p>
                               <p className="text-sm font-semibold text-on-surface">{selectedApp.education}</p>
                               {selectedApp.diploma && (
                                 <p className="text-xs text-on-surface-variant mt-1">{selectedApp.diploma}</p>
@@ -3931,18 +4247,18 @@ export default function App() {
                             </div>
 
                             <div className="bg-white p-3 rounded-xl border border-gray-200/50">
-                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Téléphone</p>
+                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">TÃ©lÃ©phone</p>
                               <p className="text-sm font-semibold text-on-surface">{selectedApp.phone}</p>
                             </div>
 
                             <div className="bg-white p-3 rounded-xl border border-gray-200/50">
-                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Expérience</p>
-                              <p className="text-sm font-semibold text-on-surface">{selectedApp.experience || 'Non spécifiée'}</p>
+                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">ExpÃ©rience</p>
+                              <p className="text-sm font-semibold text-on-surface">{selectedApp.experience || 'Non spÃ©cifiÃ©e'}</p>
                             </div>
 
                             <div className="bg-white p-3 rounded-xl border border-gray-200/50">
                               <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Ville</p>
-                              <p className="text-sm font-semibold text-on-surface">{selectedApp.city || selectedApp.address || 'Non spécifiée'}</p>
+                              <p className="text-sm font-semibold text-on-surface">{selectedApp.city || selectedApp.address || 'Non spÃ©cifiÃ©e'}</p>
                             </div>
 
                             {selectedApp.dateOfBirth && (
@@ -3961,28 +4277,28 @@ export default function App() {
 
                             {selectedApp.nationality && (
                               <div className="bg-white p-3 rounded-xl border border-gray-200/50">
-                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Nationalité</p>
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">NationalitÃ©</p>
                                 <p className="text-sm font-semibold text-on-surface">{selectedApp.nationality}</p>
                               </div>
                             )}
 
                             {selectedApp.lastPosition && (
                               <div className="bg-white p-3 rounded-xl border border-gray-200/50">
-                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Dernier poste occupé</p>
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Dernier poste occupÃ©</p>
                                 <p className="text-sm font-semibold text-on-surface">{selectedApp.lastPosition}</p>
                               </div>
                             )}
 
                             {selectedApp.availability && (
                               <div className="bg-white p-3 rounded-xl border border-gray-200/50">
-                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Disponibilité</p>
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">DisponibilitÃ©</p>
                                 <p className="text-sm font-semibold text-on-surface">{selectedApp.availability}</p>
                               </div>
                             )}
 
                             {selectedApp.source && (
                               <div className="bg-white p-3 rounded-xl border border-gray-200/50">
-                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Connaît le cabinet via</p>
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">ConnaÃ®t le cabinet via</p>
                                 <p className="text-sm font-semibold text-on-surface">{selectedApp.source}</p>
                               </div>
                             )}
@@ -4004,7 +4320,7 @@ export default function App() {
                                     <div className="flex-1 overflow-hidden">
                                       <p className="text-xs font-bold text-on-surface truncate">{att.originalName}</p>
                                       <p className="text-[10px] text-on-surface-variant">
-                                        {att.type === 'cv' ? 'CV' : att.type === 'coverLetter' ? 'Lettre de motivation' : 'Certificat'} — {Math.round(att.size / 1024)} Ko
+                                        {att.type === 'cv' ? 'CV' : att.type === 'coverLetter' ? 'Lettre de motivation' : 'Certificat'} â€” {Math.round(att.size / 1024)} Ko
                                       </p>
                                     </div>
                                     <Download className="w-4 h-4 text-primary opacity-70 group-hover:opacity-100 transition-opacity" />
@@ -4020,7 +4336,7 @@ export default function App() {
                     <div className="hidden xl:flex w-96 flex-col items-center justify-center p-8 text-center text-gray-400 bg-surface-container-low/30 border-l border-gray-200">
                       <Search className="w-12 h-12 mb-3 text-gray-300" />
                       <p className="text-sm font-medium text-gray-500">
-                        Sélectionnez un candidat dans la liste pour voir ses détails complets.
+                        SÃ©lectionnez un candidat dans la liste pour voir ses dÃ©tails complets.
                       </p>
                     </div>
                   )}
@@ -4044,12 +4360,12 @@ export default function App() {
                               : <Archive className="w-6 h-6 text-gray-600" />}
                           </div>
                           <h3 className="font-headline font-bold text-lg text-on-surface mb-2">
-                            {deleteMode === 'permanent' ? 'Supprimer définitivement' : 'Archiver la candidature'}
+                            {deleteMode === 'permanent' ? 'Supprimer dÃ©finitivement' : 'Archiver la candidature'}
                           </h3>
                           <p className="text-sm text-on-surface-variant mb-6">
                             {deleteMode === 'permanent'
-                              ? 'Cette action est irréversible. Tous les fichiers seront également supprimés.'
-                              : 'La candidature sera déplacée dans la corbeille. Vous pourrez la restaurer ou la supprimer définitivement à tout moment.'}
+                              ? 'Cette action est irrÃ©versible. Tous les fichiers seront Ã©galement supprimÃ©s.'
+                              : 'La candidature sera dÃ©placÃ©e dans la corbeille. Vous pourrez la restaurer ou la supprimer dÃ©finitivement Ã  tout moment.'}
                           </p>
                           <div className="flex gap-3">
                             <button
@@ -4070,13 +4386,13 @@ export default function App() {
                                     if (deleteMode === 'permanent') {
                                       setArchivedApps((prev: any[]) => prev.filter((a: any) => a._id !== appToDelete));
                                       if (selectedApp?._id === appToDelete) setSelectedApp(null);
-                                      addToast('Candidature supprimée définitivement');
+                                      addToast('Candidature supprimÃ©e dÃ©finitivement');
                                     } else {
                                       const archived = jobApps.find((a: any) => a._id === appToDelete);
                                       setJobApps((prev: any[]) => prev.filter((a: any) => a._id !== appToDelete));
                                       if (selectedApp?._id === appToDelete) setSelectedApp(null);
                                       if (archived) setArchivedApps((prev: any[]) => [archived, ...prev]);
-                                      addToast('Candidature archivée');
+                                      addToast('Candidature archivÃ©e');
                                     }
                                   }
                                 } catch { addToast('Erreur lors de la suppression', 'info'); }
@@ -4087,7 +4403,7 @@ export default function App() {
                                 deleteMode === 'permanent' ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-800'
                               }`}
                             >
-                              {deleteMode === 'permanent' ? 'Supprimer définitivement' : 'Archiver'}
+                              {deleteMode === 'permanent' ? 'Supprimer dÃ©finitivement' : 'Archiver'}
                             </button>
                           </div>
                         </div>
@@ -4107,15 +4423,15 @@ export default function App() {
               >
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
-                    <h3 className="font-headline text-xl font-bold text-on-surface">Paramètres Globaux</h3>
-                    <p className="text-xs text-on-surface-variant">Gérez les informations d'entreprise affichées sur le site.</p>
+                    <h3 className="font-headline text-xl font-bold text-on-surface">ParamÃ¨tres Globaux</h3>
+                    <p className="text-xs text-on-surface-variant">GÃ©rez les informations d'entreprise affichÃ©es sur le site.</p>
                   </div>
                   <button
                     onClick={handleOpenAddParam}
                     className="bg-primary hover:bg-primary-container text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
-                    Ajouter un paramètre
+                    Ajouter un paramÃ¨tre
                   </button>
                 </div>
 
@@ -4126,7 +4442,7 @@ export default function App() {
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-100">
                           <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">#</th>
-                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Clé</th>
+                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">ClÃ©</th>
                           <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Valeur</th>
                           <th className="text-right py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
@@ -4136,12 +4452,12 @@ export default function App() {
                           <tr>
                             <td colSpan={4} className="py-12 text-center">
                               <Settings className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                              <p className="text-sm text-gray-400 font-medium">Aucun paramètre pour le moment</p>
+                              <p className="text-sm text-gray-400 font-medium">Aucun paramÃ¨tre pour le moment</p>
                               <button
                                 onClick={handleOpenAddParam}
                                 className="mt-3 text-secondary hover:text-secondary/80 text-xs font-bold cursor-pointer"
                               >
-                                + Ajouter votre premier paramètre
+                                + Ajouter votre premier paramÃ¨tre
                               </button>
                             </td>
                           </tr>
@@ -4197,7 +4513,7 @@ export default function App() {
                   <div>
                     <h3 className="font-headline text-2xl font-bold text-primary">Gestion des Rendez-vous</h3>
                     <p className="text-xs text-on-surface-variant">
-                      Définissez vos dates et créneaux disponibles, et consultez les demandes de rendez-vous reçues.
+                      DÃ©finissez vos dates et crÃ©neaux disponibles, et consultez les demandes de rendez-vous reÃ§ues.
                     </p>
                   </div>
                   <div className="flex gap-4 bg-white/60 p-3 rounded-xl border border-secondary/15 shadow-sm">
@@ -4216,7 +4532,7 @@ export default function App() {
                   {/* LEFT: Calendar to manage available dates */}
                   <div className="glass-card rounded-xl p-6">
                     <h4 className="font-headline text-base font-bold text-on-surface mb-4">Dates Disponibles</h4>
-                    <p className="text-[11px] text-on-surface-variant mb-4">Cliquez sur une date pour la rendre disponible aux réservations. Cliquez à nouveau pour la retirer.</p>
+                    <p className="text-[11px] text-on-surface-variant mb-4">Cliquez sur une date pour la rendre disponible aux rÃ©servations. Cliquez Ã  nouveau pour la retirer.</p>
                     
                     <div className="bg-surface-container-low rounded-xl p-4">
                       <div className="flex items-center justify-between mb-3">
@@ -4230,7 +4546,7 @@ export default function App() {
                           <ChevronLeft className="w-4 h-4 text-on-surface-variant" />
                         </button>
                         <span className="text-sm font-bold text-on-surface">
-                          {['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][availCalMonth]} {availCalYear}
+                          {['Janvier','FÃ©vrier','Mars','Avril','Mai','Juin','Juillet','AoÃ»t','Septembre','Octobre','Novembre','DÃ©cembre'][availCalMonth]} {availCalYear}
                         </span>
                         <button
                           onClick={() => {
@@ -4307,7 +4623,7 @@ export default function App() {
                     {/* List of available dates */}
                     {availableDatesList.length > 0 && (
                       <div className="mt-4 space-y-2">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Dates programmées</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Dates programmÃ©es</p>
                         <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
                         {availableDatesList.map(d => (
                           <div key={d._id} className="p-2 bg-emerald-50 rounded-lg border border-emerald-100">
@@ -4397,7 +4713,7 @@ export default function App() {
                                 appt.status === 'rescheduled' ? 'bg-blue-100 text-blue-700' :
                                 'bg-gray-100 text-gray-500'
                               }`}>
-                                {appt.status === 'pending' ? 'EN ATTENTE' : appt.status === 'confirmed' ? 'CONFIRMÉ' : appt.status === 'rescheduled' ? 'REPORTÉ' : 'ANNULÉ'}
+                                {appt.status === 'pending' ? 'EN ATTENTE' : appt.status === 'confirmed' ? 'CONFIRMÃ‰' : appt.status === 'rescheduled' ? 'REPORTÃ‰' : 'ANNULÃ‰'}
                               </span>
                             </div>
                             <div className="flex items-center gap-3 text-[11px] text-on-surface-variant mb-2">
@@ -4415,7 +4731,7 @@ export default function App() {
                             {appt.status === 'rescheduled' && appt.rescheduledDate && (
                               <div className="text-[11px] text-blue-600 font-semibold mb-3 flex items-center gap-1">
                                 <CalendarIcon className="w-3 h-3" />
-                                Nouveau RDV : {new Date(appt.rescheduledDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })} — {appt.rescheduledTimeSlot}
+                                Nouveau RDV : {new Date(appt.rescheduledDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })} â€” {appt.rescheduledTimeSlot}
                               </div>
                             )}
                             {appt.status === 'pending' && (
@@ -4428,7 +4744,7 @@ export default function App() {
                                       body: JSON.stringify({ status: 'confirmed' })
                                     });
                                     setAppointments(prev => prev.map(a => a._id === appt._id ? { ...a, status: 'confirmed' } : a));
-                                    addToast(`RDV avec ${appt.clientName} confirmé.`);
+                                    addToast(`RDV avec ${appt.clientName} confirmÃ©.`);
                                   }}
                                   className="px-3 py-1.5 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-700 transition-colors cursor-pointer"
                                 >
@@ -4468,6 +4784,140 @@ export default function App() {
               </motion.div>
             )}
 
+            {/* 6. MESSAGES VIEW */}
+            {activeTab === 'messages' && (
+              <motion.div
+                key="messages"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-8"
+              >
+                {/* Header */}
+                <div>
+                  <h3 className="font-headline text-2xl font-bold text-primary">Messages</h3>
+                  <p className="text-xs text-on-surface-variant">Demandes reÃ§ues depuis le formulaire de contact.</p>
+                </div>
+
+                {/* Summary cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <button
+                    onClick={() => setMessageFilter('all')}
+                    className={`glass-card p-4 rounded-xl text-left cursor-pointer transition-all ${messageFilter === 'all' ? 'ring-2 ring-primary shadow-md' : 'hover:shadow-md'}`}
+                  >
+                    <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">Tous</p>
+                    <p className="font-headline text-2xl font-bold text-on-surface mt-1">{clientInboxMessages.length}</p>
+                    <p className="text-[11px] text-on-surface-variant mt-1">messages reÃ§us</p>
+                  </button>
+                  <button
+                    onClick={() => setMessageFilter('unread')}
+                    className={`glass-card p-4 rounded-xl text-left cursor-pointer transition-all ${messageFilter === 'unread' ? 'ring-2 ring-primary shadow-md' : 'hover:shadow-md'}`}
+                  >
+                    <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">Non lus</p>
+                    <p className="font-headline text-2xl font-bold text-blue-600 mt-1">{clientInboxMessages.filter(m => m.isUnread).length}</p>
+                    <p className="text-[11px] text-on-surface-variant mt-1">Ã  traiter</p>
+                  </button>
+                  <button
+                    onClick={() => setMessageFilter('processing')}
+                    className={`glass-card p-4 rounded-xl text-left cursor-pointer transition-all ${messageFilter === 'processing' ? 'ring-2 ring-primary shadow-md' : 'hover:shadow-md'}`}
+                  >
+                    <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">En cours</p>
+                    <p className="font-headline text-2xl font-bold text-amber-600 mt-1">{clientInboxMessages.filter(m => m.status === 'processing').length}</p>
+                    <p className="text-[11px] text-on-surface-variant mt-1">en traitement</p>
+                  </button>
+                  <button
+                    onClick={() => setMessageFilter('done')}
+                    className={`glass-card p-4 rounded-xl text-left cursor-pointer transition-all ${messageFilter === 'done' ? 'ring-2 ring-primary shadow-md' : 'hover:shadow-md'}`}
+                  >
+                    <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">TraitÃ©s</p>
+                    <p className="font-headline text-2xl font-bold text-emerald-600 mt-1">{clientInboxMessages.filter(m => m.status === 'done').length}</p>
+                    <p className="text-[11px] text-on-surface-variant mt-1">clÃ´turÃ©s</p>
+                  </button>
+                </div>
+
+                {/* Inbox list */}
+                <div className="bg-white rounded-2xl border border-secondary/10 overflow-hidden shadow-sm">
+                  {filteredMessages.length === 0 ? (
+                    <div className="text-center py-16 text-sm text-on-surface-variant flex flex-col items-center gap-2">
+                      <Mail className="w-10 h-10 text-on-surface-variant/30" />
+                      <span>Aucun message trouvÃ©.</span>
+                    </div>
+                  ) : (
+                    filteredMessages.map(msg => {
+                      const parts = parseMessageParts(msg);
+                      const status = messageStatusInfo(msg.status);
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex flex-col lg:flex-row lg:items-center gap-3 p-4 border-b border-gray-100 transition-colors ${msg.isUnread ? 'bg-primary/5' : 'hover:bg-surface-container-low/50'}`}
+                        >
+                          <div className="flex items-center gap-3 lg:w-72 lg:shrink-0 min-w-0">
+                            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
+                              {msg.initials}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-xs font-bold text-on-surface truncate">{msg.sender}</p>
+                                {msg.isUnread && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
+                              </div>
+                              <p className="text-[10px] text-on-surface-variant truncate">{parts.email || msg.email || 'â€”'}</p>
+                            </div>
+                          </div>
+                          <div className="lg:w-56 lg:shrink-0 min-w-0">
+                            <p className="text-xs font-semibold text-on-surface truncate">{parts.subject}</p>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] text-on-surface-variant line-clamp-1">{parts.body || msg.content}</p>
+                          </div>
+                          <div className="flex lg:flex-col lg:items-end items-center gap-2 lg:w-28 lg:shrink-0">
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${status.cls}`}>{status.label}</span>
+                            <span className="text-[10px] text-on-surface-variant">{formatMessageDate(msg)}</span>
+                          </div>
+                          <div className="flex items-center gap-0.5 lg:shrink-0">
+                            <button
+                              onClick={() => openMessageDetail(msg)}
+                              className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
+                              title="Voir"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => openReplyModal(msg)}
+                              className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
+                              title="RÃ©pondre"
+                            >
+                              <Send className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setMessageStatus(msg, 'done')}
+                              className="p-1.5 text-on-surface-variant hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                              title="Marquer comme traitÃ©"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => archiveMessage(msg)}
+                              className="p-1.5 text-on-surface-variant hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                              title="Archiver"
+                            >
+                              <Archive className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleArchiveMessage(msg.id, msg.sender)}
+                              className="p-1.5 text-on-surface-variant hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </motion.div>
+            )}
+
             {/* 7. REFERENCES VIEW */}
             {activeTab === 'references' && (
               <motion.div
@@ -4480,9 +4930,9 @@ export default function App() {
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
-                    <h3 className="font-headline text-2xl font-bold text-primary">Nos Références</h3>
+                    <h3 className="font-headline text-2xl font-bold text-primary">Nos RÃ©fÃ©rences</h3>
                     <p className="text-xs text-on-surface-variant">
-                      Gérez les entreprises et partenaires affichés dans la section « Ils Nous Font Confiance ».
+                      GÃ©rez les entreprises et partenaires affichÃ©s dans la section Â« Ils Nous Font Confiance Â».
                     </p>
                   </div>
                   <button
@@ -4490,17 +4940,17 @@ export default function App() {
                     className="bg-secondary hover:bg-secondary/80 text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
-                    Ajouter une Référence
+                    Ajouter une RÃ©fÃ©rence
                   </button>
                 </div>
 
                 {/* Stats Bar */}
                 <div className="flex flex-wrap gap-4 text-xs text-on-surface-variant">
                   <span className="font-semibold">
-                    Total : <span className="text-primary font-bold">{references.length}</span> références
+                    Total : <span className="text-primary font-bold">{references.length}</span> rÃ©fÃ©rences
                   </span>
                   <span className="font-semibold">
-                    Catégories : <span className="text-primary font-bold">{new Set(references.map(r => r.category)).size}</span>
+                    CatÃ©gories : <span className="text-primary font-bold">{new Set(references.map(r => r.category)).size}</span>
                   </span>
                 </div>
 
@@ -4513,7 +4963,7 @@ export default function App() {
                           <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">#</th>
                           <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Logo</th>
                           <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Nom</th>
-                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Catégorie</th>
+                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">CatÃ©gorie</th>
                           <th className="text-right py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                       </thead>
@@ -4522,12 +4972,12 @@ export default function App() {
                           <tr>
                             <td colSpan={5} className="py-12 text-center">
                               <ClipboardList className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                              <p className="text-sm text-gray-400 font-medium">Aucune référence pour le moment</p>
+                              <p className="text-sm text-gray-400 font-medium">Aucune rÃ©fÃ©rence pour le moment</p>
                               <button
                                 onClick={handleOpenAddRef}
                                 className="mt-3 text-secondary hover:text-secondary/80 text-xs font-bold cursor-pointer"
                               >
-                                + Ajouter votre première référence
+                                + Ajouter votre premiÃ¨re rÃ©fÃ©rence
                               </button>
                             </td>
                           </tr>
@@ -4627,7 +5077,7 @@ export default function App() {
               <form onSubmit={handleCreateMission} className="p-6 space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-on-surface-variant mb-1">
-                    Intitulé de la Mission <span className="text-error">*</span>
+                    IntitulÃ© de la Mission <span className="text-error">*</span>
                   </label>
                   <input
                     type="text"
@@ -4655,17 +5105,17 @@ export default function App() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-on-surface-variant mb-1">Département</label>
+                    <label className="block text-xs font-bold text-on-surface-variant mb-1">DÃ©partement</label>
                     <select
                       value={newMissionDept}
                       onChange={(e) => setNewMissionDept(e.target.value as any)}
                       className="w-full bg-surface-container-low border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-primary"
                     >
-                      <option value="Audit Légal">Audit Légal</option>
+                      <option value="Audit LÃ©gal">Audit LÃ©gal</option>
                       <option value="Conseil">Conseil</option>
-                      <option value="Comptabilité">Comptabilité</option>
+                      <option value="ComptabilitÃ©">ComptabilitÃ©</option>
                       <option value="Juridique">Juridique</option>
-                      <option value="Fiscalité">Fiscalité</option>
+                      <option value="FiscalitÃ©">FiscalitÃ©</option>
                     </select>
                   </div>
 
@@ -4708,7 +5158,7 @@ export default function App() {
                     type="submit"
                     className="px-4 py-2 text-xs font-bold bg-primary text-white hover:bg-primary-container rounded-lg transition-colors cursor-pointer"
                   >
-                    Créer la Mission
+                    CrÃ©er la Mission
                   </button>
                 </div>
               </form>
@@ -4717,7 +5167,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* MODAL 2: REPLY TO MESSAGE — Chat Thread */}
+      {/* MODAL 2: REPLY TO MESSAGE â€” Chat Thread */}
       <AnimatePresence>
         {isReplyOpen && activeReplyMessage && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -4819,7 +5269,7 @@ export default function App() {
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
-                    placeholder="Écrire un message..."
+                    placeholder="Ã‰crire un message..."
                     className="flex-1 bg-surface-container-low border border-secondary/15 rounded-2xl px-4 py-2.5 text-xs text-on-surface focus:outline-primary focus:ring-1 focus:ring-primary/30 placeholder:text-on-surface-variant/40 resize-none"
                   />
                   <button
@@ -4870,12 +5320,12 @@ export default function App() {
                 <p className="font-medium text-on-surface">Besoin d'aide sur le portail RM Consulting ?</p>
                 <div className="space-y-2.5">
                   <div className="p-3 bg-surface-container-low rounded-lg">
-                    <p className="font-bold text-on-surface mb-1">Comment créer une mission ?</p>
-                    <p>Cliquez sur "Nouvelle Mission" en bas à gauche pour configurer un nouvel audit ou une mission de conseil.</p>
+                    <p className="font-bold text-on-surface mb-1">Comment crÃ©er une mission ?</p>
+                    <p>Cliquez sur "Nouvelle Mission" en bas Ã  gauche pour configurer un nouvel audit ou une mission de conseil.</p>
                   </div>
                   <div className="p-3 bg-surface-container-low rounded-lg">
-                    <p className="font-bold text-on-surface mb-1">Mise à jour de la progression</p>
-                    <p>Dans l'onglet "Missions", vous pouvez augmenter la progression de 10% ou marquer la mission comme validée instantanément.</p>
+                    <p className="font-bold text-on-surface mb-1">Mise Ã  jour de la progression</p>
+                    <p>Dans l'onglet "Missions", vous pouvez augmenter la progression de 10% ou marquer la mission comme validÃ©e instantanÃ©ment.</p>
                   </div>
                 </div>
               </div>
@@ -4928,7 +5378,7 @@ export default function App() {
 
               <form onSubmit={handleSendDeptContact} className="p-6 space-y-4">
                 <div className="p-3 bg-surface-container-low rounded-lg text-xs text-on-surface-variant">
-                  <p className="font-semibold text-on-surface mb-1">Pôle d'Expertise :</p>
+                  <p className="font-semibold text-on-surface mb-1">PÃ´le d'Expertise :</p>
                   <p className="font-bold text-primary">{selectedDeptForContact.name}</p>
                 </div>
 
@@ -4989,7 +5439,7 @@ export default function App() {
               <div className="flex justify-between items-center bg-primary text-on-primary px-6 py-4">
                 <h4 className="font-headline font-bold text-sm flex items-center gap-2">
                   <Building2 className="w-4 h-4" />
-                  {editingDept ? 'Modifier le Département' : 'Nouveau Département'}
+                  {editingDept ? 'Modifier le DÃ©partement' : 'Nouveau DÃ©partement'}
                 </h4>
                 <button
                   type="button"
@@ -5003,14 +5453,14 @@ export default function App() {
               <form onSubmit={handleSubmitDept} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
                 <div>
                   <label className="block text-xs font-bold text-on-surface-variant mb-1">
-                    Nom du Département *
+                    Nom du DÃ©partement *
                   </label>
                   <input
                     type="text"
                     required
                     value={deptName}
                     onChange={(e) => setDeptName(e.target.value)}
-                    placeholder="Ex: Conseil & Stratégie, Fiscalité..."
+                    placeholder="Ex: Conseil & StratÃ©gie, FiscalitÃ©..."
                     className="w-full bg-surface-container-low border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-primary placeholder:text-on-surface-variant/30"
                   />
                 </div>
@@ -5024,14 +5474,14 @@ export default function App() {
                     required
                     value={deptDescription}
                     onChange={(e) => setDeptDescription(e.target.value)}
-                    placeholder="Description concise des missions et spécialités de ce pôle..."
+                    placeholder="Description concise des missions et spÃ©cialitÃ©s de ce pÃ´le..."
                     className="w-full bg-surface-container-low border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-primary placeholder:text-on-surface-variant/30 resize-none"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-on-surface-variant mb-1">
-                    Responsable du Pôle *
+                    Responsable du PÃ´le *
                   </label>
                   <input
                     type="text"
@@ -5078,20 +5528,20 @@ export default function App() {
                     rows={4}
                     value={deptServicesText}
                     onChange={(e) => setDeptServicesText(e.target.value)}
-                    placeholder={"Ex:\nTenue complète ou partagée de la comptabilité\nÉtablissement des comptes annuels\nConsolidation financière"}
+                    placeholder={"Ex:\nTenue complÃ¨te ou partagÃ©e de la comptabilitÃ©\nÃ‰tablissement des comptes annuels\nConsolidation financiÃ¨re"}
                     className="w-full bg-surface-container-low border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface font-sans focus:outline-primary placeholder:text-on-surface-variant/30"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-on-surface-variant mb-1">
-                    Image du Département <span className="font-normal text-on-surface-variant/60">(optionnel)</span>
+                    Image du DÃ©partement <span className="font-normal text-on-surface-variant/60">(optionnel)</span>
                   </label>
                   {(deptImagePreview || deptExistingImageUrl) && (
                     <div className="relative mb-2 inline-block">
                       <img
                         src={deptImagePreview || deptExistingImageUrl || ''}
-                        alt="Aperçu"
+                        alt="AperÃ§u"
                         className="w-full h-32 object-cover rounded-lg border border-outline-variant"
                       />
                       <button
@@ -5141,7 +5591,7 @@ export default function App() {
                     className="px-4 py-2 text-xs font-bold bg-primary text-white hover:bg-primary-container rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    {editingDept ? 'Enregistrer les Modifications' : 'Créer le Département'}
+                    {editingDept ? 'Enregistrer les Modifications' : 'CrÃ©er le DÃ©partement'}
                   </button>
                 </div>
               </form>
@@ -5170,7 +5620,7 @@ export default function App() {
               <div className="flex justify-between items-center bg-primary text-on-primary px-6 py-4">
                 <h4 className="font-headline font-bold text-sm flex items-center gap-2">
                   <CalendarIcon className="w-4 h-4" />
-                  Horaires - {timeSlotDayNum} {['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][availCalMonth]} {availCalYear}
+                  Horaires - {timeSlotDayNum} {['Janvier','FÃ©vrier','Mars','Avril','Mai','Juin','Juillet','AoÃ»t','Septembre','Octobre','Novembre','DÃ©cembre'][availCalMonth]} {availCalYear}
                 </h4>
                 <button
                   type="button"
@@ -5183,12 +5633,12 @@ export default function App() {
 
               <div className="p-6 space-y-4">
                 <p className="text-xs text-on-surface-variant">
-                  Choisissez l'intervalle horaire, puis sélectionnez les créneaux de 30 min que vous souhaitez rendre disponibles.
+                  Choisissez l'intervalle horaire, puis sÃ©lectionnez les crÃ©neaux de 30 min que vous souhaitez rendre disponibles.
                 </p>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[11px] font-bold text-on-surface block mb-1">Heure de début</label>
+                    <label className="text-[11px] font-bold text-on-surface block mb-1">Heure de dÃ©but</label>
                     <input
                       type="time"
                       value={newSlotStartTime}
@@ -5215,7 +5665,7 @@ export default function App() {
 
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Créneaux disponibles</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-primary">CrÃ©neaux disponibles</p>
                     <button
                       type="button"
                       onClick={() => {
@@ -5228,7 +5678,7 @@ export default function App() {
                       }}
                       className="text-[10px] text-primary font-bold cursor-pointer hover:underline"
                     >
-                      {selectedModalSlots.length === generateClientSlots(newSlotStartTime, newSlotEndTime).length ? 'Tout désélectionner' : 'Tout sélectionner'}
+                      {selectedModalSlots.length === generateClientSlots(newSlotStartTime, newSlotEndTime).length ? 'Tout dÃ©sÃ©lectionner' : 'Tout sÃ©lectionner'}
                     </button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -5254,7 +5704,7 @@ export default function App() {
                       );
                     })}
                     {generateClientSlots(newSlotStartTime, newSlotEndTime).length === 0 && (
-                      <p className="col-span-2 text-[10px] text-on-surface-variant italic text-center py-2">Aucun créneau possible</p>
+                      <p className="col-span-2 text-[10px] text-on-surface-variant italic text-center py-2">Aucun crÃ©neau possible</p>
                     )}
                   </div>
                 </div>
@@ -5267,7 +5717,7 @@ export default function App() {
                         await fetch(`${API_URL}/available-dates/${editingTimeSlotId}`, { method: 'DELETE' });
                         setAvailableDatesList(prev => prev.filter(d => d._id !== editingTimeSlotId));
                         setTimeSlotModalOpen(false);
-                        addToast(`Date ${timeSlotDayNum} supprimée.`, 'info');
+                        addToast(`Date ${timeSlotDayNum} supprimÃ©e.`, 'info');
                       }}
                       className="px-4 py-2 text-xs font-bold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
                     >
@@ -5297,7 +5747,7 @@ export default function App() {
                           setAvailableDatesList(prev =>
                             prev.map(d => d._id === editingTimeSlotId ? { ...updated, bookedSlots: d.bookedSlots } : d)
                           );
-                          addToast(`Horaires mis à jour pour le ${timeSlotDayNum}.`);
+                          addToast(`Horaires mis Ã  jour pour le ${timeSlotDayNum}.`);
                         }
                       } else {
                         const res = await fetch(`${API_URL}/available-dates`, {
@@ -5308,7 +5758,7 @@ export default function App() {
                         if (res.ok) {
                           const created = await res.json();
                           setAvailableDatesList(prev => [...prev, { ...created, bookedSlots: [] }]);
-                          addToast(`Date ${timeSlotDayNum} ajoutée avec ${selectedModalSlots.length} créneau(x).`);
+                          addToast(`Date ${timeSlotDayNum} ajoutÃ©e avec ${selectedModalSlots.length} crÃ©neau(x).`);
                         }
                       }
                       setTimeSlotModalOpen(false);
@@ -5317,6 +5767,231 @@ export default function App() {
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     {editingTimeSlotId ? 'Enregistrer' : 'Ajouter la date'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: PROGRAMME FORM (ADD/EDIT) */}
+      <AnimatePresence>
+        {programmeFormOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setProgrammeFormOpen(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="relative w-full max-w-lg bg-white border border-outline-variant rounded-xl shadow-2xl z-10 overflow-hidden"
+            >
+              <div className="flex justify-between items-center bg-orange-600 text-white px-6 py-4">
+                <h4 className="font-headline font-bold text-sm flex items-center gap-2">
+                  <CalendarIcon className="w-4 h-4" />
+                  {editingProgrammeId ? 'Modifier le Programme' : 'Nouveau Programme'}
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setProgrammeFormOpen(false)}
+                  className="p-1 hover:bg-white/10 rounded-full text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveProgramme} className="p-6 space-y-4">
+                <div>
+                  <label className="text-[11px] font-bold text-on-surface block mb-1">Titre du programme *</label>
+                  <input
+                    type="text"
+                    value={progTitle}
+                    onChange={e => setProgTitle(e.target.value)}
+                    placeholder="Ex: SÃ©minaire FiscalitÃ© 2026"
+                    className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-on-surface block mb-1">Description</label>
+                  <textarea
+                    value={progDescription}
+                    onChange={e => setProgDescription(e.target.value)}
+                    rows={2}
+                    placeholder="Description du programmeâ€¦"
+                    className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-on-surface block mb-1">Date *</label>
+                  <input
+                    type="date"
+                    value={progDate}
+                    onChange={e => setProgDate(e.target.value)}
+                    className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-on-surface block mb-1">Heure de dÃ©but *</label>
+                    <input
+                      type="time"
+                      value={progStartTime}
+                      onChange={e => setProgStartTime(e.target.value)}
+                      className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-on-surface block mb-1">Heure de fin *</label>
+                    <input
+                      type="time"
+                      value={progEndTime}
+                      onChange={e => setProgEndTime(e.target.value)}
+                      className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-on-surface block mb-1">Type de programme *</label>
+                  <select
+                    value={progType}
+                    onChange={e => setProgType(e.target.value)}
+                    className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
+                  >
+                    <option value="Formation">Formation</option>
+                    <option value="SÃ©minaire">SÃ©minaire</option>
+                    <option value="Atelier">Atelier</option>
+                    <option value="ConfÃ©rence">ConfÃ©rence</option>
+                    <option value="RÃ©union">RÃ©union</option>
+                    <option value="Autre">Autre</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-on-surface block mb-1">Notes <span className="font-normal text-on-surface-variant">(optionnel)</span></label>
+                  <textarea
+                    value={progNotes}
+                    onChange={e => setProgNotes(e.target.value)}
+                    rows={2}
+                    placeholder="Notes ou informations complÃ©mentairesâ€¦"
+                    className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3 border-t border-secondary/10">
+                  <button
+                    type="button"
+                    onClick={() => setProgrammeFormOpen(false)}
+                    className="px-4 py-2 text-xs font-bold text-on-surface-variant border border-outline-variant rounded-lg hover:bg-surface-container transition-colors cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-xs font-bold bg-orange-600 text-white hover:bg-orange-700 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    {editingProgrammeId ? 'Enregistrer' : 'Ajouter'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: PROGRAMME VIEW */}
+      <AnimatePresence>
+        {viewingProgramme && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setViewingProgramme(null)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="relative w-full max-w-md bg-white border border-outline-variant rounded-xl shadow-2xl z-10 overflow-hidden"
+            >
+              <div className="flex justify-between items-center bg-orange-600 text-white px-6 py-4">
+                <h4 className="font-headline font-bold text-sm flex items-center gap-2">
+                  <CalendarIcon className="w-4 h-4" />
+                  Programme
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setViewingProgramme(null)}
+                  className="p-1 hover:bg-white/10 rounded-full text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
+                    {viewingProgramme.type}
+                  </span>
+                  <h5 className="font-headline font-bold text-on-surface text-sm">{viewingProgramme.title}</h5>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <p className="text-on-surface flex items-center gap-2">
+                    <CalendarIcon className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                    {new Date(`${viewingProgramme.date}T00:00:00`).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                  <p className="text-on-surface flex items-center gap-2">
+                    <Clock className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                    {viewingProgramme.startTime} - {viewingProgramme.endTime}
+                  </p>
+                </div>
+
+                {viewingProgramme.description && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Description</p>
+                    <p className="text-xs text-on-surface leading-relaxed">{viewingProgramme.description}</p>
+                  </div>
+                )}
+
+                {viewingProgramme.notes && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Notes</p>
+                    <p className="text-xs text-on-surface leading-relaxed bg-surface-container-low rounded-lg p-3">{viewingProgramme.notes}</p>
+                  </div>
+                )}
+
+                <div className="pt-4 flex justify-end gap-3 border-t border-secondary/10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openEditProgramme(viewingProgramme);
+                      setViewingProgramme(null);
+                    }}
+                    className="px-4 py-2 text-xs font-bold border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Modifier
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteProgramme(viewingProgramme.id, viewingProgramme.title)}
+                    className="px-4 py-2 text-xs font-bold border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Supprimer
                   </button>
                 </div>
               </div>
@@ -5344,7 +6019,7 @@ export default function App() {
             >
               <div className="flex items-center justify-between mb-6">
                 <h4 className="font-headline text-lg font-bold text-primary">
-                  {editingRef ? 'Modifier la référence' : 'Ajouter une référence'}
+                  {editingRef ? 'Modifier la rÃ©fÃ©rence' : 'Ajouter une rÃ©fÃ©rence'}
                 </h4>
                 <button
                   onClick={() => setIsRefModalOpen(false)}
@@ -5368,12 +6043,12 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Catégorie</label>
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">CatÃ©gorie</label>
                   <input
                     type="text"
                     value={refCategory}
                     onChange={e => setRefCategory(e.target.value)}
-                    placeholder="Ex: BTP, Banque, Éducation..."
+                    placeholder="Ex: BTP, Banque, Ã‰ducation..."
                     className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
                     required
                   />
@@ -5387,7 +6062,7 @@ export default function App() {
                     <div className="relative mb-2 inline-block">
                       <img
                         src={refImagePreview || refExistingImageUrl || ''}
-                        alt="Aperçu"
+                        alt="AperÃ§u"
                         className="w-full h-28 object-contain rounded-xl border border-gray-200 bg-white p-2"
                       />
                       <button
@@ -5476,8 +6151,8 @@ export default function App() {
               </div>
 
               <p className="text-xs text-on-surface-variant">
-                Vous êtes sur le point de refuser le rendez-vous avec <strong>{rejectTargetName}</strong>.
-                Veuillez indiquer la raison du refus, elle sera envoyée par email au client.
+                Vous Ãªtes sur le point de refuser le rendez-vous avec <strong>{rejectTargetName}</strong>.
+                Veuillez indiquer la raison du refus, elle sera envoyÃ©e par email au client.
               </p>
 
               <textarea
@@ -5506,7 +6181,7 @@ export default function App() {
                     });
                     setAppointments(prev => prev.map(a => a._id === rejectTargetId ? { ...a, status: 'cancelled' } : a));
                     setRejectModalOpen(false);
-                    addToast(`RDV avec ${rejectTargetName} refusé. Email envoyé.`, 'info');
+                    addToast(`RDV avec ${rejectTargetName} refusÃ©. Email envoyÃ©.`, 'info');
                   }}
                   className="px-4 py-2 text-xs font-bold bg-red-600 text-white hover:bg-red-700 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                 >
@@ -5549,8 +6224,8 @@ export default function App() {
               </div>
 
               <p className="text-xs text-on-surface-variant">
-                Vous êtes sur le point de reporter le rendez-vous avec <strong>{rescheduleTargetName}</strong>.
-                Sélectionnez une nouvelle date et un créneau horaire.
+                Vous Ãªtes sur le point de reporter le rendez-vous avec <strong>{rescheduleTargetName}</strong>.
+                SÃ©lectionnez une nouvelle date et un crÃ©neau horaire.
               </p>
 
               <div className="space-y-3">
@@ -5564,7 +6239,7 @@ export default function App() {
                     }}
                     className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-amber-400"
                   >
-                    <option value="">Sélectionner une date</option>
+                    <option value="">SÃ©lectionner une date</option>
                     {availableDatesList.map((ad) => (
                       <option key={ad._id} value={ad.date}>
                         {new Date(ad.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -5575,7 +6250,7 @@ export default function App() {
 
                 {rescheduleNewDate && (
                   <div>
-                    <label className="text-[11px] font-bold text-on-surface block mb-1">Créneau horaire</label>
+                    <label className="text-[11px] font-bold text-on-surface block mb-1">CrÃ©neau horaire</label>
                     <div className="flex flex-wrap gap-2">
                       {availableDatesList
                         .find((ad) => ad.date === rescheduleNewDate)
@@ -5621,7 +6296,7 @@ export default function App() {
                       ? { ...a, status: 'rescheduled' as const, rescheduledDate: rescheduleNewDate, rescheduledTimeSlot: rescheduleNewTimeSlot }
                       : a));
                     setRescheduleModalOpen(false);
-                    addToast(`RDV avec ${rescheduleTargetName} reporté. Email envoyé.`, 'info');
+                    addToast(`RDV avec ${rescheduleTargetName} reportÃ©. Email envoyÃ©.`, 'info');
                   }}
                   className="px-4 py-2 text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                 >
@@ -5652,7 +6327,7 @@ export default function App() {
             >
               <div className="flex items-center justify-between mb-6">
                 <h4 className="font-headline text-lg font-bold text-primary">
-                  {editingParam ? 'Modifier le paramètre' : 'Ajouter un paramètre'}
+                  {editingParam ? 'Modifier le paramÃ¨tre' : 'Ajouter un paramÃ¨tre'}
                 </h4>
                 <button
                   onClick={() => setIsParamModalOpen(false)}
@@ -5664,7 +6339,7 @@ export default function App() {
 
               <form onSubmit={handleSubmitParam} className="space-y-5">
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Clé</label>
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">ClÃ©</label>
                   <input
                     type="text"
                     value={paramKey}
@@ -5680,7 +6355,7 @@ export default function App() {
                     rows={3}
                     value={paramValue}
                     onChange={e => setParamValue(e.target.value)}
-                    placeholder="Valeur du paramètre..."
+                    placeholder="Valeur du paramÃ¨tre..."
                     className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none"
                     required
                   />
@@ -5689,7 +6364,7 @@ export default function App() {
                 {paramKey.toLowerCase() === 'address' && (
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                      Sélectionner sur la carte
+                      SÃ©lectionner sur la carte
                     </label>
                     <MapPicker value={paramValue} onChange={setParamValue} />
                   </div>
@@ -5738,7 +6413,7 @@ export default function App() {
                   <h4 className="font-headline text-lg font-bold text-primary">
                     {editingOffer ? 'Modifier l\'offre d\'emploi' : 'Nouvelle offre d\'emploi'}
                   </h4>
-                  <p className="text-[11px] text-on-surface-variant">Les champs marqués d'un * sont obligatoires.</p>
+                  <p className="text-[11px] text-on-surface-variant">Les champs marqu├®s d'un * sont obligatoires.</p>
                 </div>
                 <button
                   onClick={() => setIsOfferModalOpen(false)}
@@ -5752,7 +6427,7 @@ export default function App() {
                 <div className="p-6 space-y-5">
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                      Intitulé du poste <span className="text-error">*</span>
+                      Intitul├® du poste <span className="text-error">*</span>
                     </label>
                     <input
                       type="text"
@@ -5769,7 +6444,7 @@ export default function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                        Département <span className="text-error">*</span>
+                        D├®partement <span className="text-error">*</span>
                       </label>
                       <select
                         value={offerDepartment}
@@ -5818,25 +6493,25 @@ export default function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                        Niveau d'étude requis
+                        Niveau d'├®tude requis
                       </label>
                       <input
                         type="text"
                         value={offerEducationLevel}
                         onChange={(e) => setOfferEducationLevel(e.target.value)}
-                        placeholder="Ex : Master en comptabilité"
+                        placeholder="Ex : Master en comptabilit├®"
                         className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                        Expérience requise
+                        Exp├®rience requise
                       </label>
                       <input
                         type="text"
                         value={offerRequiredExperience}
                         onChange={(e) => setOfferRequiredExperience(e.target.value)}
-                        placeholder="Ex : 2 à 5 ans"
+                        placeholder="Ex : 2 ├á 5 ans"
                         className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
                       />
                     </div>
@@ -5857,14 +6532,14 @@ export default function App() {
 
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                      Compétences recherchées <span className="text-error">*</span>
+                      Comp├®tences recherch├®es <span className="text-error">*</span>
                       <span className="normal-case font-semibold text-gray-400"> (une par ligne)</span>
                     </label>
                     <textarea
                       rows={4}
                       value={offerSkillsText}
                       onChange={(e) => setOfferSkillsText(e.target.value)}
-                      placeholder={'Excel avancé\nMaîtrise des normes comptables\nEsprit d\'analyse'}
+                      placeholder={'Excel avanc├®\nMa├«trise des normes comptables\nEsprit d\'analyse'}
                       className={`w-full px-4 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none ${
                         offerFormErrors.skills ? 'border-red-400' : 'border-gray-200'
                       }`}
@@ -5874,13 +6549,13 @@ export default function App() {
 
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                      Description détaillée du poste <span className="text-error">*</span>
+                      Description d├®taill├®e du poste <span className="text-error">*</span>
                     </label>
                     <textarea
                       rows={4}
                       value={offerDescription}
                       onChange={(e) => setOfferDescription(e.target.value)}
-                      placeholder="Décrivez le contexte du poste, le cabinet et les responsabilités..."
+                      placeholder="D├®crivez le contexte du poste, le cabinet et les responsabilit├®s..."
                       className={`w-full px-4 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none ${
                         offerFormErrors.description ? 'border-red-400' : 'border-gray-200'
                       }`}
@@ -5896,20 +6571,20 @@ export default function App() {
                       rows={4}
                       value={offerMissionsText}
                       onChange={(e) => setOfferMissionsText(e.target.value)}
-                      placeholder={'Tenue et suivi de la comptabilité\nPréparation des états financiers'}
+                      placeholder={'Tenue et suivi de la comptabilit├®\nPr├®paration des ├®tats financiers'}
                       className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                      Profil recherché
+                      Profil recherch├®
                     </label>
                     <textarea
                       rows={3}
                       value={offerProfile}
                       onChange={(e) => setOfferProfile(e.target.value)}
-                      placeholder="Décrivez le profil idéal : formation, qualités, atouts..."
+                      placeholder="D├®crivez le profil id├®al : formation, qualit├®s, atouts..."
                       className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none"
                     />
                   </div>
@@ -5952,7 +6627,7 @@ export default function App() {
                         onChange={(e) => setOfferDeadline(e.target.value)}
                         className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
                       />
-                      <p className="text-[10px] text-on-surface-variant mt-1">Facultative — offre ouverte si vide.</p>
+                      <p className="text-[10px] text-on-surface-variant mt-1">Facultative ÔÇö offre ouverte si vide.</p>
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Statut</label>
@@ -5962,12 +6637,12 @@ export default function App() {
                         className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all bg-white"
                       >
                         <option value="draft">Brouillon</option>
-                        <option value="published">Publiée</option>
-                        <option value="closed">Fermée</option>
+                        <option value="published">Publi├®e</option>
+                        <option value="closed">Ferm├®e</option>
                       </select>
                       {offerStatus === 'published' && (
                         <p className="text-[10px] text-emerald-600 mt-1 font-semibold">
-                          Visible immédiatement sur le site (#/offres)
+                          Visible imm├®diatement sur le site (#/offres)
                         </p>
                       )}
                     </div>
@@ -5987,7 +6662,7 @@ export default function App() {
                     className="px-6 py-2.5 text-xs font-bold bg-primary text-white rounded-xl hover:bg-primary-container transition-all cursor-pointer flex items-center gap-2"
                   >
                     <CheckCircle2 className="w-4 h-4" />
-                    {editingOffer ? 'Enregistrer les modifications' : 'Créer l\'offre'}
+                    {editingOffer ? 'Enregistrer les modifications' : 'Cr├®er l\'offre'}
                   </button>
                 </div>
               </form>
@@ -5996,7 +6671,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Offer detail modal (Vue 2 : offre + candidatures reçues) */}
+      {/* Offer detail modal (Vue 2 : offre + candidatures re├ºues) */}
       <AnimatePresence>
         {selectedOffer && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -6034,7 +6709,7 @@ export default function App() {
                     <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {selectedOffer.location}</span>
                     <span className="inline-flex items-center gap-1">
                       <CalendarClock className="w-3.5 h-3.5" />
-                      Publiée le {selectedOffer.publishedAt ? new Date(selectedOffer.publishedAt).toLocaleDateString('fr-FR') : '—'}
+                      Publi├®e le {selectedOffer.publishedAt ? new Date(selectedOffer.publishedAt).toLocaleDateString('fr-FR') : 'ÔÇö'}
                     </span>
                   </p>
                 </div>
@@ -6066,14 +6741,14 @@ export default function App() {
 
               <div className="overflow-y-auto custom-scrollbar flex-1">
                 <div className="p-6 space-y-6">
-                  {/* Détails de l'offre */}
+                  {/* D├®tails de l'offre */}
                   <div className="space-y-5">
                     {selectedOffer.requiredExperience || selectedOffer.educationLevel ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {selectedOffer.educationLevel && (
                           <div className="bg-surface-container-low/60 p-3 rounded-xl border border-secondary/10">
                             <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1 flex items-center gap-1">
-                              <GraduationCap className="w-3.5 h-3.5" /> Niveau d'étude
+                              <GraduationCap className="w-3.5 h-3.5" /> Niveau d'├®tude
                             </p>
                             <p className="text-sm font-semibold text-on-surface">{selectedOffer.educationLevel}</p>
                           </div>
@@ -6081,7 +6756,7 @@ export default function App() {
                         {selectedOffer.requiredExperience && (
                           <div className="bg-surface-container-low/60 p-3 rounded-xl border border-secondary/10">
                             <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1 flex items-center gap-1">
-                              <Target className="w-3.5 h-3.5" /> Expérience requise
+                              <Target className="w-3.5 h-3.5" /> Exp├®rience requise
                             </p>
                             <p className="text-sm font-semibold text-on-surface">{selectedOffer.requiredExperience}</p>
                           </div>
@@ -6102,7 +6777,7 @@ export default function App() {
                         <ul className="space-y-1.5">
                           {selectedOffer.missions.map((m, i) => (
                             <li key={i} className="flex items-start gap-2 text-sm text-on-surface">
-                              <span className="text-emerald-600 font-bold shrink-0 mt-0.5">✓</span>
+                              <span className="text-emerald-600 font-bold shrink-0 mt-0.5">Ô£ô</span>
                               {m}
                             </li>
                           ))}
@@ -6112,7 +6787,7 @@ export default function App() {
 
                     {(selectedOffer.skills || []).length > 0 && (
                       <div>
-                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Compétences recherchées</p>
+                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Comp├®tences recherch├®es</p>
                         <div className="flex flex-wrap gap-2">
                           {selectedOffer.skills.map((s, i) => (
                             <span key={i} className="px-3 py-1 bg-primary/5 text-primary border border-primary/15 rounded-full text-xs font-bold">
@@ -6125,7 +6800,7 @@ export default function App() {
 
                     {selectedOffer.profile && (
                       <div>
-                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Profil recherché</p>
+                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Profil recherch├®</p>
                         <p className="text-sm text-on-surface leading-relaxed">{selectedOffer.profile}</p>
                       </div>
                     )}
@@ -6146,12 +6821,12 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Candidatures reçues pour cette offre (Vue 2) */}
+                  {/* Candidatures re├ºues pour cette offre (Vue 2) */}
                   <div className="border-t border-gray-100 pt-5">
                     <div className="flex items-center justify-between mb-4">
                       <h5 className="font-headline text-sm font-bold text-on-surface flex items-center gap-2">
                         <UsersRound className="w-4 h-4 text-primary" />
-                        Candidatures reçues
+                        Candidatures re├ºues
                       </h5>
                       <span className="px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-bold">
                         {(offerCandidatesCount[selectedOffer._id] || 0)} candidature{(offerCandidatesCount[selectedOffer._id] || 0) > 1 ? 's' : ''}
@@ -6164,7 +6839,7 @@ export default function App() {
                         return (
                           <div className="text-center py-8 text-on-surface-variant bg-surface-container-low/40 rounded-xl border border-dashed border-secondary/20">
                             <UsersRound className="w-8 h-8 mx-auto mb-2 text-on-surface-variant/40" />
-                            <p className="text-sm font-medium">Aucune candidature reçue pour cette offre.</p>
+                            <p className="text-sm font-medium">Aucune candidature re├ºue pour cette offre.</p>
                           </div>
                         );
                       }
@@ -6181,7 +6856,7 @@ export default function App() {
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-bold text-on-surface truncate">{app.firstName} {app.lastName}</p>
                                   <p className="text-xs text-on-surface-variant truncate">
-                                    {app.email} — {new Date(app.createdAt).toLocaleDateString('fr-FR')}
+                                    {app.email} ÔÇö {new Date(app.createdAt).toLocaleDateString('fr-FR')}
                                   </p>
                                 </div>
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${info.cls}`}>
@@ -6225,7 +6900,6 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
-
       {/* Offer delete confirmation */}
       <AnimatePresence>
         {isOfferDeleteOpen && offerToDelete && (
@@ -6244,7 +6918,7 @@ export default function App() {
                 <h3 className="font-headline font-bold text-lg text-on-surface mb-2">Supprimer l'offre</h3>
                 <p className="text-sm text-on-surface-variant mb-6">
                   Voulez-vous vraiment supprimer l'offre <strong className="text-on-surface">"{offerToDelete.title}"</strong> ?
-                  Cette action est irréversible.
+                  Cette action est irr├®versible.
                 </p>
                 <div className="flex gap-3">
                   <button
@@ -6265,7 +6939,233 @@ export default function App() {
           </>
         )}
       </AnimatePresence>
+      {/* MODAL: MESSAGE DETAIL */}
+      <AnimatePresence>
+        {messageDetailOpen && activeMessageDetail && (() => {
+          const parts = parseMessageParts(activeMessageDetail);
+          const status = messageStatusInfo(activeMessageDetail.status);
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                onClick={() => setMessageDetailOpen(false)}
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-2xl z-10"
+              >
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-base shrink-0">
+                      {activeMessageDetail.initials}
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-headline text-lg font-bold text-primary truncate">{activeMessageDetail.sender}</h4>
+                      <p className="text-xs text-on-surface-variant truncate">{parts.email || activeMessageDetail.email || 'ÔÇö'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border whitespace-nowrap ${status.cls}`}>{status.label}</span>
+                    <button
+                      onClick={() => setMessageDetailOpen(false)}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
 
+                <div className="border-t border-gray-100 pt-4">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <p className="text-sm font-bold text-on-surface">{parts.subject}</p>
+                    <span className="text-[10px] text-on-surface-variant whitespace-nowrap">{formatMessageDate(activeMessageDetail)}</span>
+                  </div>
+                  <div className="bg-surface-container-low rounded-xl p-4 text-sm text-on-surface leading-relaxed whitespace-pre-wrap min-h-32">
+                    {parts.body || activeMessageDetail.content}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-3 pt-5">
+                  <button
+                    onClick={() => {
+                      archiveMessage(activeMessageDetail);
+                      setMessageDetailOpen(false);
+                    }}
+                    className="px-4 py-2.5 text-xs font-bold text-amber-700 border border-amber-200 rounded-xl hover:bg-amber-50 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Archive className="w-3.5 h-3.5" /> Archiver
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleArchiveMessage(activeMessageDetail.id, activeMessageDetail.sender);
+                      setMessageDetailOpen(false);
+                    }}
+                    className="px-4 py-2.5 text-xs font-bold text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Supprimer
+                  </button>
+                  <button
+                    onClick={() => openMessageDetailWithReply(activeMessageDetail)}
+                    className="px-4 py-2.5 text-xs font-bold text-on-surface-variant border border-outline-variant rounded-xl hover:bg-surface-container transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Send className="w-3.5 h-3.5" /> R├®pondre par email
+                  </button>
+                  {activeMessageDetail.status !== 'done' && (
+                    <button
+                      onClick={() => setMessageStatus(activeMessageDetail, 'done')}
+                      className="px-4 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Marquer comme trait├®
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      openNewAppointment(activeMessageDetail);
+                      setMessageDetailOpen(false);
+                    }}
+                    className="px-4 py-2.5 text-xs font-bold bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <CalendarIcon className="w-3.5 h-3.5" /> Planifier un rendez-vous
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
+      {/* MODAL: PLANIFIER UN RENDEZ-VOUS */}
+      <AnimatePresence>
+        {appointmentModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setAppointmentModalOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-2xl z-10"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h4 className="font-headline text-lg font-bold text-primary">Planifier un rendez-vous</h4>
+                <button
+                  onClick={() => setAppointmentModalOpen(false)}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveAppointment} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Client</label>
+                    <input
+                      type="text"
+                      value={newApptClient}
+                      onChange={e => setNewApptClient(e.target.value)}
+                      placeholder="Nom du client"
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Email</label>
+                    <input
+                      type="email"
+                      value={newApptEmail}
+                      onChange={e => setNewApptEmail(e.target.value)}
+                      placeholder="email@exemple.com"
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Service</label>
+                    <input
+                      type="text"
+                      value={newApptService}
+                      onChange={e => setNewApptService(e.target.value)}
+                      placeholder="Ex: Conseil en strat├®gie"
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Date</label>
+                    <input
+                      type="date"
+                      value={newApptDate}
+                      onChange={e => setNewApptDate(e.target.value)}
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Heure</label>
+                    <input
+                      type="time"
+                      value={newApptTime}
+                      onChange={e => setNewApptTime(e.target.value)}
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Dur├®e</label>
+                    <select
+                      value={newApptDuration}
+                      onChange={e => setNewApptDuration(e.target.value)}
+                      className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all bg-white cursor-pointer"
+                    >
+                      <option value="15">15 minutes</option>
+                      <option value="30">30 minutes</option>
+                      <option value="45">45 minutes</option>
+                      <option value="60">1 heure</option>
+                      <option value="90">1h30</option>
+                      <option value="120">2 heures</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Notes (optionnel)</label>
+                  <textarea
+                    rows={3}
+                    value={newApptNotes}
+                    onChange={e => setNewApptNotes(e.target.value)}
+                    placeholder="Notes concernant le rendez-vous..."
+                    className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setAppointmentModalOpen(false)}
+                    className="px-5 py-2.5 text-xs font-bold text-on-surface-variant border border-outline-variant rounded-xl hover:bg-surface-container transition-colors cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 text-xs font-bold bg-primary text-white rounded-xl hover:bg-primary/90 transition-all cursor-pointer"
+                  >
+                    Planifier
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
