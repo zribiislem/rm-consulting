@@ -52,7 +52,8 @@ import {
   UsersRound,
   Eye,
   ExternalLink,
-  Loader2
+  Loader2,
+  ChevronDown
 } from 'lucide-react';
 
 // Interfaces
@@ -60,7 +61,7 @@ interface Mission {
   id: string;
   title: string;
   client: string;
-  department: 'Audit LÃ©gal' | 'Conseil' | 'ComptabilitÃ©' | 'Juridique' | 'FiscalitÃ©';
+  department: 'Audit Légal' | 'Conseil' | 'Comptabilité' | 'Juridique' | 'Fiscalité';
   status: string;
   progression: number;
 }
@@ -101,7 +102,7 @@ const siteOrigin = (): string => {
     const stored = localStorage.getItem('rm_site_origin');
     if (stored) return stored;
   } catch {
-    // localStorage unavailable (sandboxed iframe) â€” fall through to default
+    // localStorage unavailable (sandboxed iframe) ” fall through to default
   }
   return `${window.location.protocol}//${getHostname()}:3000`;
 };
@@ -150,7 +151,7 @@ const authHeaders = (json = true): Record<string, string> => {
 const authedFetch = (url: string, init: RequestInit = {}): Promise<Response> =>
   fetch(url, { ...init, headers: { ...authHeaders(!!init.body), ...(init.headers || {}) } });
 
-// Ã‰chappe le contenu candidat avant insertion dans le document HTML du PDF exportÃ©
+// Échappe le contenu candidat avant insertion dans le document HTML du PDF exporté
 const escHtml = (value: unknown): string =>
   String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -176,7 +177,7 @@ const getDeptIcon = (id: string) => {
   }
 };
 
-// Estimation du nombre d'annÃ©es d'expÃ©rience Ã  partir de la chaÃ®ne libre (ex: "4 ans d'expÃ©rience")
+// Estimation du nombre d'années d'expérience à partir de la chaîne libre (ex: "4 ans d'expérience")
 const parseExpYears = (exp?: string): number => {
   if (!exp) return 0;
   const match = exp.match(/(\d+([.,]\d+)?)\s*ans?/i);
@@ -184,7 +185,7 @@ const parseExpYears = (exp?: string): number => {
   return /junior|stage/i.test(exp) ? 0.5 : 0;
 };
 
-// LibellÃ© + classes de couleur pour chaque statut de candidature
+// Libellé + classes de couleur pour chaque statut de candidature
 const candidateStatusInfo = (status: string): { label: string; cls: string } => {
   switch (status) {
     case 'new':
@@ -194,9 +195,9 @@ const candidateStatusInfo = (status: string): { label: string; cls: string } => 
     case 'interview':
       return { label: 'Entretien', cls: 'bg-purple-100 text-purple-700 border-purple-200' };
     case 'accepted':
-      return { label: 'AcceptÃ©', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+      return { label: 'Accepté', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
     default:
-      return { label: 'RefusÃ©', cls: 'bg-rose-100 text-rose-700 border-rose-200' };
+      return { label: 'Refusé', cls: 'bg-rose-100 text-rose-700 border-rose-200' };
   }
 };
 
@@ -211,10 +212,24 @@ const formatTimeAmPm = (time?: string): string => {
   return `${hour12}:${String(minutes).padStart(2, '0')} ${period}`;
 };
 
+// Statut effectif d'un rendez-vous : EXPIRÉ automatiquement une fois la date/heure passée
+const apptEffectiveStatus = (appt: { date?: string; timeSlot?: string; status: string }): string => {
+  if (appt.date && appt.status !== 'cancelled') {
+    try {
+      const startTime = (appt.timeSlot || '').split('-')[0].trim();
+      const dt = /^\d{1,2}:\d{2}$/.test(startTime)
+        ? new Date(`${appt.date}T${startTime}:00`)
+        : new Date(appt.date);
+      if (dt.getTime() < Date.now()) return 'expired';
+    } catch { /* ignore */ }
+  }
+  return appt.status;
+};
+
 const OFFER_DEPARTMENTS = [
   'Expertise Comptable',
   'Audit',
-  'FiscalitÃ©',
+  'Fiscalité',
   'Conseil',
   'Administratif',
   'Autre',
@@ -224,17 +239,17 @@ const OFFER_CONTRACTS = ['CDI', 'CDD', 'Stage', 'Alternance', 'Freelance'];
 
 const OFFER_STATUS_LABELS: Record<string, string> = {
   draft: 'Brouillon',
-  published: 'PubliÃ©e',
-  closed: 'FermÃ©e',
+  published: 'Publiée',
+  closed: 'Fermée',
 };
 
 // Badge couleur pour chaque statut d'offre
 const offerStatusInfo = (status: string): { label: string; cls: string } => {
   switch (status) {
     case 'published':
-      return { label: 'PubliÃ©e', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+      return { label: 'Publiée', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
     case 'closed':
-      return { label: 'FermÃ©e', cls: 'bg-gray-100 text-gray-600 border-gray-200' };
+      return { label: 'Fermée', cls: 'bg-gray-100 text-gray-600 border-gray-200' };
     default:
       return { label: 'Brouillon', cls: 'bg-amber-100 text-amber-700 border-amber-200' };
   }
@@ -258,19 +273,19 @@ const contractBadgeCls = (contract: string): string => {
   }
 };
 
-// LibellÃ© + classes de couleur pour chaque statut de message
+// Libellé + classes de couleur pour chaque statut de message
 const messageStatusInfo = (status: string): { label: string; cls: string } => {
   switch (status) {
     case 'processing':
       return { label: 'En cours', cls: 'bg-amber-100 text-amber-700 border-amber-200' };
     case 'done':
-      return { label: 'TraitÃ©', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+      return { label: 'Traité', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
     default:
       return { label: 'Nouveau', cls: 'bg-blue-100 text-blue-700 border-blue-200' };
   }
 };
 
-// Date de rÃ©ception lisible d'un message (crÃ©Ã© en base) sinon son heure
+// Date de réception lisible d'un message (créé en base) sinon son heure
 const formatMessageDate = (msg: Message): string => {
   if (msg.createdAt) {
     try {
@@ -343,9 +358,16 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
 
   // Messages inbox state
-  const [messageFilter, setMessageFilter] = useState<'all' | 'unread' | 'processing' | 'done'>('all');
+  const [messageFilter, setMessageFilter] = useState<'all' | 'unread' | 'processing' | 'done' | 'today' | 'week'>('all');
+  const [messageSearch, setMessageSearch] = useState('');
+  const [messageSort, setMessageSort] = useState<'newest' | 'oldest' | 'name-az' | 'name-za'>('newest');
   const [messageDetailOpen, setMessageDetailOpen] = useState(false);
   const [activeMessageDetail, setActiveMessageDetail] = useState<Message | null>(null);
+  const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
+  const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [messagePage, setMessagePage] = useState(1);
+  const MESSAGES_PER_PAGE = 20;
 
   // Appointments state
   interface AppointmentData {
@@ -360,6 +382,7 @@ export default function App() {
     rescheduledDate: string;
     rescheduledTimeSlot: string;
     duration?: string;
+    createdAt?: string;
   }
   interface AvailableDateData {
     _id: string;
@@ -370,6 +393,10 @@ export default function App() {
     bookedSlots: string[];
   }
   const [appointments, setAppointments] = useState<AppointmentData[]>([]);
+  const [activeAppointment, setActiveAppointment] = useState<AppointmentData | null>(null);
+  const [apptSearch, setApptSearch] = useState('');
+  const [apptFilter, setApptFilter] = useState<'all' | 'pending' | 'confirmed' | 'rescheduled' | 'cancelled' | 'expired' | 'today' | 'week'>('all');
+  const [apptSort, setApptSort] = useState<'recent' | 'oldest' | 'date' | 'name'>('recent');
   const [availableDatesList, setAvailableDatesList] = useState<AvailableDateData[]>([]);
   const [availCalMonth, setAvailCalMonth] = useState(new Date().getMonth());
   const [availCalYear, setAvailCalYear] = useState(new Date().getFullYear());
@@ -502,7 +529,7 @@ export default function App() {
   }
   const [offers, setOffers] = useState<JobOffer[]>([]);
   const [offerSearch, setOfferSearch] = useState('');
-  const [offerDeptFilter, setOfferDeptFilter] = useState('Tous les dÃ©partements');
+  const [offerDeptFilter, setOfferDeptFilter] = useState('Tous les départements');
   const [offerContractFilter, setOfferContractFilter] = useState('Tous les contrats');
   const [offerStatusFilter, setOfferStatusFilter] = useState('Tous les statuts');
 
@@ -599,6 +626,7 @@ export default function App() {
         setMissions(missionsData.map((m: any) => ({ ...m, id: m._id })));
         setMessages(msgs.map((m: any) => ({ ...m, id: m._id })));
         setAppointments(appts);
+        knownApptIdsRef.current = new Set(appts.map((a: any) => a._id));
         setAvailableDatesList(avails);
         setReferences(refs);
         setParameters(params);
@@ -615,13 +643,13 @@ export default function App() {
 
   // ---------------------------------------------------------------
   // Recherches dynamiques : interrogation live du serveur (debounce),
-  // rÃ©sultats mis Ã  jour automatiquement pendant la frappe.
+  // résultats mis à jour automatiquement pendant la frappe.
   // ---------------------------------------------------------------
   const skipAppsFirstRun = useRef(true);
   const skipOffersFirstRun = useRef(true);
   const skipMissionsFirstRun = useRef(true);
 
-  // Candidatures : recherche serveur en direct (mots clÃ©s)
+  // Candidatures : recherche serveur en direct (mots clés)
   useEffect(() => {
     if (skipAppsFirstRun.current) {
       skipAppsFirstRun.current = false;
@@ -641,7 +669,7 @@ export default function App() {
         setJobApps(data);
         setArchivedApps(archivedData);
       } catch (err) {
-        console.error('Recherche candidatures Ã©chouÃ©e:', err);
+        console.error('Recherche candidatures échouée:', err);
       } finally {
         setIsAppsSearching(false);
       }
@@ -649,7 +677,7 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Offres : recherche serveur en direct (mots clÃ©s + filtres)
+  // Offres : recherche serveur en direct (mots clés + filtres)
   useEffect(() => {
     if (skipOffersFirstRun.current) {
       return;
@@ -659,14 +687,14 @@ export default function App() {
       try {
         const params = new URLSearchParams();
         if (offerSearch.trim()) params.set('search', offerSearch.trim());
-        if (offerDeptFilter !== 'Tous les dÃ©partements') params.set('department', offerDeptFilter);
+        if (offerDeptFilter !== 'Tous les départements') params.set('department', offerDeptFilter);
         if (offerContractFilter !== 'Tous les contrats') params.set('contractType', offerContractFilter);
         if (offerStatusFilter !== 'Tous les statuts') params.set('status', offerStatusFilter);
         const res = await authedFetch(`${API_URL}/job-offers?${params.toString()}`);
         const data = await res.json();
         setOffers(data);
       } catch (err) {
-        console.error('Recherche offres Ã©chouÃ©e:', err);
+        console.error('Recherche offres échouée:', err);
       } finally {
         setIsOffersSearching(false);
       }
@@ -674,7 +702,7 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [offerSearch, offerDeptFilter, offerContractFilter, offerStatusFilter]);
 
-  // Missions : recherche serveur en direct (mots clÃ©s)
+  // Missions : recherche serveur en direct (mots clés)
   useEffect(() => {
     if (skipMissionsFirstRun.current) {
       return;
@@ -688,13 +716,122 @@ export default function App() {
         const data = await res.json();
         setMissions(data.map((m: any) => ({ ...m, id: m._id })));
       } catch (err) {
-        console.error('Recherche missions Ã©chouÃ©e:', err);
+        console.error('Recherche missions échouée:', err);
       } finally {
         setIsMissionsSearching(false);
       }
     }, 350);
     return () => clearTimeout(timer);
   }, [missionSearch]);
+
+  // Real-time notifications: détecte les nouveaux rendez-vous sans recharger la page
+  const knownApptIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!isAuthChecked) return;
+    let stopped = false;
+
+    const checkNewAppointments = async () => {
+      try {
+        const res = await fetch(`${API_URL}/appointments`);
+        const appts = await res.json();
+        if (!Array.isArray(appts) || stopped) return;
+
+        const currentIds = new Set(appts.map((a: any) => a._id));
+
+        if (knownApptIdsRef.current.size === 0) {
+          knownApptIdsRef.current = currentIds;
+          return;
+        }
+
+        const newOnes = appts.filter((a: any) => !knownApptIdsRef.current.has(a._id));
+        if (newOnes.length > 0) {
+          setAppointments(appts);
+          setApptNotifications(prev => [...newOnes, ...prev]);
+          newOnes.forEach((a: any) => {
+            addToast(`🔔 Nouveau rendez-vous — ${a.clientName} (${a.timeSlot})`, 'info');
+          });
+        }
+        knownApptIdsRef.current = currentIds;
+      } catch (err) {
+        console.error('Failed to poll appointments:', err);
+      }
+    };
+
+    checkNewAppointments();
+    const interval = setInterval(checkNewAppointments, 15000);
+
+    return () => {
+      stopped = true;
+      clearInterval(interval);
+    };
+  }, [isAuthChecked]);
+
+  // Garde le rendez-vous affiché synchronisé avec les données à jour
+  useEffect(() => {
+    if (!activeAppointment) return;
+    const updated = appointments.find(a => a._id === activeAppointment._id);
+    if (updated) setActiveAppointment(updated);
+    else setActiveAppointment(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointments]);
+
+  // Demandes de Rendez-vous : recherche + filtres + tri
+  const filteredAppointments = useMemo(() => {
+    let list = appointments;
+
+    const q = apptSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter(a =>
+        [a.clientName, a.email, a.subject, a.details]
+          .filter(Boolean)
+          .some(field => String(field).toLowerCase().includes(q))
+      );
+    }
+
+    const now = new Date();
+    const d = now.getDate();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), d);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    if (apptFilter !== 'all') {
+      if (apptFilter === 'today') {
+        list = list.filter(a => a.date === todayStr);
+      } else if (apptFilter === 'week') {
+        list = list.filter(a => {
+          const date = new Date(a.date);
+          return date >= weekStart && date <= weekEnd;
+        });
+      } else {
+        list = list.filter(a => apptEffectiveStatus(a) === apptFilter);
+      }
+    }
+
+    const sorted = [...list];
+    switch (apptSort) {
+      case 'oldest':
+        sorted.sort((a, b) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime());
+        break;
+      case 'date':
+        sorted.sort((a, b) => {
+          const ta = new Date(`${a.date}T${(a.timeSlot || '').split('-')[0].trim() || '00:00'}:00`).getTime();
+          const tb = new Date(`${b.date}T${(b.timeSlot || '').split('-')[0].trim() || '00:00'}:00`).getTime();
+          return ta - tb;
+        });
+        break;
+      case 'name':
+        sorted.sort((a, b) => (a.clientName || '').localeCompare(b.clientName || ''));
+        break;
+      default:
+        sorted.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+    }
+    return sorted;
+  }, [appointments, apptSearch, apptFilter, apptSort]);
 
   // Dashboard calendar state
   const today = new Date();
@@ -779,9 +916,9 @@ export default function App() {
       if (res.ok) {
         const updated = await res.json();
         setProgrammes(prev => prev.map(p => p.id === editingProgrammeId ? { ...updated, id: updated._id } : p));
-        addToast(`Programme "${progTitle.trim()}" mis Ã  jour.`);
+        addToast(`Programme "${progTitle.trim()}" mis à jour.`);
       } else {
-        addToast('Erreur lors de la mise Ã  jour du programme.', 'error');
+        addToast('Erreur lors de la mise à jour du programme.', 'error');
       }
     } else {
       const res = await authedFetch(`${API_URL}/programs`, {
@@ -791,7 +928,7 @@ export default function App() {
       if (res.ok) {
         const created = await res.json();
         setProgrammes(prev => [...prev, { ...created, id: created._id }]);
-        addToast(`Programme "${progTitle.trim()}" ajoutÃ©.`);
+        addToast(`Programme "${progTitle.trim()}" ajouté.`);
       } else {
         addToast('Erreur lors de l\'ajout du programme.', 'error');
       }
@@ -803,7 +940,7 @@ export default function App() {
     const res = await authedFetch(`${API_URL}/programs/${id}`, { method: 'DELETE' });
     if (res.ok) {
       setProgrammes(prev => prev.filter(p => p.id !== id));
-      addToast(`Programme "${title}" supprimÃ©.`, 'info');
+      addToast(`Programme "${title}" supprimé.`, 'info');
     } else {
       addToast('Erreur lors de la suppression du programme.', 'error');
     }
@@ -848,6 +985,7 @@ export default function App() {
   const [replyText, setReplyText] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [apptNotifications, setApptNotifications] = useState<any[]>([]);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
   const [rejectTargetName, setRejectTargetName] = useState('');
@@ -857,6 +995,7 @@ export default function App() {
   const [rescheduleTargetName, setRescheduleTargetName] = useState('');
   const [rescheduleNewDate, setRescheduleNewDate] = useState('');
   const [rescheduleNewTimeSlot, setRescheduleNewTimeSlot] = useState('');
+  const [apptConfirmAction, setApptConfirmAction] = useState<null | { type: 'confirm' | 'reject' | 'reschedule'; appt: any }>(null);
 
   // Department contact modal state
   const [isDeptContactOpen, setIsDeptContactOpen] = useState(false);
@@ -866,8 +1005,8 @@ export default function App() {
   // New Mission form state
   const [newMissionTitle, setNewMissionTitle] = useState('');
   const [newMissionClient, setNewMissionClient] = useState('');
-  const [newMissionDept, setNewMissionDept] = useState<'Audit LÃ©gal' | 'Conseil' | 'ComptabilitÃ©' | 'Juridique' | 'FiscalitÃ©'>('Audit LÃ©gal');
-  const [newMissionStatus, setNewMissionStatus] = useState('EN PRÃ‰PARATION');
+  const [newMissionDept, setNewMissionDept] = useState<'Audit Légal' | 'Conseil' | 'Comptabilité' | 'Juridique' | 'Fiscalité'>('Audit Légal');
+  const [newMissionStatus, setNewMissionStatus] = useState('EN PRÉPARATION');
   const [newMissionProg, setNewMissionProg] = useState(10);
 
   // Notifications alerts
@@ -922,12 +1061,79 @@ export default function App() {
   const activeMissionsCount = missions.length + 21; // Mock constant added to make it matches the original "24"
   const unreadMessagesCount = messages.filter((m) => m.isUnread && m.sender !== 'Rezgui Mihoub' && !m.parentId).length;
 
-  // BoÃ®te de rÃ©ception Messages (hors messages archivÃ©s)
+  // Boîte de réception Messages (hors messages archivés)
   const clientInboxMessages = messages.filter(m => m.sender !== 'Rezgui Mihoub' && !m.parentId && !m.archived);
   const newMessagesCount = clientInboxMessages.filter(m => m.status === 'new' || m.isUnread).length;
-  const filteredMessages = messageFilter === 'all' ? clientInboxMessages
-    : messageFilter === 'unread' ? clientInboxMessages.filter(m => m.isUnread)
-    : clientInboxMessages.filter(m => m.status === messageFilter);
+
+  const messageTimestamp = (m: Message): number => {
+    if (m.createdAt) {
+      try {
+        return new Date(m.createdAt).getTime();
+      } catch { /* fall through */ }
+    }
+    const t = m.time ? new Date(m.time).getTime() : NaN;
+    return Number.isNaN(t) ? 0 : t;
+  };
+
+  const filteredMessages = useMemo(() => {
+    let list = clientInboxMessages;
+
+    if (messageFilter === 'unread') list = list.filter(m => m.isUnread);
+    else if (messageFilter === 'processing') list = list.filter(m => m.status === 'processing');
+    else if (messageFilter === 'done') list = list.filter(m => m.status === 'done');
+    else if (messageFilter === 'today') {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start.getTime() + 86400000);
+      list = list.filter(m => {
+        const t = messageTimestamp(m);
+        return t >= start.getTime() && t < end.getTime();
+      });
+    } else if (messageFilter === 'week') {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      start.setDate(start.getDate() - 6);
+      list = list.filter(m => messageTimestamp(m) >= start.getTime());
+    }
+
+    const q = messageSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter(m => {
+        const parts = parseMessageParts(m);
+        return [m.sender, parts.email, m.email, parts.subject, parts.body, m.content]
+          .filter(Boolean)
+          .some(field => String(field).toLowerCase().includes(q));
+      });
+    }
+
+    const sorted = [...list];
+    switch (messageSort) {
+      case 'oldest':
+        sorted.sort((a, b) => messageTimestamp(a) - messageTimestamp(b));
+        break;
+      case 'name-az':
+        sorted.sort((a, b) => (a.sender || '').localeCompare(b.sender || ''));
+        break;
+      case 'name-za':
+        sorted.sort((a, b) => (b.sender || '').localeCompare(a.sender || ''));
+        break;
+      default:
+        sorted.sort((a, b) => messageTimestamp(b) - messageTimestamp(a));
+    }
+    return sorted;
+  }, [clientInboxMessages, messageFilter, messageSearch, messageSort]);
+
+  // Reset pagination when the filter, search or sort changes
+  useEffect(() => {
+    setMessagePage(1);
+  }, [messageFilter, messageSearch, messageSort]);
+
+  const totalMessagePages = Math.max(1, Math.ceil(filteredMessages.length / MESSAGES_PER_PAGE));
+  const currentMessagePage = Math.min(messagePage, totalMessagePages);
+  const pagedMessages = filteredMessages.slice(
+    (currentMessagePage - 1) * MESSAGES_PER_PAGE,
+    currentMessagePage * MESSAGES_PER_PAGE
+  );
 
   // Handle Nouvelle Mission
   const handleCreateMission = async (e: React.FormEvent) => {
@@ -952,15 +1158,15 @@ export default function App() {
       const newM = await res.json();
       setMissions([{ ...newM, id: newM._id }, ...missions]);
       setIsNewMissionOpen(false);
-      addToast(`Mission "${newMissionTitle}" crÃ©Ã©e avec succÃ¨s !`);
+      addToast(`Mission "${newMissionTitle}" créée avec succès !`);
     } catch (err) {
-      addToast('Erreur lors de la crÃ©ation de la mission.', 'info');
+      addToast('Erreur lors de la création de la mission.', 'info');
     }
 
     setNewMissionTitle('');
     setNewMissionClient('');
-    setNewMissionDept('Audit LÃ©gal');
-    setNewMissionStatus('EN PRÃ‰PARATION');
+    setNewMissionDept('Audit Légal');
+    setNewMissionStatus('EN PRÉPARATION');
     setNewMissionProg(10);
   };
 
@@ -972,10 +1178,15 @@ export default function App() {
       console.error('Failed to delete message:', err);
     }
     setMessages((prev) => prev.filter((m) => m.id !== id));
-    addToast(`Message de ${senderName} supprimÃ©.`, 'info');
+    if (activeMessageDetail?.id === id) {
+      setActiveMessageDetail(null);
+      setMessageDetailOpen(false);
+    }
+    setSelectedMessageIds(prev => prev.filter(x => x !== id));
+    addToast(`Message de ${senderName} supprimé.`, 'info');
   };
 
-  // Archiver un message (retirÃ© de la boÃ®te de rÃ©ception, sans suppression)
+  // Archiver un message (retiré de la boîte de réception, sans suppression)
   const archiveMessage = async (msg: Message) => {
     try {
       await fetch(`${API_URL}/messages/${msg.id}`, {
@@ -985,10 +1196,10 @@ export default function App() {
       }).catch(() => {});
     } catch { /* ignore */ }
     setMessages((prev) => prev.filter((m) => m.id !== msg.id));
-    addToast(`Message de ${msg.sender} archivÃ©.`, 'info');
+    addToast(`Message de ${msg.sender} archivé.`, 'info');
   };
 
-  // Mettre Ã  jour le statut d'un message (nouveau / en cours / traitÃ©)
+  // Mettre à jour le statut d'un message (nouveau / en cours / traité)
   const setMessageStatus = async (msg: Message, status: 'new' | 'processing' | 'done') => {
     const isUnread = status === 'new';
     try {
@@ -1004,12 +1215,106 @@ export default function App() {
     }
     addToast(
       status === 'done'
-        ? 'Message marquÃ© comme traitÃ©.'
+        ? 'Message marqué comme traité.'
         : status === 'processing'
-        ? 'Message marquÃ© en cours de traitement.'
+        ? 'Message marqué en cours de traitement.'
         : 'Message remis comme nouveau.',
       'info'
     );
+  };
+
+  // Bulk actions handlers (sélection multiple)
+  const toggleMessageSelection = (id: string) => {
+    setSelectedMessageIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const allMessagesSelected = filteredMessages.length > 0 && filteredMessages.every(m => selectedMessageIds.includes(m.id));
+
+  const toggleAllMessages = () => {
+    if (allMessagesSelected) {
+      const ids = new Set(filteredMessages.map(m => m.id));
+      setSelectedMessageIds(prev => prev.filter(id => !ids.has(id)));
+    } else {
+      setSelectedMessageIds(prev => [...new Set([...prev, ...filteredMessages.map(m => m.id)])]);
+    }
+  };
+
+  const clearMessageSelection = () => setSelectedMessageIds([]);
+
+  const bulkMarkRead = async () => {
+    if (selectedMessageIds.length === 0) return;
+    await Promise.all(
+      selectedMessageIds.map(id =>
+        fetch(`${API_URL}/messages/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isUnread: false }),
+        }).catch(() => {})
+      )
+    );
+    setMessages(prev => prev.map(m =>
+      selectedMessageIds.includes(m.id) ? { ...m, isUnread: false } : m
+    ));
+    addToast(`${selectedMessageIds.length} message${selectedMessageIds.length > 1 ? 's' : ''} marqué${selectedMessageIds.length > 1 ? 's' : ''} comme lu.`, 'info');
+    clearMessageSelection();
+  };
+
+  const bulkMarkDone = async () => {
+    if (selectedMessageIds.length === 0) return;
+    await Promise.all(
+      selectedMessageIds.map(id =>
+        fetch(`${API_URL}/messages/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'done', isUnread: false }),
+        }).catch(() => {})
+      )
+    );
+    setMessages(prev => prev.map(m =>
+      selectedMessageIds.includes(m.id) ? { ...m, status: 'done', isUnread: false } : m
+    ));
+    addToast(`${selectedMessageIds.length} message${selectedMessageIds.length > 1 ? 's' : ''} marqué${selectedMessageIds.length > 1 ? 's' : ''} comme traité.`, 'info');
+    clearMessageSelection();
+  };
+
+  const bulkDeleteMessages = async () => {
+    if (selectedMessageIds.length === 0) return;
+    await Promise.all(
+      selectedMessageIds.map(id =>
+        fetch(`${API_URL}/messages/${id}`, { method: 'DELETE' }).catch(() => {})
+      )
+    );
+    setMessages(prev => prev.filter(m => !selectedMessageIds.includes(m.id)));
+    addToast(`${selectedMessageIds.length} message${selectedMessageIds.length > 1 ? 's' : ''} supprimé${selectedMessageIds.length > 1 ? 's' : ''}.`, 'info');
+    clearMessageSelection();
+    setBulkDeleteOpen(false);
+  };
+
+  const exportSelectedMessages = () => {
+    const selected = filteredMessages.filter(m => selectedMessageIds.includes(m.id));
+    if (selected.length === 0) {
+      addToast('Aucun message à exporter', 'info');
+      return;
+    }
+    const rows = selected.map(m => {
+      const parts = parseMessageParts(m);
+      return {
+        'Expéditeur': m.sender || '',
+        'Email': parts.email || m.email || '',
+        'Sujet': parts.subject || '',
+        'Message': parts.body || m.content || '',
+        'Date': formatMessageDate(m),
+        'Statut': messageStatusInfo(m.status).label,
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 22 }, { wch: 30 }, { wch: 30 }, { wch: 60 }, { wch: 14 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Messages');
+    XLSX.writeFile(wb, `messages_${new Date().toISOString().split('T')[0]}.xlsx`);
+    addToast(`${selected.length} message${selected.length > 1 ? 's' : ''} exporté${selected.length > 1 ? 's' : ''} (Excel)`);
   };
 
   // Messages inbox handlers
@@ -1069,12 +1374,12 @@ export default function App() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        addToast(err.message || 'Erreur lors de la crÃ©ation.', 'info');
+        addToast(err.message || 'Erreur lors de la création.', 'info');
         return;
       }
       const created = await res.json();
       setAppointments(prev => [created, ...prev]);
-      addToast(`Rendez-vous avec ${newApptClient.trim()} planifiÃ©.`);
+      addToast(`Rendez-vous avec ${newApptClient.trim()} planifié.`);
       setAppointmentModalOpen(false);
     } catch {
       addToast('Erreur lors de l\'enregistrement.', 'error');
@@ -1115,7 +1420,7 @@ export default function App() {
 
     const replyData = {
       sender: 'Rezgui Mihoub',
-      role: 'Expert-Comptable | AssociÃ© GÃ©rant',
+      role: 'Expert-Comptable | Associé Gérant',
       initials: 'MA',
       time: timeStr,
       content: replyText.trim(),
@@ -1131,28 +1436,28 @@ export default function App() {
       });
       const saved = await res.json();
       setMessages((prev) => [{ ...saved, id: saved._id }, ...prev]);
-      addToast(`RÃ©ponse envoyÃ©e Ã  ${activeReplyMessage.sender}.`);
+      addToast(`Réponse envoyée à ${activeReplyMessage.sender}.`);
     } catch {
-      addToast(`RÃ©ponse envoyÃ©e Ã  ${activeReplyMessage.sender}.`);
+      addToast(`Réponse envoyée à ${activeReplyMessage.sender}.`);
     }
 
     // Send email to client
     if (clientEmail) {
-      const subject = originalMsg?.content?.match(/\[(.+?)\]/)?.[1] || 'RÃ©ponse RM Consulting';
+      const subject = originalMsg?.content?.match(/\[(.+?)\]/)?.[1] || 'Réponse RM Consulting';
       try {
         await fetch(`${API_URL}/send-email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             to: clientEmail,
-            subject: `Re: ${subject} â€” RM Consulting`,
+            subject: `Re: ${subject} ” RM Consulting`,
             text: replyText.trim(),
             senderName: 'Rezgui Mihoub',
           })
         });
-        addToast(`Email envoyÃ© Ã  ${clientEmail}`);
+        addToast(`Email envoyé à ${clientEmail}`);
       } catch {
-        addToast('Email non envoyÃ© (vÃ©rifiez la configuration SMTP)', 'info');
+        addToast('Email non envoyé (vérifiez la configuration SMTP)', 'info');
       }
     }
 
@@ -1171,7 +1476,7 @@ export default function App() {
     e.preventDefault();
     if (!deptContactMessage.trim() || !selectedDeptForContact) return;
 
-    addToast(`Message transmis Ã  ${selectedDeptForContact.head.split(' (')[0]} avec succÃ¨s.`);
+    addToast(`Message transmis à ${selectedDeptForContact.head.split(' (')[0]} avec succès.`);
     setIsDeptContactOpen(false);
 
     const senderName = selectedDeptForContact.head.split(' (')[0];
@@ -1184,8 +1489,8 @@ export default function App() {
         sender: senderName,
         role: `Responsable - ${selectedDeptForContact.name}`,
         initials: initials,
-        time: 'Ã€ l\'instant',
-        content: `Bonjour, j'ai bien reÃ§u votre demande concernant le pÃ´le "${selectedDeptForContact.name}". Je l'Ã©tudie dÃ¨s Ã  prÃ©sent et reviens vers vous trÃ¨s vite.`,
+        time: 'À l\'instant',
+        content: `Bonjour, j'ai bien reçu votre demande concernant le pôle "${selectedDeptForContact.name}". Je l'étudie dès à présent et reviens vers vous très vite.`,
         isUnread: true,
         status: 'new'
       };
@@ -1244,7 +1549,7 @@ export default function App() {
       console.error('Failed to delete department:', err);
     }
     setDepartments(prev => prev.filter(d => d.id !== deptId));
-    addToast(`Le dÃ©partement "${deptToDelete.name}" a Ã©tÃ© supprimÃ©.`, 'info');
+    addToast(`Le département "${deptToDelete.name}" a été supprimé.`, 'info');
   };
 
   // References CRUD handlers
@@ -1274,7 +1579,7 @@ export default function App() {
     try {
       await fetch(`${API_URL}/references/${refId}`, { method: 'DELETE' });
       setReferences(prev => prev.filter(r => r._id !== refId));
-      addToast(`"${refToDelete.name}" a Ã©tÃ© supprimÃ©.`, 'info');
+      addToast(`"${refToDelete.name}" a été supprimé.`, 'info');
     } catch {
       addToast('Erreur lors de la suppression.', 'error');
     }
@@ -1309,7 +1614,7 @@ export default function App() {
         }
         const updated = await res.json();
         setReferences(prev => prev.map(r => r._id === editingRef._id ? updated : r));
-        addToast('RÃ©fÃ©rence modifiÃ©e.', 'info');
+        addToast('Référence modifiée.', 'info');
       } else {
         const res = await fetch(`${API_URL}/references`, {
           method: 'POST',
@@ -1321,7 +1626,7 @@ export default function App() {
         }
         const created = await res.json();
         setReferences(prev => [...prev, created]);
-        addToast('RÃ©fÃ©rence ajoutÃ©e.', 'info');
+        addToast('Référence ajoutée.', 'info');
       }
       setIsRefModalOpen(false);
     } catch {
@@ -1350,7 +1655,7 @@ export default function App() {
     try {
       await fetch(`${API_URL}/parameters/${paramId}`, { method: 'DELETE' });
       setParameters(prev => prev.filter(p => p._id !== paramId));
-      addToast(`"${paramToDelete.key}" supprimÃ©.`, 'info');
+      addToast(`"${paramToDelete.key}" supprimé.`, 'info');
     } catch {
       addToast('Erreur lors de la suppression.', 'info');
     }
@@ -1372,7 +1677,7 @@ export default function App() {
         if (!res.ok) { addToast('Erreur lors de la modification.', 'info'); return; }
         const updated = await res.json();
         setParameters(prev => prev.map(p => p._id === editingParam._id ? updated : p));
-        addToast('ParamÃ¨tre modifiÃ©.', 'info');
+        addToast('Paramètre modifié.', 'info');
       } else {
         const res = await fetch(`${API_URL}/parameters`, {
           method: 'POST',
@@ -1382,7 +1687,7 @@ export default function App() {
         if (!res.ok) { addToast('Erreur lors de l\'ajout.', 'info'); return; }
         const created = await res.json();
         setParameters(prev => [...prev, created]);
-        addToast('ParamÃ¨tre ajoutÃ©.', 'info');
+        addToast('Paramètre ajouté.', 'info');
       }
       setIsParamModalOpen(false);
     } catch {
@@ -1424,14 +1729,14 @@ export default function App() {
         });
         if (!res.ok) {
           const err = await res.json();
-          addToast(err.message || 'Erreur lors de la modification du dÃ©partement.', 'info');
+          addToast(err.message || 'Erreur lors de la modification du département.', 'info');
           return;
         }
         const updated = await res.json();
         setDepartments(prev =>
           prev.map(d => d.id === editingDept.id ? { ...updated, id: updated._id } : d)
         );
-        addToast(`Le dÃ©partement "${deptName}" a Ã©tÃ© modifiÃ© avec succÃ¨s.`);
+        addToast(`Le département "${deptName}" a été modifié avec succès.`);
       } else {
         const res = await fetch(`${API_URL}/departments`, {
           method: 'POST',
@@ -1439,15 +1744,15 @@ export default function App() {
         });
         if (!res.ok) {
           const err = await res.json();
-          addToast(err.message || 'Erreur lors de la crÃ©ation du dÃ©partement.', 'info');
+          addToast(err.message || 'Erreur lors de la création du département.', 'info');
           return;
         }
         const created = await res.json();
         setDepartments(prev => [...prev, { ...created, id: created._id }]);
-        addToast(`Le dÃ©partement "${deptName}" a Ã©tÃ© crÃ©Ã© avec succÃ¨s.`);
+        addToast(`Le département "${deptName}" a été créé avec succès.`);
       }
     } catch (err) {
-      addToast('Erreur lors de la sauvegarde du dÃ©partement.', 'info');
+      addToast('Erreur lors de la sauvegarde du département.', 'info');
     }
 
     setIsDeptModalOpen(false);
@@ -1466,7 +1771,7 @@ export default function App() {
   const acceptedCandidates = jobApps.filter((a: any) => a.status === 'accepted').length;
   const rejectedCandidates = jobApps.filter((a: any) => a.status === 'rejected').length;
 
-  // Filtered candidates (recherche + poste + expÃ©rience)
+  // Filtered candidates (recherche + poste + expérience)
   const filteredApps = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return jobApps.filter((a: any) => {
@@ -1479,7 +1784,7 @@ export default function App() {
 
       const matchesRole = roleFilter === 'Tous les postes' || a.position === roleFilter;
 
-      // Filtre par offre d'emploi (offre liÃ©e ou candidature spontanÃ©e)
+      // Filtre par offre d'emploi (offre liée ou candidature spontanée)
       const appOfferId = a.jobOffer?._id || a.jobOffer || null;
       const matchesOffer =
         offerFilter === 'Toutes les offres' ||
@@ -1516,30 +1821,30 @@ export default function App() {
     [offers, jobApps]
   );
 
-  // Export Excel (.xlsx) de la liste des candidats filtrÃ©s (respecte recherche + filtres actifs)
+  // Export Excel (.xlsx) de la liste des candidats filtrés (respecte recherche + filtres actifs)
   const exportCandidatesXLSX = () => {
     if (filteredApps.length === 0) {
-      addToast('Aucun candidat Ã  exporter', 'info');
+      addToast('Aucun candidat à exporter', 'info');
       return;
     }
 
     const rows = filteredApps.map((app: any) => ({
       'Nom complet': `${app.firstName || ''} ${app.lastName || ''}`,
       'Email': app.email || '',
-      'TÃ©lÃ©phone': app.phone || '',
+      'Téléphone': app.phone || '',
       'Poste': app.position || '',
-      'Offre liÃ©e': app.jobOffer?.title || '',
+      'Offre liée': app.jobOffer?.title || '',
       'Date de naissance': app.dateOfBirth || '',
       'Sexe': app.gender || '',
-      'NationalitÃ©': app.nationality || '',
+      'Nationalité': app.nationality || '',
       'Ville': app.city || app.address || '',
-      'ExpÃ©rience': app.experience || '',
-      'Ã‰tudes & DiplÃ´mes': app.education || '',
-      'DiplÃ´me': app.diploma || '',
-      'Dernier poste occupÃ©': app.lastPosition || '',
-      'DisponibilitÃ©': app.availability || '',
-      'ConnaÃ®t le cabinet via': app.source || '',
-      'Date de dÃ©pÃ´t': new Date(app.createdAt).toLocaleDateString('fr-FR'),
+      'Expérience': app.experience || '',
+      'Études & Diplômes': app.education || '',
+      'Diplôme': app.diploma || '',
+      'Dernier poste occupé': app.lastPosition || '',
+      'Disponibilité': app.availability || '',
+      'Connaît le cabinet via': app.source || '',
+      'Date de dépôt': new Date(app.createdAt).toLocaleDateString('fr-FR'),
       'Statut': candidateStatusInfo(app.status).label,
       'Date de prise de poste': app.startDate
         ? `${new Date(`${app.startDate}T00:00:00`).toLocaleDateString('fr-FR')}${app.startTime ? ` ${formatTimeAmPm(app.startTime)}` : ''}`
@@ -1556,10 +1861,10 @@ export default function App() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Candidats');
     XLSX.writeFile(wb, `candidatures_${new Date().toISOString().split('T')[0]}.xlsx`);
-    addToast(`${filteredApps.length} candidat${filteredApps.length > 1 ? 's' : ''} exportÃ©${filteredApps.length > 1 ? 's' : ''} (Excel)`);
+    addToast(`${filteredApps.length} candidat${filteredApps.length > 1 ? 's' : ''} exporté${filteredApps.length > 1 ? 's' : ''} (Excel)`);
   };
 
-  // URL sÃ©curisÃ©e de tÃ©lÃ©chargement d'une piÃ¨ce jointe
+  // URL sécurisée de téléchargement d'une pièce jointe
   const attachmentDownloadUrl = (app: any, att: any): string =>
     att._id
       ? `${API_URL}/job-applications/${app._id}/attachments/${att._id}?token=${encodeURIComponent(safeGetToken() || '')}`
@@ -1573,7 +1878,7 @@ export default function App() {
         const restored = archivedApps.find((a: any) => a._id === appId);
         setArchivedApps((prev: any[]) => prev.filter((a: any) => a._id !== appId));
         if (restored) setJobApps((prev: any[]) => [restored, ...prev]);
-        addToast('Candidature restaurÃ©e');
+        addToast('Candidature restaurée');
       } else {
         addToast('Erreur lors de la restauration', 'info');
       }
@@ -1582,14 +1887,14 @@ export default function App() {
     }
   };
 
-  // Ouverture de la confirmation : archivage (actifs) ou suppression dÃ©finitive (corbeille)
+  // Ouverture de la confirmation : archivage (actifs) ou suppression définitive (corbeille)
   const openDeleteConfirm = (appId: string, mode: 'archive' | 'permanent') => {
     setAppToDelete(appId);
     setDeleteMode(mode);
     setIsDeleteConfirmOpen(true);
   };
 
-  // Invitation Ã  un entretien (statut -> interview)
+  // Invitation à un entretien (statut -> interview)
   const handleInviteInterview = async (app: any) => {
     if (!app) return;
     try {
@@ -1601,14 +1906,14 @@ export default function App() {
         const updated = await res.json();
         setJobApps((prev: any[]) => prev.map((a: any) => (a._id === app._id ? updated : a)));
         if (selectedApp?._id === app._id) setSelectedApp(updated);
-        addToast(`Invitation envoyÃ©e Ã  ${app.firstName} ${app.lastName}`);
+        addToast(`Invitation envoyée à ${app.firstName} ${app.lastName}`);
       }
     } catch {
       addToast('Erreur lors de l\'envoi de l\'invitation', 'info');
     }
   };
 
-  // PrÃ©-remplir le formulaire de planification avec les donnÃ©es dÃ©jÃ  enregistrÃ©es
+  // Pré-remplir le formulaire de planification avec les données déjà enregistrées
   useEffect(() => {
     if (!selectedApp) return;
     setInterviewDate(selectedApp.interview?.date || '');
@@ -1633,7 +1938,7 @@ export default function App() {
       return;
     }
     if (interviewType === 'en_ligne' && !interviewLink.trim()) {
-      addToast('Le lien de la rÃ©union est obligatoire.', 'info');
+      addToast('Le lien de la réunion est obligatoire.', 'info');
       return;
     }
 
@@ -1658,8 +1963,8 @@ export default function App() {
         setSelectedApp(updated);
         addToast(
           sendInterviewEmail
-            ? `Entretien planifiÃ© et convocation envoyÃ©e Ã  ${selectedApp.firstName} ${selectedApp.lastName}`
-            : `Entretien planifiÃ© pour ${selectedApp.firstName} ${selectedApp.lastName}`
+            ? `Entretien planifié et convocation envoyée à ${selectedApp.firstName} ${selectedApp.lastName}`
+            : `Entretien planifié pour ${selectedApp.firstName} ${selectedApp.lastName}`
         );
       } else {
         const err = await res.json().catch(() => ({}));
@@ -1674,7 +1979,7 @@ export default function App() {
 
   // ----- Gestion des Offres d'Emploi -----
 
-  // Nombre de candidatures reÃ§ues par offre (hors corbeille)
+  // Nombre de candidatures reçues par offre (hors corbeille)
   const offerCandidatesCount = useMemo(() => {
     const counts: Record<string, number> = {};
     jobApps.forEach((a: any) => {
@@ -1684,7 +1989,7 @@ export default function App() {
     return counts;
   }, [jobApps]);
 
-  // Offres filtrÃ©es (recherche + dÃ©partement + contrat + statut)
+  // Offres filtrées (recherche + département + contrat + statut)
   const filteredOffers = useMemo(() => {
     const q = offerSearch.toLowerCase().trim();
     return offers.filter((o) => {
@@ -1693,7 +1998,7 @@ export default function App() {
         o.title.toLowerCase().includes(q) ||
         (o.location || '').toLowerCase().includes(q) ||
         (o.description || '').toLowerCase().includes(q);
-      const matchesDept = offerDeptFilter === 'Tous les dÃ©partements' || o.department === offerDeptFilter;
+      const matchesDept = offerDeptFilter === 'Tous les départements' || o.department === offerDeptFilter;
       const matchesContract = offerContractFilter === 'Tous les contrats' || o.contractType === offerContractFilter;
       const matchesStatus = offerStatusFilter === 'Tous les statuts' || o.status === offerStatusFilter;
       return matchesSearch && matchesDept && matchesContract && matchesStatus;
@@ -1766,14 +2071,14 @@ export default function App() {
     e.preventDefault();
     const errs: Record<string, string> = {};
     if (!offerTitle.trim()) errs.title = 'Le titre est requis';
-    if (!offerDepartment.trim()) errs.department = 'Le dÃ©partement est requis';
+    if (!offerDepartment.trim()) errs.department = 'Le département est requis';
     if (!offerContractType.trim()) errs.contract = 'Le type de contrat est requis';
     if (!offerLocation.trim()) errs.location = 'La localisation est requise';
     if (!offerDescription.trim()) errs.description = 'La description est requise';
-    if (textToList(offerSkillsText).length === 0) errs.skills = 'Au moins une compÃ©tence est requise';
+    if (textToList(offerSkillsText).length === 0) errs.skills = 'Au moins une compétence est requise';
     setOfferFormErrors(errs);
     if (Object.keys(errs).length > 0) {
-      addToast('Veuillez corriger les champs signalÃ©s.', 'info');
+      addToast('Veuillez corriger les champs signalés.', 'info');
       return;
     }
 
@@ -1815,10 +2120,10 @@ export default function App() {
       if (editingOffer) {
         setOffers((prev) => prev.map((o) => (o._id === saved._id ? saved : o)));
         if (selectedOffer?._id === saved._id) setSelectedOffer(saved);
-        addToast(`Offre "${saved.title}" mise Ã  jour`);
+        addToast(`Offre "${saved.title}" mise à jour`);
       } else {
         setOffers((prev) => [saved, ...prev]);
-        addToast(`Offre "${saved.title}" crÃ©Ã©e`);
+        addToast(`Offre "${saved.title}" créée`);
       }
       setIsOfferModalOpen(false);
       resetOfferForm();
@@ -1846,7 +2151,7 @@ export default function App() {
       if (res.ok) {
         const saved = await res.json();
         setOffers((prev) => [saved, ...prev]);
-        addToast(`Offre dupliquÃ©e : "${saved.title}"`);
+        addToast(`Offre dupliquée : "${saved.title}"`);
       } else {
         addToast('Erreur lors de la duplication', 'error');
       }
@@ -1855,7 +2160,7 @@ export default function App() {
     }
   };
 
-  // Activer / dÃ©sactiver une offre (publiÃ©e <-> fermÃ©e)
+  // Activer / désactiver une offre (publiée <-> fermée)
   const handleToggleOffer = async (offer: JobOffer) => {
     try {
       const res = await authedFetch(`${API_URL}/job-offers/${offer._id}/toggle`, { method: 'PATCH' });
@@ -1865,14 +2170,14 @@ export default function App() {
         if (selectedOffer?._id === updated._id) setSelectedOffer(updated);
         addToast(
           updated.status === 'published'
-            ? `Offre "${updated.title}" publiÃ©e (visible sur le site)`
-            : `Offre "${updated.title}" dÃ©sactivÃ©e`
+            ? `Offre "${updated.title}" publiée (visible sur le site)`
+            : `Offre "${updated.title}" désactivée`
         );
       } else {
-        addToast('Erreur lors de la mise Ã  jour', 'error');
+        addToast('Erreur lors de la mise à jour', 'error');
       }
     } catch {
-      addToast('Erreur lors de la mise Ã  jour', 'error');
+      addToast('Erreur lors de la mise à jour', 'error');
     }
   };
 
@@ -1883,7 +2188,7 @@ export default function App() {
       if (res.ok) {
         setOffers((prev) => prev.filter((o) => o._id !== offerToDelete._id));
         if (selectedOffer?._id === offerToDelete._id) setSelectedOffer(null);
-        addToast(`Offre "${offerToDelete.title}" supprimÃ©e`);
+        addToast(`Offre "${offerToDelete.title}" supprimée`);
       } else {
         addToast('Erreur lors de la suppression', 'error');
       }
@@ -1899,7 +2204,7 @@ export default function App() {
       <div className="min-h-screen bg-[#f9f9f9] flex items-center justify-center">
         <div className="text-center space-y-3">
           <div className="w-10 h-10 border-4 border-[#6c0042] border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-[#554249]">VÃ©rification de l'authentification...</p>
+          <p className="text-sm text-[#554249]">Vérification de l'authentification...</p>
         </div>
       </div>
     );
@@ -1967,7 +2272,7 @@ export default function App() {
             }`}
           >
             <Building2 className="w-5 h-5" />
-            <span className="text-sm">DÃ©partements</span>
+            <span className="text-sm">Départements</span>
           </button>
 
           {/* NOTE: "Documents" and "Missions" have been strictly removed per user request. */}
@@ -2036,7 +2341,7 @@ export default function App() {
             }`}
           >
             <ClipboardList className="w-5 h-5" />
-            <span className="text-sm">Nos RÃ©fÃ©rences</span>
+            <span className="text-sm">Nos Références</span>
           </button>
 
           {/* NOTE: "Reporting" has been strictly removed per user request. */}
@@ -2050,7 +2355,7 @@ export default function App() {
             }`}
           >
             <Settings className="w-5 h-5" />
-            <span className="text-sm">ParamÃ¨tres</span>
+            <span className="text-sm">Paramètres</span>
           </button>
         </nav>
 
@@ -2062,7 +2367,7 @@ export default function App() {
             className="w-full text-left text-on-surface-variant hover:text-error flex items-center gap-3 p-2 rounded-lg text-sm transition-colors cursor-pointer"
           >
             <LogOut className="w-5 h-5 text-on-surface-variant" />
-            <span>DÃ©connexion</span>
+            <span>Déconnexion</span>
           </button>
         </div>
       </aside>
@@ -2074,7 +2379,7 @@ export default function App() {
         <header className="sticky top-0 bg-surface/95 backdrop-blur-md border-b border-secondary/20 h-16 flex items-center justify-between px-8 z-30 shadow-sm">
           <div>
             <h2 className="font-headline text-lg font-semibold text-on-surface">Bonjour, Rezgui</h2>
-            <p className="text-[11px] text-on-surface-variant">Voici le rÃ©capitulatif de RM Consulting pour aujourd'hui.</p>
+            <p className="text-[11px] text-on-surface-variant">Voici le récapitulatif de RM Consulting pour aujourd'hui.</p>
           </div>
 
           <div className="flex items-center gap-6">
@@ -2084,7 +2389,7 @@ export default function App() {
                 className="p-2 text-on-surface-variant hover:bg-secondary-container/10 rounded-full transition-colors relative"
               >
                 <Bell className="w-5 h-5" />
-                {unreadMessagesCount > 0 && (
+                {(unreadMessagesCount + apptNotifications.length) > 0 && (
                   <span className="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border border-surface"></span>
                 )}
               </button>
@@ -2103,11 +2408,32 @@ export default function App() {
                       <div className="flex justify-between items-center pb-2 border-b border-secondary/10 mb-2">
                         <span className="font-headline font-bold text-sm text-primary">Notifications</span>
                         <span className="text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
-                          {unreadMessagesCount} nouvelles
+                          {unreadMessagesCount + apptNotifications.length} nouvelles
                         </span>
                       </div>
                       <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
-                        {messages.filter(m => m.isUnread && m.sender !== 'Rezgui Mihoub' && !m.parentId).length === 0 ? (
+                        {apptNotifications.map((a: any) => (
+                          <div
+                            key={`appt-${a._id}`}
+                            onClick={() => {
+                              setApptNotifications(prev => prev.filter(n => n._id !== a._id));
+                              setActiveTab('appointments');
+                              setIsNotificationsOpen(false);
+                            }}
+                            className="p-2 hover:bg-surface-container-low rounded-lg transition-colors cursor-pointer text-left bg-amber-50/60"
+                          >
+                            <div className="flex justify-between items-start">
+                              <span className="font-semibold text-xs text-on-surface">
+                                🔔 Nouveau rendez-vous — {a.clientName}
+                              </span>
+                              <span className="text-[9px] text-on-surface-variant">
+                                {a.date} · {a.timeSlot}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-on-surface-variant line-clamp-1 mt-0.5">{a.subject || 'Demande de rendez-vous'}</p>
+                          </div>
+                        ))}
+                        {messages.filter(m => m.isUnread && m.sender !== 'Rezgui Mihoub' && !m.parentId).length === 0 && apptNotifications.length === 0 ? (
                           <div className="text-center py-4 text-xs text-on-surface-variant">
                             Aucune nouvelle notification
                           </div>
@@ -2151,7 +2477,7 @@ export default function App() {
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
                 <p className="text-xs font-semibold text-on-surface">R. Mihoub</p>
-                <p className="text-[10px] text-on-surface-variant">Expert-Comptable | AssociÃ© GÃ©rant</p>
+                <p className="text-[10px] text-on-surface-variant">Expert-Comptable | Associé Gérant</p>
               </div>
               <img
                 className="w-10 h-10 rounded-full object-cover border-2 border-primary/20"
@@ -2190,7 +2516,7 @@ export default function App() {
                     <p className="text-on-surface-variant text-[13px] font-medium">Nouveaux Messages</p>
                     <h3 className="font-headline text-2xl font-bold text-on-surface">{messages.length}</h3>
                     <p className="mt-4 text-[12px] text-on-surface-variant italic">
-                      {unreadMessagesCount} non lus Ã  traiter
+                      {unreadMessagesCount} non lus à traiter
                     </p>
                   </div>
 
@@ -2208,7 +2534,7 @@ export default function App() {
                     <p className="text-on-surface-variant text-[13px] font-medium">Dates Disponibles</p>
                     <h3 className="font-headline text-2xl font-bold text-emerald-600">{availableDatesList.length}</h3>
                     <p className="mt-4 text-[12px] text-on-surface-variant italic">
-                      {availableDatesList.length > 0 ? `${availableDatesList.length} date(s) ouverte(s) aux rÃ©servations` : 'Aucune date programmÃ©e'}
+                      {availableDatesList.length > 0 ? `${availableDatesList.length} date(s) ouverte(s) aux réservations` : 'Aucune date programmée'}
                     </p>
                   </div>
 
@@ -2229,76 +2555,11 @@ export default function App() {
                       <div className="bg-secondary h-full" style={{ width: `${appointments.length > 0 ? Math.round((appointments.filter(a => a.status === 'confirmed').length / appointments.length) * 100) : 0}%` }}></div>
                     </div>
                     <p className="mt-2 text-[11px] text-on-surface-variant flex justify-between">
-                      <span>CapacitÃ© traitÃ©e</span>
+                      <span>Capacité traitée</span>
                       <span>{appointments.length > 0 ? Math.round((appointments.filter(a => a.status === 'confirmed').length / appointments.length) * 100) : 0}%</span>
                     </p>
                   </div>
 
-                  {/* Card 4: Offres publiÃ©es */}
-                  <div className="glass-card p-5 rounded-xl">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="p-2 bg-primary/10 rounded-lg">
-                        <BriefcaseBusiness className="w-5 h-5 text-primary" />
-                      </div>
-                      <button
-                        onClick={() => setActiveTab('offers')}
-                        className="text-[9px] font-bold text-primary bg-primary/5 hover:bg-primary/10 px-2 py-1 rounded-full transition-colors cursor-pointer"
-                      >
-                        GÃ‰RER
-                      </button>
-                    </div>
-                    <p className="text-on-surface-variant text-[13px] font-medium">Offres publiÃ©es</p>
-                    <h3 className="font-headline text-2xl font-bold text-primary">{offerStats.published}</h3>
-                    <p className="mt-4 text-[12px] text-on-surface-variant italic">
-                      {offerStats.drafts} brouillon{offerStats.drafts > 1 ? 's' : ''} Â· {offerStats.closed} fermÃ©e{offerStats.closed > 1 ? 's' : ''}
-                    </p>
-                  </div>
-
-                  {/* Card 5: Candidatures reÃ§ues */}
-                  <div className="glass-card p-5 rounded-xl">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="p-2 bg-amber-100 rounded-lg">
-                        <UsersRound className="w-5 h-5 text-amber-700" />
-                      </div>
-                      <button
-                        onClick={() => setActiveTab('recruitment')}
-                        className="text-[9px] font-bold text-primary bg-primary/5 hover:bg-primary/10 px-2 py-1 rounded-full transition-colors cursor-pointer"
-                      >
-                        VOIR
-                      </button>
-                    </div>
-                    <p className="text-on-surface-variant text-[13px] font-medium">Candidatures reÃ§ues</p>
-                    <h3 className="font-headline text-2xl font-bold text-on-surface">{offerStats.totalCandidatures}</h3>
-                    <p className="mt-4 text-[12px] text-on-surface-variant italic">
-                      {pendingCandidates} en attente de traitement
-                    </p>
-                  </div>
-
-                  {/* Card 6: Offre la plus sollicitÃ©e */}
-                  <div className="glass-card p-5 rounded-xl">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="p-2 bg-emerald-100 rounded-lg">
-                        <TrendingUp className="w-5 h-5 text-emerald-600" />
-                      </div>
-                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">TOP OFFRE</span>
-                    </div>
-                    <p className="text-on-surface-variant text-[13px] font-medium">Offre la plus sollicitÃ©e</p>
-                    {offerStats.topOffer ? (
-                      <>
-                        <h3 className="font-headline text-lg font-bold text-on-surface mt-0.5 leading-snug">
-                          {offerStats.topOffer.offer.title}
-                        </h3>
-                        <p className="mt-3 text-[12px] text-emerald-600 font-bold">
-                          {offerStats.topOffer.count} candidature{offerStats.topOffer.count > 1 ? 's' : ''}
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <h3 className="font-headline text-xl font-bold text-on-surface-variant/60 mt-1">â€”</h3>
-                        <p className="mt-3 text-[12px] text-on-surface-variant italic">Aucune candidature reÃ§ue</p>
-                      </>
-                    )}
-                  </div>
                 </div>
 
                 {/* Dashboard Widgets Row */}
@@ -2325,7 +2586,7 @@ export default function App() {
                           <ChevronLeft className="w-4 h-4 text-on-surface-variant" />
                         </button>
                         <span className="text-xs font-bold text-on-surface">
-                          {['Janvier','FÃ©vrier','Mars','Avril','Mai','Juin','Juillet','AoÃ»t','Septembre','Octobre','Novembre','DÃ©cembre'][calMonth]} {calYear}
+                          {['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][calMonth]} {calYear}
                         </span>
                         <button
                           onClick={() => {
@@ -2416,10 +2677,12 @@ export default function App() {
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: 10 }}
                                 className={`flex items-center gap-3 px-2 py-1 rounded-lg border-l-4 ${
-                                  appt.status === 'confirmed'
+                                  apptEffectiveStatus(appt) === 'confirmed'
                                     ? 'bg-emerald-50 border-emerald-500'
-                                    : appt.status === 'cancelled'
+                                    : apptEffectiveStatus(appt) === 'cancelled'
                                     ? 'bg-gray-50 border-gray-400 opacity-60'
+                                    : apptEffectiveStatus(appt) === 'expired'
+                                    ? 'bg-gray-100 border-gray-400'
                                     : 'bg-primary/5 border-primary'
                                 }`}
                               >
@@ -2431,16 +2694,21 @@ export default function App() {
                                   <div className="flex items-center gap-2">
                                     <p className="text-[11px] font-bold text-on-surface truncate">{appt.subject}</p>
                                     <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
-                                      appt.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
-                                      appt.status === 'cancelled' ? 'bg-gray-100 text-gray-500' :
-                                      appt.status === 'rescheduled' ? 'bg-blue-100 text-blue-700' :
+                                      apptEffectiveStatus(appt) === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
+                                      apptEffectiveStatus(appt) === 'cancelled' ? 'bg-gray-100 text-gray-500' :
+                                      apptEffectiveStatus(appt) === 'expired' ? 'bg-gray-200 text-gray-500' :
+                                      apptEffectiveStatus(appt) === 'rescheduled' ? 'bg-blue-100 text-blue-700' :
                                       'bg-amber-100 text-amber-700'
                                     }`}>
-                                      {appt.status === 'confirmed' ? 'CONFIRMÃ‰' : appt.status === 'cancelled' ? 'ANNULÃ‰' : appt.status === 'rescheduled' ? 'REPORTÃ‰' : 'EN ATTENTE'}
+                                      {apptEffectiveStatus(appt) === 'confirmed' ? 'CONFIRMÉ'
+                                        : apptEffectiveStatus(appt) === 'cancelled' ? 'ANNULÉ'
+                                        : apptEffectiveStatus(appt) === 'expired' ? 'EXPIRÉ'
+                                        : apptEffectiveStatus(appt) === 'rescheduled' ? 'REPORTÉ'
+                                        : 'EN ATTENTE'}
                                     </span>
                                   </div>
                                   <p className="text-[10px] text-on-surface-variant truncate">
-                                    {appt.clientName} â€” {appt.email}
+                                    {appt.clientName} ” {appt.email}
                                   </p>
                                 </div>
                               </motion.div>
@@ -2499,8 +2767,8 @@ export default function App() {
                             className="p-3 text-center text-xs text-on-surface-variant italic bg-surface-container-low rounded-lg"
                           >
                             {selectedDay
-                              ? `Aucun rendez-vous ni programme le ${selectedDay} ${['Janvier','FÃ©vrier','Mars','Avril','Mai','Juin','Juillet','AoÃ»t','Septembre','Octobre','Novembre','DÃ©cembre'][calMonth]}.`
-                              : 'SÃ©lectionnez un jour pour voir les rendez-vous et programmes.'
+                              ? `Aucun rendez-vous ni programme le ${selectedDay} ${['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][calMonth]}.`
+                              : 'Sélectionnez un jour pour voir les rendez-vous et programmes.'
                             }
                           </motion.div>
                         )}
@@ -2510,7 +2778,7 @@ export default function App() {
 
                   {/* Departments Breakdown */}
                   <div className="glass-card rounded-xl p-6 flex flex-col">
-                    <h4 className="font-headline text-base font-bold text-on-surface mb-6">RÃ©partition par DÃ©partement</h4>
+                    <h4 className="font-headline text-base font-bold text-on-surface mb-6">Répartition par Département</h4>
                     <div className="flex-1 flex flex-col md:flex-row items-center justify-around gap-6 py-2">
                       
                       {/* Donut Chart representation */}
@@ -2545,7 +2813,7 @@ export default function App() {
                             strokeDasharray="15 100"
                             strokeDashoffset="-70"
                           />
-                          {/* Segment 4: FiscalitÃ© (15%) */}
+                          {/* Segment 4: Fiscalité (15%) */}
                           <circle
                             cx="18" cy="18" r="15.915"
                             fill="none"
@@ -2577,7 +2845,7 @@ export default function App() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="w-3 h-3 rounded-full bg-[#ffd8e6]" />
-                          <span className="text-xs font-bold text-on-surface">FiscalitÃ© ({15}%)</span>
+                          <span className="text-xs font-bold text-on-surface">Fiscalité ({15}%)</span>
                         </div>
                       </div>
 
@@ -2585,53 +2853,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Offres & Recrutement Widget */}
-                <div className="glass-card rounded-xl p-6">
-                  <div className="flex justify-between items-center mb-6">
-                    <h4 className="font-headline text-base font-bold text-on-surface">Candidatures par Offre</h4>
-                    <button
-                      onClick={() => setActiveTab('offers')}
-                      className="text-[11px] font-bold text-primary bg-primary/5 hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                    >
-                      GÃ©rer les offres
-                    </button>
-                  </div>
-
-                  {offerStats.perOffer.filter((p) => p.count > 0).length === 0 ? (
-                    <div className="text-center py-6 text-sm text-on-surface-variant flex flex-col items-center gap-2">
-                      <BriefcaseBusiness className="w-8 h-8 text-on-surface-variant/30" />
-                      <span>Aucune candidature reÃ§ue pour le moment.</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {offerStats.perOffer.filter((p) => p.count > 0).slice(0, 6).map(({ offer, count }) => {
-                        const max = offerStats.perOffer[0]?.count || 1;
-                        return (
-                          <button
-                            key={offer._id}
-                            onClick={() => { setSelectedOffer(offer); setActiveTab('offers'); }}
-                            className="w-full text-left group"
-                          >
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-xs font-bold text-on-surface group-hover:text-primary transition-colors truncate pr-3">
-                                {offer.title}
-                              </span>
-                              <span className="text-xs font-bold text-primary shrink-0">
-                                {count} candidature{count > 1 ? 's' : ''}
-                              </span>
-                            </div>
-                            <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-gradient-to-r from-primary to-secondary rounded-full transition-all duration-700"
-                                style={{ width: `${Math.round((count / max) * 100)}%` }}
-                              />
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
               </motion.div>
             )}
 
@@ -2647,9 +2868,9 @@ export default function App() {
                 {/* Header Section */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
-                    <h3 className="font-headline text-2xl font-bold text-primary">DÃ©partements d'Expertise</h3>
+                    <h3 className="font-headline text-2xl font-bold text-primary">Départements d'Expertise</h3>
                     <p className="text-xs text-on-surface-variant">
-                      DÃ©couvrez nos pÃ´les de spÃ©cialitÃ© chez RM Consulting. Des Ã©quipes dÃ©diÃ©es au service de votre croissance et de votre conformitÃ©.
+                      Découvrez nos pôles de spécialité chez RM Consulting. Des équipes dédiées au service de votre croissance et de votre conformité.
                     </p>
                   </div>
                   
@@ -2659,13 +2880,13 @@ export default function App() {
                       className="px-4 py-2.5 bg-primary text-white hover:bg-primary-container rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md active:scale-95"
                     >
                       <Plus className="w-4 h-4" />
-                      Nouveau DÃ©partement
+                      Nouveau Département
                     </button>
 
                     {/* Quick stats board */}
                     <div className="flex gap-4 bg-white/60 p-3 rounded-xl border border-secondary/15 shadow-sm">
                       <div className="text-center px-3 border-r border-secondary/10">
-                        <p className="text-[10px] text-on-surface-variant font-medium uppercase tracking-wider">PÃ´les</p>
+                        <p className="text-[10px] text-on-surface-variant font-medium uppercase tracking-wider">Pôles</p>
                         <p className="text-base font-bold text-primary">{departments.length}</p>
                       </div>
                       <div className="text-center px-3 border-r border-secondary/10">
@@ -2684,8 +2905,8 @@ export default function App() {
                 {departments.length === 0 ? (
                   <div className="glass-card p-12 text-center rounded-2xl border border-dashed border-secondary/20">
                     <Building2 className="w-12 h-12 text-on-surface-variant/40 mx-auto mb-4" />
-                    <p className="text-sm font-semibold text-on-surface">Aucun dÃ©partement trouvÃ©</p>
-                    <p className="text-xs text-on-surface-variant mt-1 mb-4">Ajoutez un nouveau pÃ´le d'expertise pour commencer.</p>
+                    <p className="text-sm font-semibold text-on-surface">Aucun département trouvé</p>
+                    <p className="text-xs text-on-surface-variant mt-1 mb-4">Ajoutez un nouveau pôle d'expertise pour commencer.</p>
                     <button
                       onClick={handleOpenAddDept}
                       className="px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer"
@@ -2724,10 +2945,10 @@ export default function App() {
                               {/* Staff & Projects pills */}
                               <div className="flex flex-col items-end gap-1 text-[10px] font-mono text-on-surface-variant">
                                 <span className="bg-surface-container-low px-2 py-0.5 rounded border border-outline-variant/30">
-                                  ðŸ‘¥ {dept.staffCount} Collaborateurs
+                                  😥 {dept.staffCount} Collaborateurs
                                 </span>
                                 <span className="bg-surface-container-low px-2 py-0.5 rounded border border-outline-variant/30">
-                                  ðŸ’¼ {dept.activeProjects} Projets en cours
+                                  🙌 {dept.activeProjects} Projets en cours
                                 </span>
                               </div>
                             </div>
@@ -2744,13 +2965,13 @@ export default function App() {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                   {dept.services.map((service, index) => (
                                     <div key={index} className="flex items-start gap-2 text-xs text-on-surface-variant bg-surface-container-low/40 p-2 rounded-lg border border-secondary/5">
-                                      <div className="text-emerald-600 font-bold shrink-0 mt-0.5">âœ“</div>
+                                      <div className="text-emerald-600 font-bold shrink-0 mt-0.5">✓</div>
                                       <span>{service}</span>
                                     </div>
                                   ))}
                                 </div>
                               ) : (
-                                <p className="text-xs text-on-surface-variant/50 italic">Aucun service dÃ©fini.</p>
+                                <p className="text-xs text-on-surface-variant/50 italic">Aucun service défini.</p>
                               )}
                             </div>
                           </div>
@@ -2811,14 +3032,14 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h3 className="font-headline text-xl font-bold text-on-surface">Registre des Missions</h3>
-                    <p className="text-xs text-on-surface-variant">GÃ©rez et suivez le statut de toutes vos missions actives d'audit et de conseil.</p>
+                    <p className="text-xs text-on-surface-variant">Gérez et suivez le statut de toutes vos missions actives d'audit et de conseil.</p>
                   </div>
                   <button
                     onClick={() => setIsNewMissionOpen(true)}
                     className="bg-primary hover:bg-primary-container text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 cursor-pointer shadow-sm self-start sm:self-center"
                   >
                     <Plus className="w-4 h-4" />
-                    CrÃ©er une Mission
+                    Créer une Mission
                   </button>
                 </div>
 
@@ -2849,7 +3070,7 @@ export default function App() {
                       <thead>
                         <tr className="bg-surface-container-low border-b border-primary/20">
                           <th className="px-6 py-4 text-xs font-bold text-on-surface-variant">Mission / Client</th>
-                          <th className="px-6 py-4 text-xs font-bold text-on-surface-variant">DÃ©partement</th>
+                          <th className="px-6 py-4 text-xs font-bold text-on-surface-variant">Département</th>
                           <th className="px-6 py-4 text-xs font-bold text-on-surface-variant">Statut</th>
                           <th className="px-6 py-4 text-xs font-bold text-on-surface-variant">Progression</th>
                           <th className="px-6 py-4 text-xs font-bold text-on-surface-variant text-right">Actions</th>
@@ -2900,7 +3121,7 @@ export default function App() {
                                   <button
                                     onClick={() => {
                                       setMissions(prev => prev.map(m => m.id === mission.id ? { ...m, progression: Math.min(100, m.progression + 10) } : m));
-                                      addToast(`Progression de "${mission.title}" incrÃ©mentÃ©e.`);
+                                      addToast(`Progression de "${mission.title}" incrémentée.`);
                                     }}
                                     className="px-2.5 py-1 text-xs font-semibold text-primary border border-primary/20 hover:bg-primary/5 rounded transition-all cursor-pointer"
                                   >
@@ -2909,7 +3130,7 @@ export default function App() {
                                   <button
                                     onClick={() => {
                                       setMissions(prev => prev.map(m => m.id === mission.id ? { ...m, status: 'VALIDE', progression: 100 } : m));
-                                      addToast(`Mission "${mission.title}" validÃ©e.`);
+                                      addToast(`Mission "${mission.title}" validée.`);
                                     }}
                                     className="px-2.5 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-all cursor-pointer"
                                   >
@@ -2937,7 +3158,7 @@ export default function App() {
               >
                 <div>
                   <h3 className="font-headline text-xl font-bold text-on-surface">Annuaire des Clients</h3>
-                  <p className="text-xs text-on-surface-variant">Consultez et gÃ©rez les comptes de vos clients et leurs interlocuteurs privilÃ©giÃ©s.</p>
+                  <p className="text-xs text-on-surface-variant">Consultez et gérez les comptes de vos clients et leurs interlocuteurs privilégiés.</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -2951,7 +3172,7 @@ export default function App() {
                         <div>
                           <h4 className="font-bold text-base text-on-surface">TechFlow SAS</h4>
                           <span className="text-[10px] bg-primary-fixed text-on-primary-fixed-variant px-2 py-0.5 rounded-full font-bold uppercase">
-                            Audit LÃ©gal
+                            Audit Légal
                           </span>
                         </div>
                       </div>
@@ -2967,7 +3188,7 @@ export default function App() {
                       </div>
                       <div className="flex justify-between">
                         <span>Chiffre d'Affaires:</span>
-                        <span className="font-semibold text-on-surface">2.4M â‚¬</span>
+                        <span className="font-semibold text-on-surface">2.4M €</span>
                       </div>
                     </div>
                   </div>
@@ -2998,7 +3219,7 @@ export default function App() {
                       </div>
                       <div className="flex justify-between">
                         <span>Chiffre d'Affaires:</span>
-                        <span className="font-semibold text-on-surface">850k â‚¬</span>
+                        <span className="font-semibold text-on-surface">850k €</span>
                       </div>
                     </div>
                   </div>
@@ -3013,7 +3234,7 @@ export default function App() {
                         <div>
                           <h4 className="font-bold text-base text-on-surface">Global Logistics</h4>
                           <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold uppercase">
-                            ComptabilitÃ©
+                            Comptabilité
                           </span>
                         </div>
                       </div>
@@ -3029,7 +3250,7 @@ export default function App() {
                       </div>
                       <div className="flex justify-between">
                         <span>Chiffre d'Affaires:</span>
-                        <span className="font-semibold text-on-surface">12M â‚¬</span>
+                        <span className="font-semibold text-on-surface">12M €</span>
                       </div>
                     </div>
                   </div>
@@ -3048,7 +3269,7 @@ export default function App() {
               >
                 <div>
                   <h3 className="font-headline text-xl font-bold text-on-surface">Analyses &amp; Performance</h3>
-                  <p className="text-xs text-on-surface-variant">Suivi en temps rÃ©el des performances de RM Consulting et de la rÃ©partition des portefeuilles clients.</p>
+                  <p className="text-xs text-on-surface-variant">Suivi en temps réel des performances de RM Consulting et de la répartition des portefeuilles clients.</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -3078,7 +3299,7 @@ export default function App() {
 
                       <div>
                         <div className="flex justify-between text-xs font-semibold mb-1">
-                          <span>FiscalitÃ© et Juridique</span>
+                          <span>Fiscalité et Juridique</span>
                           <span>85%</span>
                         </div>
                         <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
@@ -3122,7 +3343,7 @@ export default function App() {
                   <div>
                     <h3 className="font-headline text-2xl font-bold text-primary">Gestion des Offres d'Emploi</h3>
                     <p className="text-xs text-on-surface-variant">
-                      CrÃ©ez, publiez et suivez vos offres. Chaque modification est immÃ©diatement visible sur le site.
+                      Créez, publiez et suivez vos offres. Chaque modification est immédiatement visible sur le site.
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
@@ -3154,7 +3375,7 @@ export default function App() {
                       </span>
                       <span className="text-[10px] font-bold text-on-surface-variant bg-surface-container-low px-2 py-1 rounded-full">Total</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres crÃ©Ã©es</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres créées</p>
                     <h3 className="font-headline text-3xl font-extrabold text-primary mt-1">{offers.length}</h3>
                   </div>
                   <div className="glass-card p-5 rounded-2xl shadow-sm relative overflow-hidden">
@@ -3164,7 +3385,7 @@ export default function App() {
                       </span>
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">Actives</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres publiÃ©es</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres publiées</p>
                     <h3 className="font-headline text-3xl font-extrabold text-emerald-600 mt-1">{offerStats.published}</h3>
                   </div>
                   <div className="glass-card p-5 rounded-2xl shadow-sm relative overflow-hidden">
@@ -3174,7 +3395,7 @@ export default function App() {
                       </span>
                       <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-full">Brouillons</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">En prÃ©paration</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">En préparation</p>
                     <h3 className="font-headline text-3xl font-extrabold text-amber-600 mt-1">{offerStats.drafts}</h3>
                   </div>
                   <div className="glass-card p-5 rounded-2xl shadow-sm relative overflow-hidden">
@@ -3182,9 +3403,9 @@ export default function App() {
                       <span className="p-2 bg-gray-100 text-gray-600 rounded-lg">
                         <Layers className="w-5 h-5" />
                       </span>
-                      <span className="text-[10px] font-bold text-gray-600 bg-gray-50 px-2 py-1 rounded-full">TerminÃ©es</span>
+                      <span className="text-[10px] font-bold text-gray-600 bg-gray-50 px-2 py-1 rounded-full">Terminées</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres fermÃ©es</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Offres fermées</p>
                     <h3 className="font-headline text-3xl font-extrabold text-gray-600 mt-1">{offerStats.closed}</h3>
                   </div>
                 </div>
@@ -3208,13 +3429,13 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center gap-2 px-3 py-2 bg-surface-container-low border border-gray-200 rounded-lg">
-                        <span className="text-[10px] font-bold text-on-surface-variant">DÃ©partement:</span>
+                        <span className="text-[10px] font-bold text-on-surface-variant">Département:</span>
                         <select
                           value={offerDeptFilter}
                           onChange={(e) => setOfferDeptFilter(e.target.value)}
                           className="bg-transparent border-none p-0 text-sm focus:ring-0 text-primary font-medium cursor-pointer outline-none"
                         >
-                          <option>Tous les dÃ©partements</option>
+                          <option>Tous les départements</option>
                           {OFFER_DEPARTMENTS.map((d) => (
                             <option key={d} value={d}>{d}</option>
                           ))}
@@ -3244,27 +3465,27 @@ export default function App() {
                         >
                           <option>Tous les statuts</option>
                           <option value="draft">Brouillon</option>
-                          <option value="published">PubliÃ©e</option>
-                          <option value="closed">FermÃ©e</option>
+                          <option value="published">Publiée</option>
+                          <option value="closed">Fermée</option>
                         </select>
                       </div>
 
                       <button
                         onClick={() => {
                           setOfferSearch('');
-                          setOfferDeptFilter('Tous les dÃ©partements');
+                          setOfferDeptFilter('Tous les départements');
                           setOfferContractFilter('Tous les contrats');
                           setOfferStatusFilter('Tous les statuts');
-                          addToast('Filtres rÃ©initialisÃ©s', 'info');
+                          addToast('Filtres réinitialisés', 'info');
                         }}
                         className="p-2 text-on-surface-variant hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
-                        title="RÃ©initialiser les filtres"
+                        title="Réinitialiser les filtres"
                       >
                         <Filter className="w-5 h-5" />
                       </button>
                     </div>
                     <span className="text-xs text-on-surface-variant font-medium">
-                      {filteredOffers.length} offre{filteredOffers.length > 1 ? 's' : ''} affichÃ©e{filteredOffers.length > 1 ? 's' : ''}
+                      {filteredOffers.length} offre{filteredOffers.length > 1 ? 's' : ''} affichée{filteredOffers.length > 1 ? 's' : ''}
                     </span>
                   </div>
 
@@ -3289,13 +3510,13 @@ export default function App() {
                             <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                               <BriefcaseBusiness className="w-10 h-10 text-gray-300 mb-2 mx-auto" />
                               <p className="text-sm font-medium">
-                                {offers.length === 0 ? 'Aucune offre crÃ©Ã©e pour le moment.' : 'Aucune offre ne correspond Ã  vos filtres.'}
+                                {offers.length === 0 ? 'Aucune offre créée pour le moment.' : 'Aucune offre ne correspond à vos filtres.'}
                               </p>
                               <button
                                 onClick={() => openOfferModal(null)}
                                 className="mt-4 px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer"
                               >
-                                <Plus className="w-4 h-4" /> CrÃ©er une offre
+                                <Plus className="w-4 h-4" /> Créer une offre
                               </button>
                             </td>
                           </tr>
@@ -3329,7 +3550,7 @@ export default function App() {
                                 </td>
                                 <td className="px-6 py-5">
                                   <span className="text-sm text-on-surface-variant font-medium">
-                                    {offer.publishedAt ? new Date(offer.publishedAt).toLocaleDateString('fr-FR') : 'â€”'}
+                                    {offer.publishedAt ? new Date(offer.publishedAt).toLocaleDateString('fr-FR') : '”'}
                                   </span>
                                 </td>
                                 <td className="px-6 py-5">
@@ -3390,7 +3611,7 @@ export default function App() {
                                           ? 'text-amber-600 hover:bg-amber-50'
                                           : 'text-emerald-600 hover:bg-emerald-50'
                                       }`}
-                                      title={offer.status === 'published' ? 'DÃ©sactiver (fermer l\'offre)' : 'Activer (publier l\'offre)'}
+                                      title={offer.status === 'published' ? 'Désactiver (fermer l\'offre)' : 'Activer (publier l\'offre)'}
                                     >
                                       <Power className="w-4 h-4" />
                                     </button>
@@ -3465,7 +3686,7 @@ export default function App() {
                       <span className="p-2 bg-purple-100 text-purple-700 rounded-lg">
                         <CalendarIcon className="w-5 h-5" />
                       </span>
-                      <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-full">PlanifiÃ©s</span>
+                      <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-full">Planifiés</span>
                     </div>
                     <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Entretiens</p>
                     <h3 className="font-headline text-3xl font-extrabold text-on-surface mt-1">{interviewCandidates}</h3>
@@ -3477,9 +3698,9 @@ export default function App() {
                       <span className="p-2 bg-green-100 text-green-700 rounded-lg">
                         <CheckCircle2 className="w-5 h-5" />
                       </span>
-                      <span className="text-[10px] font-bold text-green-700 bg-green-50 px-2 py-1 rounded-full">TerminÃ©</span>
+                      <span className="text-[10px] font-bold text-green-700 bg-green-50 px-2 py-1 rounded-full">Terminé</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">RecrutÃ©s</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Recrutés</p>
                     <h3 className="font-headline text-3xl font-extrabold text-on-surface mt-1">{acceptedCandidates}</h3>
                   </div>
 
@@ -3489,9 +3710,9 @@ export default function App() {
                       <span className="p-2 bg-rose-100 text-rose-700 rounded-lg">
                         <XCircle className="w-5 h-5" />
                       </span>
-                      <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-1 rounded-full">RefusÃ©</span>
+                      <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-1 rounded-full">Refusé</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">RefusÃ©s</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Refusés</p>
                     <h3 className="font-headline text-3xl font-extrabold text-on-surface mt-1">{rejectedCandidates}</h3>
                   </div>
 
@@ -3501,9 +3722,9 @@ export default function App() {
                       <span className="p-2 bg-gray-100 text-gray-700 rounded-lg">
                         <Trash2 className="w-5 h-5" />
                       </span>
-                      <span className="text-[10px] font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded-full">ArchivÃ©</span>
+                      <span className="text-[10px] font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded-full">Archivé</span>
                     </div>
-                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">ArchivÃ©s</p>
+                    <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Archivés</p>
                     <h3 className="font-headline text-3xl font-extrabold text-on-surface mt-1">
                       {archivedApps.length < 10 ? `0${archivedApps.length}` : archivedApps.length}
                     </h3>
@@ -3537,10 +3758,10 @@ export default function App() {
                             <option value="Toutes les offres">Toutes les offres</option>
                             {offersWithCounts.map((o) => (
                               <option key={o._id} value={o._id}>
-                                {o.title} Â· {o.department} ({o.count})
+                                {o.title} · {o.department} ({o.count})
                               </option>
                             ))}
-                            <option value="__spontaneous__">Candidatures spontanÃ©es</option>
+                            <option value="__spontaneous__">Candidatures spontanées</option>
                           </select>
                         </div>
 
@@ -3559,7 +3780,7 @@ export default function App() {
                         </div>
 
                         <div className="flex items-center gap-2 px-3 py-2 bg-surface-container-low border border-gray-200 rounded-lg">
-                          <span className="text-[10px] font-bold text-on-surface-variant">ExpÃ©rience:</span>
+                          <span className="text-[10px] font-bold text-on-surface-variant">Expérience:</span>
                           <select
                             value={expFilter}
                             onChange={(e) => setExpFilter(e.target.value)}
@@ -3588,7 +3809,7 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {/* Bascule Actifs / ArchivÃ©s */}
+                        {/* Bascule Actifs / Archivés */}
                         <div className="flex items-center gap-1 p-1 bg-surface-container-low border border-gray-200 rounded-lg">
                           <button
                             onClick={() => setShowArchived(false)}
@@ -3606,7 +3827,7 @@ export default function App() {
                             }`}
                           >
                             <Archive className="w-3.5 h-3.5" />
-                            ArchivÃ©s
+                            Archivés
                             <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${
                               showArchived ? 'bg-white/20' : 'bg-gray-200 text-gray-700'
                             }`}>
@@ -3621,24 +3842,24 @@ export default function App() {
                             setExpFilter('Toutes');
                             setOfferFilter('Toutes les offres');
                             setSearchQuery('');
-                            addToast('Filtres rÃ©initialisÃ©s', 'info');
+                            addToast('Filtres réinitialisés', 'info');
                           }}
                           className="p-2 text-on-surface-variant hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
-                          title="RÃ©initialiser les filtres"
+                          title="Réinitialiser les filtres"
                         >
                           <Filter className="w-5 h-5" />
                         </button>
                         <button
                           onClick={exportCandidatesXLSX}
                           className="p-2 text-on-surface-variant hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
-                          title="TÃ©lÃ©charger la liste"
+                          title="Télécharger la liste"
                         >
                           <Download className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
 
-                    {/* Bandeau "filtre actif" â€” visible dÃ¨s qu'un filtre est appliquÃ© */}
+                    {/* Bandeau "filtre actif" ” visible dès qu'un filtre est appliqué */}
                     {(offerFilter !== 'Toutes les offres' || roleFilter !== 'Tous les postes' || expFilter !== 'Toutes' || searchQuery) && (
                       <div className="flex flex-wrap items-center gap-2 px-5 py-3 bg-primary/5 border-b border-primary/20">
                         <Filter className="w-4 h-4 text-primary shrink-0" />
@@ -3647,8 +3868,8 @@ export default function App() {
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary text-white text-xs font-bold shadow-sm">
                             <BriefcaseBusiness className="w-3.5 h-3.5" />
                             {offerFilter === '__spontaneous__'
-                              ? 'Candidatures spontanÃ©es'
-                              : (offers.find((o) => o._id === offerFilter)?.title || 'Offre sÃ©lectionnÃ©e')}
+                              ? 'Candidatures spontanées'
+                              : (offers.find((o) => o._id === offerFilter)?.title || 'Offre sélectionnée')}
                             <button
                               onClick={() => setOfferFilter('Toutes les offres')}
                               className="ml-0.5 hover:bg-white/25 rounded-full p-0.5 cursor-pointer"
@@ -3684,7 +3905,7 @@ export default function App() {
                         )}
                         {searchQuery && (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary/15 border border-secondary/30 text-secondary text-xs font-bold">
-                            Â« {searchQuery} Â»
+                            « {searchQuery} »
                             <button
                               onClick={() => setSearchQuery('')}
                               className="ml-0.5 hover:bg-secondary/20 rounded-full p-0.5 cursor-pointer"
@@ -3709,10 +3930,10 @@ export default function App() {
                               Candidat
                             </th>
                             <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100">
-                              Poste &amp; ExpÃ©rience
+                              Poste &amp; Expérience
                             </th>
                             <th className="px-6 py-4 text-[11px] font-bold text-primary uppercase tracking-wider border-b border-gray-100">
-                              Date de DÃ©pÃ´t
+                              Date de Dépôt
                             </th>
                             <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-gray-100">
                               Statut
@@ -3728,7 +3949,7 @@ export default function App() {
                               <tr>
                                 <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                                   <Archive className="w-10 h-10 text-gray-300 mb-2 mx-auto" />
-                                  <p className="text-sm font-medium">Aucune candidature archivÃ©e.</p>
+                                  <p className="text-sm font-medium">Aucune candidature archivée.</p>
                                 </td>
                               </tr>
                             ) : (
@@ -3755,10 +3976,10 @@ export default function App() {
                                         <span className="text-on-surface font-medium text-sm">{app.position}</span>
                                         {app.jobOffer?.title && (
                                           <span className="text-[10px] font-bold text-primary mt-0.5">
-                                            {app.jobOffer.title} Â· {app.jobOffer.contractType}
+                                            {app.jobOffer.title} · {app.jobOffer.contractType}
                                           </span>
                                         )}
-                                        <span className="text-xs text-on-surface-variant mt-0.5">{app.experience || 'ExpÃ©rience non spÃ©cifiÃ©e'}</span>
+                                        <span className="text-xs text-on-surface-variant mt-0.5">{app.experience || 'Expérience non spécifiée'}</span>
                                       </div>
                                     </td>
 
@@ -3770,7 +3991,7 @@ export default function App() {
 
                                     <td className="px-6 py-5">
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border bg-gray-100 text-gray-600 border-gray-200">
-                                        ArchivÃ©
+                                        Archivé
                                         {app.deletedAt ? ` le ${new Date(app.deletedAt).toLocaleDateString('fr-FR')}` : ''}
                                       </span>
                                     </td>
@@ -3798,7 +4019,7 @@ export default function App() {
                                         <button
                                           onClick={() => openDeleteConfirm(app._id, 'permanent')}
                                           className="p-2 hover:bg-red-50 rounded-lg text-rose-600 transition-colors"
-                                          title="Supprimer dÃ©finitivement"
+                                          title="Supprimer définitivement"
                                         >
                                           <Trash2 className="w-4 h-4" />
                                         </button>
@@ -3812,7 +4033,7 @@ export default function App() {
                             <tr>
                               <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                                 <Search className="w-10 h-10 text-gray-300 mb-2 mx-auto" />
-                                <p className="text-sm font-medium">Aucun candidat ne correspond Ã  votre recherche.</p>
+                                <p className="text-sm font-medium">Aucun candidat ne correspond à votre recherche.</p>
                               </td>
                             </tr>
                           ) : (
@@ -3845,7 +4066,7 @@ export default function App() {
                                   <td className="px-6 py-5">
                                     <div className="flex flex-col">
                                       <span className="text-on-surface font-medium text-sm">{app.position}</span>
-                                      <span className="text-xs text-on-surface-variant mt-0.5">{app.experience || 'ExpÃ©rience non spÃ©cifiÃ©e'}</span>
+                                      <span className="text-xs text-on-surface-variant mt-0.5">{app.experience || 'Expérience non spécifiée'}</span>
                                     </div>
                                   </td>
 
@@ -3877,7 +4098,7 @@ export default function App() {
                                       <button
                                         onClick={() => setSelectedApp(app)}
                                         className="p-2 hover:bg-primary/5 rounded-lg text-primary transition-colors"
-                                        title="Voir dÃ©tails"
+                                        title="Voir détails"
                                       >
                                         <Search className="w-4 h-4" />
                                       </button>
@@ -3903,7 +4124,7 @@ export default function App() {
                   {!showArchived && selectedApp ? (
                     <div className="w-full xl:w-96 flex flex-col bg-surface-container-low/60 border-t xl:border-t-0 xl:border-l border-gray-200 p-6">
                       <div className="flex items-center justify-between mb-6">
-                        <h4 className="font-headline text-lg font-bold text-on-surface">DÃ©tails Candidat</h4>
+                        <h4 className="font-headline text-lg font-bold text-on-surface">Détails Candidat</h4>
                         <button
                           onClick={() => setSelectedApp(null)}
                           className="p-1 rounded-full hover:bg-gray-200/80 transition-colors text-gray-500"
@@ -3924,7 +4145,7 @@ export default function App() {
                           {selectedApp.jobOffer?.title && (
                             <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-bold text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full">
                               <BriefcaseBusiness className="w-3 h-3" />
-                              {selectedApp.jobOffer.title} Â· {selectedApp.jobOffer.department}
+                              {selectedApp.jobOffer.title} · {selectedApp.jobOffer.department}
                             </span>
                           )}
 
@@ -3962,19 +4183,19 @@ export default function App() {
                                     const updated = await res.json();
                                     setJobApps((prev: any[]) => prev.map((a: any) => (a._id === selectedApp._id ? updated : a)));
                                     setSelectedApp(updated);
-                                    addToast(`Statut mis Ã  jour : ${selectedApp.firstName} ${selectedApp.lastName}`);
+                                    addToast(`Statut mis à jour : ${selectedApp.firstName} ${selectedApp.lastName}`);
                                   }
                                 } catch {
-                                  addToast('Erreur lors de la mise Ã  jour', 'info');
+                                  addToast('Erreur lors de la mise à jour', 'info');
                                 }
                               }}
                               className={`text-xs font-bold px-3 py-2 rounded-lg border w-full cursor-pointer ${candidateStatusInfo(selectedApp.status).cls}`}
                             >
                               <option value="new">Nouveau</option>
                               <option value="analyzing">En cours d'analyse</option>
-                              <option value="interview">Entretien programmÃ©</option>
-                              <option value="accepted">AcceptÃ©</option>
-                              <option value="rejected">RefusÃ©</option>
+                              <option value="interview">Entretien programmé</option>
+                              <option value="accepted">Accepté</option>
+                              <option value="rejected">Refusé</option>
                             </select>
                           </div>
 
@@ -4023,7 +4244,7 @@ export default function App() {
                                         />
                                         {interviewTime && (
                                           <p className="text-[10px] text-on-surface-variant mt-1">
-                                            AffichÃ©e au candidat :{' '}
+                                            Affichée au candidat :{' '}
                                             <span className="font-bold text-primary">{formatTimeAmPm(interviewTime)}</span>
                                           </p>
                                         )}
@@ -4039,7 +4260,7 @@ export default function App() {
                                         onChange={(e) => setInterviewType(e.target.value as 'presentiel' | 'en_ligne')}
                                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none"
                                       >
-                                        <option value="presentiel">PrÃ©sentiel</option>
+                                        <option value="presentiel">Présentiel</option>
                                         <option value="en_ligne">En ligne</option>
                                       </select>
                                     </div>
@@ -4075,7 +4296,7 @@ export default function App() {
                                           className="overflow-hidden"
                                         >
                                           <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
-                                            Lien de la rÃ©union (Teams, Google Meet ou Zoom) <span className="text-error">*</span>
+                                            Lien de la réunion (Teams, Google Meet ou Zoom) <span className="text-error">*</span>
                                           </label>
                                           <input
                                             type="url"
@@ -4096,7 +4317,7 @@ export default function App() {
                                         value={interviewNotes}
                                         onChange={(e) => setInterviewNotes(e.target.value)}
                                         rows={2}
-                                        placeholder="Informations complÃ©mentaires pour le candidat..."
+                                        placeholder="Informations complémentaires pour le candidat..."
                                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:outline-none resize-none"
                                       />
                                     </div>
@@ -4136,7 +4357,7 @@ export default function App() {
                             )}
                           </AnimatePresence>
 
-                          {/* Date de prise de poste (visible quand le candidat est acceptÃ©) */}
+                          {/* Date de prise de poste (visible quand le candidat est accepté) */}
                           <AnimatePresence initial={false}>
                             {selectedApp.status === 'accepted' && (
                               <motion.div
@@ -4160,7 +4381,7 @@ export default function App() {
                                     <div className="grid grid-cols-2 gap-3">
                                       <div>
                                         <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
-                                          Date de dÃ©but <span className="text-error">*</span>
+                                          Date de début <span className="text-error">*</span>
                                         </label>
                                         <input
                                           type="date"
@@ -4172,7 +4393,7 @@ export default function App() {
                                       </div>
                                       <div>
                                         <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">
-                                          Heure d'arrivÃ©e <span className="text-error">*</span>
+                                          Heure d'arrivée <span className="text-error">*</span>
                                         </label>
                                         <input
                                           type="time"
@@ -4182,7 +4403,7 @@ export default function App() {
                                         />
                                         {startTime && (
                                           <p className="text-[10px] text-on-surface-variant mt-1">
-                                            AffichÃ©e au candidat :{' '}
+                                            Affichée au candidat :{' '}
                                             <span className="font-bold text-primary">{formatTimeAmPm(startTime)}</span>
                                           </p>
                                         )}
@@ -4203,7 +4424,7 @@ export default function App() {
                                             const updated = await res.json();
                                             setJobApps((prev: any[]) => prev.map((a: any) => (a._id === selectedApp._id ? updated : a)));
                                             setSelectedApp(updated);
-                                            addToast('Date de prise de poste enregistrÃ©e et envoyÃ©e au candidat par email');
+                                            addToast('Date de prise de poste enregistrée et envoyée au candidat par email');
                                           }
                                         } catch {
                                           addToast('Erreur lors de l\'enregistrement', 'info');
@@ -4215,7 +4436,7 @@ export default function App() {
                                       Enregistrer et envoyer au candidat
                                     </button>
                                     <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                                      Un seul email d'acceptation sera envoyÃ© au candidat, avec la date et l'heure de prise de poste. Il n'est renvoyÃ© qu'en cas de modification de la date ou de l'heure.
+                                      Un seul email d'acceptation sera envoyé au candidat, avec la date et l'heure de prise de poste. Il n'est renvoyé qu'en cas de modification de la date ou de l'heure.
                                     </p>
                                   </div>
                                 </div>
@@ -4239,7 +4460,7 @@ export default function App() {
 
                           <div className="grid grid-cols-2 gap-3">
                             <div className="bg-white p-3 rounded-xl border border-gray-200/50">
-                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Ã‰tudes &amp; DiplÃ´mes</p>
+                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Études &amp; Diplômes</p>
                               <p className="text-sm font-semibold text-on-surface">{selectedApp.education}</p>
                               {selectedApp.diploma && (
                                 <p className="text-xs text-on-surface-variant mt-1">{selectedApp.diploma}</p>
@@ -4247,18 +4468,18 @@ export default function App() {
                             </div>
 
                             <div className="bg-white p-3 rounded-xl border border-gray-200/50">
-                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">TÃ©lÃ©phone</p>
+                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Téléphone</p>
                               <p className="text-sm font-semibold text-on-surface">{selectedApp.phone}</p>
                             </div>
 
                             <div className="bg-white p-3 rounded-xl border border-gray-200/50">
-                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">ExpÃ©rience</p>
-                              <p className="text-sm font-semibold text-on-surface">{selectedApp.experience || 'Non spÃ©cifiÃ©e'}</p>
+                              <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Expérience</p>
+                              <p className="text-sm font-semibold text-on-surface">{selectedApp.experience || 'Non spécifiée'}</p>
                             </div>
 
                             <div className="bg-white p-3 rounded-xl border border-gray-200/50">
                               <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Ville</p>
-                              <p className="text-sm font-semibold text-on-surface">{selectedApp.city || selectedApp.address || 'Non spÃ©cifiÃ©e'}</p>
+                              <p className="text-sm font-semibold text-on-surface">{selectedApp.city || selectedApp.address || 'Non spécifiée'}</p>
                             </div>
 
                             {selectedApp.dateOfBirth && (
@@ -4277,28 +4498,28 @@ export default function App() {
 
                             {selectedApp.nationality && (
                               <div className="bg-white p-3 rounded-xl border border-gray-200/50">
-                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">NationalitÃ©</p>
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Nationalité</p>
                                 <p className="text-sm font-semibold text-on-surface">{selectedApp.nationality}</p>
                               </div>
                             )}
 
                             {selectedApp.lastPosition && (
                               <div className="bg-white p-3 rounded-xl border border-gray-200/50">
-                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Dernier poste occupÃ©</p>
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Dernier poste occupé</p>
                                 <p className="text-sm font-semibold text-on-surface">{selectedApp.lastPosition}</p>
                               </div>
                             )}
 
                             {selectedApp.availability && (
                               <div className="bg-white p-3 rounded-xl border border-gray-200/50">
-                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">DisponibilitÃ©</p>
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Disponibilité</p>
                                 <p className="text-sm font-semibold text-on-surface">{selectedApp.availability}</p>
                               </div>
                             )}
 
                             {selectedApp.source && (
                               <div className="bg-white p-3 rounded-xl border border-gray-200/50">
-                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">ConnaÃ®t le cabinet via</p>
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">Connaît le cabinet via</p>
                                 <p className="text-sm font-semibold text-on-surface">{selectedApp.source}</p>
                               </div>
                             )}
@@ -4320,7 +4541,7 @@ export default function App() {
                                     <div className="flex-1 overflow-hidden">
                                       <p className="text-xs font-bold text-on-surface truncate">{att.originalName}</p>
                                       <p className="text-[10px] text-on-surface-variant">
-                                        {att.type === 'cv' ? 'CV' : att.type === 'coverLetter' ? 'Lettre de motivation' : 'Certificat'} â€” {Math.round(att.size / 1024)} Ko
+                                        {att.type === 'cv' ? 'CV' : att.type === 'coverLetter' ? 'Lettre de motivation' : 'Certificat'} ” {Math.round(att.size / 1024)} Ko
                                       </p>
                                     </div>
                                     <Download className="w-4 h-4 text-primary opacity-70 group-hover:opacity-100 transition-opacity" />
@@ -4336,7 +4557,7 @@ export default function App() {
                     <div className="hidden xl:flex w-96 flex-col items-center justify-center p-8 text-center text-gray-400 bg-surface-container-low/30 border-l border-gray-200">
                       <Search className="w-12 h-12 mb-3 text-gray-300" />
                       <p className="text-sm font-medium text-gray-500">
-                        SÃ©lectionnez un candidat dans la liste pour voir ses dÃ©tails complets.
+                        Sélectionnez un candidat dans la liste pour voir ses détails complets.
                       </p>
                     </div>
                   )}
@@ -4360,12 +4581,12 @@ export default function App() {
                               : <Archive className="w-6 h-6 text-gray-600" />}
                           </div>
                           <h3 className="font-headline font-bold text-lg text-on-surface mb-2">
-                            {deleteMode === 'permanent' ? 'Supprimer dÃ©finitivement' : 'Archiver la candidature'}
+                            {deleteMode === 'permanent' ? 'Supprimer définitivement' : 'Archiver la candidature'}
                           </h3>
                           <p className="text-sm text-on-surface-variant mb-6">
                             {deleteMode === 'permanent'
-                              ? 'Cette action est irrÃ©versible. Tous les fichiers seront Ã©galement supprimÃ©s.'
-                              : 'La candidature sera dÃ©placÃ©e dans la corbeille. Vous pourrez la restaurer ou la supprimer dÃ©finitivement Ã  tout moment.'}
+                              ? 'Cette action est irréversible. Tous les fichiers seront également supprimés.'
+                              : 'La candidature sera déplacée dans la corbeille. Vous pourrez la restaurer ou la supprimer définitivement à tout moment.'}
                           </p>
                           <div className="flex gap-3">
                             <button
@@ -4386,13 +4607,13 @@ export default function App() {
                                     if (deleteMode === 'permanent') {
                                       setArchivedApps((prev: any[]) => prev.filter((a: any) => a._id !== appToDelete));
                                       if (selectedApp?._id === appToDelete) setSelectedApp(null);
-                                      addToast('Candidature supprimÃ©e dÃ©finitivement');
+                                      addToast('Candidature supprimée définitivement');
                                     } else {
                                       const archived = jobApps.find((a: any) => a._id === appToDelete);
                                       setJobApps((prev: any[]) => prev.filter((a: any) => a._id !== appToDelete));
                                       if (selectedApp?._id === appToDelete) setSelectedApp(null);
                                       if (archived) setArchivedApps((prev: any[]) => [archived, ...prev]);
-                                      addToast('Candidature archivÃ©e');
+                                      addToast('Candidature archivée');
                                     }
                                   }
                                 } catch { addToast('Erreur lors de la suppression', 'info'); }
@@ -4403,7 +4624,7 @@ export default function App() {
                                 deleteMode === 'permanent' ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-800'
                               }`}
                             >
-                              {deleteMode === 'permanent' ? 'Supprimer dÃ©finitivement' : 'Archiver'}
+                              {deleteMode === 'permanent' ? 'Supprimer définitivement' : 'Archiver'}
                             </button>
                           </div>
                         </div>
@@ -4423,15 +4644,15 @@ export default function App() {
               >
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
-                    <h3 className="font-headline text-xl font-bold text-on-surface">ParamÃ¨tres Globaux</h3>
-                    <p className="text-xs text-on-surface-variant">GÃ©rez les informations d'entreprise affichÃ©es sur le site.</p>
+                    <h3 className="font-headline text-xl font-bold text-on-surface">Paramètres Globaux</h3>
+                    <p className="text-xs text-on-surface-variant">Gérez les informations d'entreprise affichées sur le site.</p>
                   </div>
                   <button
                     onClick={handleOpenAddParam}
                     className="bg-primary hover:bg-primary-container text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
-                    Ajouter un paramÃ¨tre
+                    Ajouter un paramètre
                   </button>
                 </div>
 
@@ -4442,7 +4663,7 @@ export default function App() {
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-100">
                           <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">#</th>
-                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">ClÃ©</th>
+                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Clé</th>
                           <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Valeur</th>
                           <th className="text-right py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
@@ -4452,12 +4673,12 @@ export default function App() {
                           <tr>
                             <td colSpan={4} className="py-12 text-center">
                               <Settings className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                              <p className="text-sm text-gray-400 font-medium">Aucun paramÃ¨tre pour le moment</p>
+                              <p className="text-sm text-gray-400 font-medium">Aucun paramètre pour le moment</p>
                               <button
                                 onClick={handleOpenAddParam}
                                 className="mt-3 text-secondary hover:text-secondary/80 text-xs font-bold cursor-pointer"
                               >
-                                + Ajouter votre premier paramÃ¨tre
+                                + Ajouter votre premier paramètre
                               </button>
                             </td>
                           </tr>
@@ -4513,7 +4734,7 @@ export default function App() {
                   <div>
                     <h3 className="font-headline text-2xl font-bold text-primary">Gestion des Rendez-vous</h3>
                     <p className="text-xs text-on-surface-variant">
-                      DÃ©finissez vos dates et crÃ©neaux disponibles, et consultez les demandes de rendez-vous reÃ§ues.
+                      Définissez vos dates et créneaux disponibles, et consultez les demandes de rendez-vous reçues.
                     </p>
                   </div>
                   <div className="flex gap-4 bg-white/60 p-3 rounded-xl border border-secondary/15 shadow-sm">
@@ -4528,11 +4749,11 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-7 gap-8">
                   {/* LEFT: Calendar to manage available dates */}
-                  <div className="glass-card rounded-xl p-6">
+                  <div className="glass-card rounded-xl p-6 lg:col-span-3">
                     <h4 className="font-headline text-base font-bold text-on-surface mb-4">Dates Disponibles</h4>
-                    <p className="text-[11px] text-on-surface-variant mb-4">Cliquez sur une date pour la rendre disponible aux rÃ©servations. Cliquez Ã  nouveau pour la retirer.</p>
+                    <p className="text-[11px] text-on-surface-variant mb-4">Cliquez sur une date pour la rendre disponible aux réservations. Cliquez à nouveau pour la retirer.</p>
                     
                     <div className="bg-surface-container-low rounded-xl p-4">
                       <div className="flex items-center justify-between mb-3">
@@ -4546,7 +4767,7 @@ export default function App() {
                           <ChevronLeft className="w-4 h-4 text-on-surface-variant" />
                         </button>
                         <span className="text-sm font-bold text-on-surface">
-                          {['Janvier','FÃ©vrier','Mars','Avril','Mai','Juin','Juillet','AoÃ»t','Septembre','Octobre','Novembre','DÃ©cembre'][availCalMonth]} {availCalYear}
+                          {['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][availCalMonth]} {availCalYear}
                         </span>
                         <button
                           onClick={() => {
@@ -4623,7 +4844,7 @@ export default function App() {
                     {/* List of available dates */}
                     {availableDatesList.length > 0 && (
                       <div className="mt-4 space-y-2">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Dates programmÃ©es</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Dates programmées</p>
                         <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
                         {availableDatesList.map(d => (
                           <div key={d._id} className="p-2 bg-emerald-50 rounded-lg border border-emerald-100">
@@ -4684,100 +4905,265 @@ export default function App() {
                   </div>
 
                   {/* RIGHT: Incoming appointment requests */}
-                  <div className="glass-card rounded-xl flex flex-col">
+                  <div className="glass-card rounded-xl flex flex-col lg:col-span-4">
                     <div className="p-6 border-b border-secondary/10">
                       <h4 className="font-headline text-base font-bold text-on-surface">Demandes de Rendez-vous</h4>
                     </div>
-                    <div className="flex-1 p-4 space-y-3 overflow-y-auto max-h-[440px] custom-scrollbar">
-                      {appointments.length === 0 ? (
-                        <div className="text-center py-12 text-sm text-on-surface-variant flex flex-col items-center gap-2">
-                          <CalendarIcon className="w-8 h-8 text-on-surface-variant/30" />
-                          <span>Aucune demande de rendez-vous</span>
-                        </div>
-                      ) : (
-                        appointments.map(appt => (
-                          <div key={appt._id} className={`p-4 rounded-xl border transition-all ${
-                            appt.status === 'pending' ? 'border-amber-200 bg-amber-50/50' :
-                            appt.status === 'confirmed' ? 'border-emerald-200 bg-emerald-50/50' :
-                            appt.status === 'rescheduled' ? 'border-blue-200 bg-blue-50/50' :
-                            'border-gray-200 bg-gray-50/50 opacity-60'
-                          }`}>
-                            <div className="flex items-start justify-between mb-2">
-                              <div>
-                                <p className="text-sm font-bold text-on-surface">{appt.clientName}</p>
-                                <p className="text-[10px] text-on-surface-variant">{appt.email}</p>
-                              </div>
-                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                                appt.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                                appt.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
-                                appt.status === 'rescheduled' ? 'bg-blue-100 text-blue-700' :
-                                'bg-gray-100 text-gray-500'
-                              }`}>
-                                {appt.status === 'pending' ? 'EN ATTENTE' : appt.status === 'confirmed' ? 'CONFIRMÃ‰' : appt.status === 'rescheduled' ? 'REPORTÃ‰' : 'ANNULÃ‰'}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-3 text-[11px] text-on-surface-variant mb-2">
-                              <span className="flex items-center gap-1">
-                                <CalendarIcon className="w-3.5 h-3.5" />
-                                {new Date(appt.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-3.5 h-3.5" />
-                                {appt.timeSlot}
-                              </span>
-                            </div>
-                            <p className="text-xs font-semibold text-on-surface mb-1">{appt.subject}</p>
-                            {appt.details && <p className="text-[11px] text-on-surface-variant line-clamp-2 mb-3">{appt.details}</p>}
-                            {appt.status === 'rescheduled' && appt.rescheduledDate && (
-                              <div className="text-[11px] text-blue-600 font-semibold mb-3 flex items-center gap-1">
-                                <CalendarIcon className="w-3 h-3" />
-                                Nouveau RDV : {new Date(appt.rescheduledDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })} â€” {appt.rescheduledTimeSlot}
-                              </div>
-                            )}
-                            {appt.status === 'pending' && (
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={async () => {
-                                    await fetch(`${API_URL}/appointments/${appt._id}`, {
-                                      method: 'PUT',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ status: 'confirmed' })
-                                    });
-                                    setAppointments(prev => prev.map(a => a._id === appt._id ? { ...a, status: 'confirmed' } : a));
-                                    addToast(`RDV avec ${appt.clientName} confirmÃ©.`);
-                                  }}
-                                  className="px-3 py-1.5 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-700 transition-colors cursor-pointer"
-                                >
-                                  Confirmer
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setRejectTargetId(appt._id);
-                                    setRejectTargetName(appt.clientName);
-                                    setRejectionReason('');
-                                    setRejectModalOpen(true);
-                                  }}
-                                  className="px-3 py-1.5 border border-red-300 text-red-600 text-[10px] font-bold rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
-                                >
-                                  Refuser
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setRescheduleTargetId(appt._id);
-                                    setRescheduleTargetName(appt.clientName);
-                                    setRescheduleNewDate('');
-                                    setRescheduleNewTimeSlot('');
-                                    setRescheduleModalOpen(true);
-                                  }}
-                                  className="px-3 py-1.5 border border-amber-300 text-amber-600 text-[10px] font-bold rounded-lg hover:bg-amber-50 transition-colors cursor-pointer"
-                                >
-                                  Reporter
-                                </button>
-                              </div>
-                            )}
+                    <div className="flex-1 p-4">
+                      {/* Toolbar: recherche + filtres + tri */}
+                      <div className="flex flex-col gap-2 mb-3">
+                        <div className="flex flex-col lg:flex-row lg:items-center gap-2">
+                          <div className="relative flex-1 min-w-0">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant/50" />
+                            <input
+                              type="text"
+                              value={apptSearch}
+                              onChange={(e) => setApptSearch(e.target.value)}
+                              placeholder="Rechercher un client..."
+                              className="w-full bg-surface-container-low border border-outline-variant rounded-lg pl-9 pr-3 py-2 text-xs text-on-surface focus:outline-primary placeholder:text-on-surface-variant/40"
+                            />
                           </div>
-                        ))
-                      )}
+                          <div className="relative shrink-0">
+                            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-on-surface-variant/50 pointer-events-none" />
+                            <select
+                              value={apptSort}
+                              onChange={(e) => setApptSort(e.target.value as any)}
+                              className="appearance-none bg-surface-container-low border border-outline-variant rounded-lg pl-8 pr-8 py-2 text-xs font-semibold text-on-surface focus:outline-primary cursor-pointer"
+                              title="Trier par"
+                            >
+                              <option value="recent">Plus récent</option>
+                              <option value="oldest">Plus ancien</option>
+                              <option value="date">Date du rendez-vous</option>
+                              <option value="name">Nom du client</option>
+                            </select>
+                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-on-surface-variant/50 pointer-events-none" />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {([
+                            { key: 'all', label: 'Tous', color: 'bg-primary text-white border-primary' },
+                            { key: 'pending', label: 'En attente', color: 'bg-amber-100 text-amber-700 border-amber-200' },
+                            { key: 'confirmed', label: 'Confirmés', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+                            { key: 'rescheduled', label: 'Reportés', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+                            { key: 'cancelled', label: 'Annulés', color: 'bg-gray-100 text-gray-600 border-gray-200' },
+                            { key: 'expired', label: 'Expirés', color: 'bg-gray-200 text-gray-500 border-gray-300' },
+                            { key: 'today', label: "Aujourd'hui", color: 'bg-primary/10 text-primary border-primary/20' },
+                            { key: 'week', label: 'Cette semaine', color: 'bg-secondary/10 text-secondary border-secondary/20' }
+                          ] as const).map(f => (
+                            <button
+                              key={f.key}
+                              onClick={() => setApptFilter(f.key)}
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${f.color} ${
+                                apptFilter === f.key ? 'ring-2 ring-primary/60 shadow-sm' : 'opacity-75 hover:opacity-100'
+                              }`}
+                            >
+                              {f.label}
+                            </button>
+                          ))}
+                          <span className="ml-auto text-[10px] text-on-surface-variant">
+                            {filteredAppointments.length} rendez-vous
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className={activeAppointment ? 'flex flex-col lg:flex-row gap-4' : ''}>
+                        {/* List */}
+                        <div className={`${activeAppointment ? 'lg:w-[45%]' : 'lg:w-full'} flex flex-col gap-3`}>
+                          <div className="space-y-3 overflow-y-auto max-h-[560px] custom-scrollbar pr-1">
+                            {appointments.length === 0 ? (
+                              <div className="text-center py-12 text-sm text-on-surface-variant flex flex-col items-center gap-2">
+                                <CalendarIcon className="w-8 h-8 text-on-surface-variant/30" />
+                                <span>Aucune demande de rendez-vous</span>
+                              </div>
+                            ) : filteredAppointments.length === 0 ? (
+                              <div className="text-center py-12 text-sm text-on-surface-variant flex flex-col items-center gap-2">
+                                <Search className="w-8 h-8 text-on-surface-variant/30" />
+                                <span>Aucun rendez-vous trouvé.</span>
+                              </div>
+                            ) : (
+                              filteredAppointments.map(appt => {
+                                const apptStatus = apptEffectiveStatus(appt);
+                                return (
+                              <div
+                                key={appt._id}
+                                onClick={() => setActiveAppointment(appt)}
+                                className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                                  activeAppointment?._id === appt._id
+                                    ? 'ring-2 ring-primary border-primary/30 shadow-md'
+                                    : 'hover:shadow-sm'
+                                } ${
+                                  apptStatus === 'pending' ? 'border-amber-200 bg-amber-50/50' :
+                                  apptStatus === 'confirmed' ? 'border-emerald-200 bg-emerald-50/50' :
+                                  apptStatus === 'rescheduled' ? 'border-blue-200 bg-blue-50/50' :
+                                  apptStatus === 'expired' ? 'border-gray-300 bg-gray-100/60' :
+                                  'border-gray-200 bg-gray-50/50 opacity-60'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-on-surface truncate">{appt.clientName}</p>
+                                    <p className="text-[10px] text-on-surface-variant truncate">{appt.email}</p>
+                                  </div>
+                                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                                    apptStatus === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                    apptStatus === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
+                                    apptStatus === 'rescheduled' ? 'bg-blue-100 text-blue-700' :
+                                    apptStatus === 'expired' ? 'bg-gray-200 text-gray-500' :
+                                    'bg-gray-100 text-gray-500'
+                                  }`}>
+                                    {apptStatus === 'pending' ? 'EN ATTENTE' : apptStatus === 'confirmed' ? 'CONFIRMÉ' : apptStatus === 'rescheduled' ? 'REPORTÉ' : apptStatus === 'expired' ? 'EXPIRÉ' : 'ANNULÉ'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3 text-[11px] text-on-surface-variant">
+                                  <span className="flex items-center gap-1">
+                                    <CalendarIcon className="w-3.5 h-3.5" />
+                                    {new Date(appt.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    {appt.timeSlot}
+                                  </span>
+                                </div>
+                              </div>
+                              );
+                            }))}
+                          </div>
+                          </div>
+
+                          {/* Detail panel */}
+                          {activeAppointment && (
+                          <div className="lg:flex-1 min-w-0">
+                              <div className="bg-white rounded-xl border border-secondary/10 shadow-sm p-4 lg:sticky lg:top-4">
+                                <div className="flex items-start justify-between gap-3 mb-3">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
+                                      {(activeAppointment.clientName || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <h5 className="font-headline font-bold text-on-surface truncate">{activeAppointment.clientName}</h5>
+                                      <p className="text-[10px] text-on-surface-variant truncate">{activeAppointment.email}</p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => setActiveAppointment(null)}
+                                    className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer shrink-0"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+
+                                <div className="space-y-2 text-xs border-t border-gray-100 pt-3">
+                                  <div className="flex justify-between gap-3">
+                                    <span className="font-bold text-on-surface-variant shrink-0">Nom</span>
+                                    <span className="text-on-surface text-right">{activeAppointment.clientName}</span>
+                                  </div>
+                                  <div className="flex justify-between gap-3">
+                                    <span className="font-bold text-on-surface-variant shrink-0">Email</span>
+                                    <span className="text-on-surface text-right break-all">{activeAppointment.email || '—'}</span>
+                                  </div>
+                                  <div className="flex justify-between gap-3">
+                                    <span className="font-bold text-on-surface-variant shrink-0">Téléphone</span>
+                                    <span className="text-on-surface text-right">—</span>
+                                  </div>
+                                  <div className="flex justify-between gap-3">
+                                    <span className="font-bold text-on-surface-variant shrink-0">Entreprise</span>
+                                    <span className="text-on-surface text-right">—</span>
+                                  </div>
+                                  <div className="flex justify-between gap-3">
+                                    <span className="font-bold text-on-surface-variant shrink-0">Département</span>
+                                    <span className="text-on-surface text-right">{activeAppointment.subject || '—'}</span>
+                                  </div>
+                                  <div className="flex justify-between gap-3">
+                                    <span className="font-bold text-on-surface-variant shrink-0">Date</span>
+                                    <span className="text-on-surface text-right whitespace-nowrap">
+                                      {new Date(activeAppointment.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between gap-3">
+                                    <span className="font-bold text-on-surface-variant shrink-0">Heure</span>
+                                    <span className="text-on-surface text-right whitespace-nowrap">{activeAppointment.timeSlot}</span>
+                                  </div>
+                                  <div className="flex justify-between gap-3">
+                                    <span className="font-bold text-on-surface-variant shrink-0">Durée</span>
+                                    <span className="text-on-surface text-right">{activeAppointment.duration ? `${activeAppointment.duration} minutes` : '30 minutes'}</span>
+                                  </div>
+                                </div>
+
+                                {activeAppointment.details && (
+                                  <div className="mt-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Message</p>
+                                    <p className="text-xs text-on-surface leading-relaxed whitespace-pre-wrap bg-surface-container-low rounded-lg p-3">{activeAppointment.details}</p>
+                                  </div>
+                                )}
+
+                                <div className="mt-3">
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Historique</p>
+                                  <div className="space-y-1.5 text-[11px]">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                      <span className="text-on-surface-variant">Demande reçue le {new Date(activeAppointment.createdAt || activeAppointment.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                                    </div>
+                                    {activeAppointment.status === 'confirmed' && (
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                        <span className="text-emerald-700 font-semibold">Rendez-vous confirmé</span>
+                                      </div>
+                                    )}
+                                    {activeAppointment.status === 'rescheduled' && (
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                        <span className="text-blue-700 font-semibold">
+                                          Reporté au {new Date(activeAppointment.rescheduledDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })} — {activeAppointment.rescheduledTimeSlot}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {activeAppointment.status === 'cancelled' && (
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                                        <span className="text-red-600 font-semibold">Rendez-vous annulé</span>
+                                      </div>
+                                    )}
+                                    {apptEffectiveStatus(activeAppointment) === 'expired' && (
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                                        <span className="text-gray-500 font-semibold">Rendez-vous expiré</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="mt-3">
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Notes</p>
+                                  <p className="text-xs text-on-surface-variant bg-surface-container-low rounded-lg p-3">{activeAppointment.details || 'Aucune note pour ce rendez-vous.'}</p>
+                                </div>
+
+                                {activeAppointment.status === 'pending' && apptEffectiveStatus(activeAppointment) === 'pending' && (
+                                  <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-100 mt-4">
+                                    <button
+                                      onClick={() => setApptConfirmAction({ type: 'confirm', appt: activeAppointment })}
+                                      className="flex-1 min-w-24 px-3 py-2 bg-emerald-600 text-white text-[11px] font-bold rounded-lg hover:bg-emerald-700 transition-colors cursor-pointer"
+                                    >
+                                      Confirmer
+                                    </button>
+                                    <button
+                                      onClick={() => setApptConfirmAction({ type: 'reschedule', appt: activeAppointment })}
+                                      className="flex-1 min-w-24 px-3 py-2 border border-amber-300 text-amber-600 text-[11px] font-bold rounded-lg hover:bg-amber-50 transition-colors cursor-pointer"
+                                    >
+                                      Reporter
+                                    </button>
+                                    <button
+                                      onClick={() => setApptConfirmAction({ type: 'reject', appt: activeAppointment })}
+                                      className="flex-1 min-w-24 px-3 py-2 border border-red-300 text-red-600 text-[11px] font-bold rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                                    >
+                                      Annuler
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                          </div>
+                          )}
+                        </div>
                     </div>
                   </div>
                 </div>
@@ -4796,7 +5182,7 @@ export default function App() {
                 {/* Header */}
                 <div>
                   <h3 className="font-headline text-2xl font-bold text-primary">Messages</h3>
-                  <p className="text-xs text-on-surface-variant">Demandes reÃ§ues depuis le formulaire de contact.</p>
+                  <p className="text-xs text-on-surface-variant">Demandes reçues depuis le formulaire de contact.</p>
                 </div>
 
                 {/* Summary cards */}
@@ -4807,7 +5193,7 @@ export default function App() {
                   >
                     <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">Tous</p>
                     <p className="font-headline text-2xl font-bold text-on-surface mt-1">{clientInboxMessages.length}</p>
-                    <p className="text-[11px] text-on-surface-variant mt-1">messages reÃ§us</p>
+                    <p className="text-[11px] text-on-surface-variant mt-1">messages reçus</p>
                   </button>
                   <button
                     onClick={() => setMessageFilter('unread')}
@@ -4815,7 +5201,7 @@ export default function App() {
                   >
                     <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">Non lus</p>
                     <p className="font-headline text-2xl font-bold text-blue-600 mt-1">{clientInboxMessages.filter(m => m.isUnread).length}</p>
-                    <p className="text-[11px] text-on-surface-variant mt-1">Ã  traiter</p>
+                    <p className="text-[11px] text-on-surface-variant mt-1">à traiter</p>
                   </button>
                   <button
                     onClick={() => setMessageFilter('processing')}
@@ -4829,29 +5215,152 @@ export default function App() {
                     onClick={() => setMessageFilter('done')}
                     className={`glass-card p-4 rounded-xl text-left cursor-pointer transition-all ${messageFilter === 'done' ? 'ring-2 ring-primary shadow-md' : 'hover:shadow-md'}`}
                   >
-                    <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">TraitÃ©s</p>
+                    <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">Traités</p>
                     <p className="font-headline text-2xl font-bold text-emerald-600 mt-1">{clientInboxMessages.filter(m => m.status === 'done').length}</p>
-                    <p className="text-[11px] text-on-surface-variant mt-1">clÃ´turÃ©s</p>
+                    <p className="text-[11px] text-on-surface-variant mt-1">clôturés</p>
                   </button>
+                </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 items-start">
+                <div className={`${messageDetailOpen && activeMessageDetail ? 'xl:col-span-3' : 'xl:col-span-4'} space-y-4 min-w-0`}>
+
+                {/* Search + quick filters + sort */}
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+                    {/* Search bar */}
+                    <div className="relative flex-1 min-w-0">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant/50" />
+                      <input
+                        type="text"
+                        value={messageSearch}
+                        onChange={(e) => setMessageSearch(e.target.value)}
+                        placeholder="Rechercher un nom, un email, un sujet ou un mot-clé..."
+                        className="w-full bg-surface-container-low border border-outline-variant rounded-lg pl-9 pr-3 py-2.5 text-xs text-on-surface focus:outline-primary placeholder:text-on-surface-variant/40"
+                      />
+                    </div>
+
+                    {/* Sort dropdown */}
+                    <div className="relative shrink-0">
+                      <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-on-surface-variant/50 pointer-events-none" />
+                      <select
+                        value={messageSort}
+                        onChange={(e) => setMessageSort(e.target.value as any)}
+                        className="appearance-none bg-surface-container-low border border-outline-variant rounded-lg pl-8 pr-8 py-2.5 text-xs font-semibold text-on-surface focus:outline-primary cursor-pointer"
+                        title="Trier par"
+                      >
+                        <option value="newest">Plus récent</option>
+                        <option value="oldest">Plus ancien</option>
+                        <option value="name-az">Nom A-Z</option>
+                        <option value="name-za">Nom Z-A</option>
+                      </select>
+                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-on-surface-variant/50 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Quick filters */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {([
+                      { key: 'all', label: 'Tous', color: 'bg-primary text-white border-primary' },
+                      { key: 'unread', label: 'Non lus', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+                      { key: 'processing', label: 'En cours', color: 'bg-amber-100 text-amber-700 border-amber-200' },
+                      { key: 'done', label: 'Traités', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+                      { key: 'today', label: "Aujourd'hui", color: 'bg-primary/10 text-primary border-primary/20' },
+                      { key: 'week', label: 'Cette semaine', color: 'bg-secondary/10 text-secondary border-secondary/20' }
+                    ] as const).map(f => (
+                      <button
+                        key={f.key}
+                        onClick={() => setMessageFilter(f.key)}
+                        className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${f.color} ${messageFilter === f.key ? 'ring-2 ring-primary/60 shadow-md scale-[1.03]' : 'opacity-75 hover:opacity-100 hover:shadow-sm'}`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                    <span className="ml-auto text-[11px] text-on-surface-variant">
+                      {filteredMessages.length} message{filteredMessages.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Inbox list */}
                 <div className="bg-white rounded-2xl border border-secondary/10 overflow-hidden shadow-sm">
+                  {/* Bulk actions header */}
+                  <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/60">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={allMessagesSelected}
+                        onChange={toggleAllMessages}
+                        className="w-4 h-4 accent-primary cursor-pointer"
+                        disabled={filteredMessages.length === 0}
+                      />
+                      <span className="text-[11px] font-semibold text-on-surface-variant">
+                        Tout sélectionner
+                      </span>
+                    </label>
+                    {selectedMessageIds.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 ml-auto">
+                        <span className="text-[11px] font-bold text-primary">
+                          {selectedMessageIds.length} sélectionné{selectedMessageIds.length > 1 ? 's' : ''}
+                        </span>
+                        <button
+                          onClick={bulkMarkRead}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-blue-700 bg-blue-100 hover:bg-blue-200 transition-colors cursor-pointer"
+                        >
+                          Marquer comme lu
+                        </button>
+                        <button
+                          onClick={bulkMarkDone}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition-colors cursor-pointer"
+                        >
+                          Marquer comme traité
+                        </button>
+                        <button
+                          onClick={exportSelectedMessages}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-on-surface-variant bg-surface-container-low border border-outline-variant hover:bg-gray-200 transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <Download className="w-3 h-3" /> Exporter
+                        </button>
+                        <button
+                          onClick={() => setBulkDeleteOpen(true)}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-red-700 bg-red-100 hover:bg-red-200 transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3 h-3" /> Supprimer
+                        </button>
+                        <button
+                          onClick={clearMessageSelection}
+                          className="p-1 text-on-surface-variant hover:text-on-surface hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
+                          title="Effacer la sélection"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   {filteredMessages.length === 0 ? (
                     <div className="text-center py-16 text-sm text-on-surface-variant flex flex-col items-center gap-2">
                       <Mail className="w-10 h-10 text-on-surface-variant/30" />
-                      <span>Aucun message trouvÃ©.</span>
+                      <span>Aucun message trouvé.</span>
                     </div>
                   ) : (
-                    filteredMessages.map(msg => {
+                    pagedMessages.map(msg => {
                       const parts = parseMessageParts(msg);
                       const status = messageStatusInfo(msg.status);
+                      const isSelected = selectedMessageIds.includes(msg.id);
                       return (
                         <div
                           key={msg.id}
-                          className={`flex flex-col lg:flex-row lg:items-center gap-3 p-4 border-b border-gray-100 transition-colors ${msg.isUnread ? 'bg-primary/5' : 'hover:bg-surface-container-low/50'}`}
+                          className={`flex flex-col lg:flex-row lg:items-center gap-3 p-4 border-b border-gray-100 transition-colors ${msg.isUnread ? 'bg-primary/5' : 'hover:bg-surface-container-low/50'} ${isSelected ? 'bg-primary/10 ring-1 ring-inset ring-primary/20' : ''}`}
                         >
-                          <div className="flex items-center gap-3 lg:w-72 lg:shrink-0 min-w-0">
+                          <div className="flex items-center shrink-0">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleMessageSelection(msg.id)}
+                              className="w-4 h-4 accent-primary cursor-pointer"
+                            />
+                          </div>
+                          <div className="flex items-center gap-3 lg:w-60 lg:shrink-0 min-w-0">
                             <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
                               {msg.initials}
                             </div>
@@ -4860,10 +5369,10 @@ export default function App() {
                                 <p className="text-xs font-bold text-on-surface truncate">{msg.sender}</p>
                                 {msg.isUnread && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
                               </div>
-                              <p className="text-[10px] text-on-surface-variant truncate">{parts.email || msg.email || 'â€”'}</p>
+                              <p className="text-[10px] text-on-surface-variant truncate">{parts.email || msg.email || '”'}</p>
                             </div>
                           </div>
-                          <div className="lg:w-56 lg:shrink-0 min-w-0">
+                          <div className="lg:w-48 lg:shrink-0 min-w-0">
                             <p className="text-xs font-semibold text-on-surface truncate">{parts.subject}</p>
                           </div>
                           <div className="flex-1 min-w-0">
@@ -4873,7 +5382,7 @@ export default function App() {
                             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${status.cls}`}>{status.label}</span>
                             <span className="text-[10px] text-on-surface-variant">{formatMessageDate(msg)}</span>
                           </div>
-                          <div className="flex items-center gap-0.5 lg:shrink-0">
+                          <div className="flex items-center gap-0.5 lg:shrink-0 lg:ml-auto">
                             <button
                               onClick={() => openMessageDetail(msg)}
                               className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
@@ -4884,26 +5393,19 @@ export default function App() {
                             <button
                               onClick={() => openReplyModal(msg)}
                               className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
-                              title="RÃ©pondre"
+                              title="Répondre"
                             >
                               <Send className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => setMessageStatus(msg, 'done')}
                               className="p-1.5 text-on-surface-variant hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                              title="Marquer comme traitÃ©"
+                              title="Marquer comme traité"
                             >
                               <CheckCircle2 className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => archiveMessage(msg)}
-                              className="p-1.5 text-on-surface-variant hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
-                              title="Archiver"
-                            >
-                              <Archive className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleArchiveMessage(msg.id, msg.sender)}
+                              onClick={() => setMessageToDelete(msg)}
                               className="p-1.5 text-on-surface-variant hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                               title="Supprimer"
                             >
@@ -4914,9 +5416,268 @@ export default function App() {
                       );
                     })
                   )}
+
+                  {/* Pagination */}
+                  {totalMessagePages > 1 && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-gray-100">
+                      <span className="text-[11px] text-on-surface-variant">
+                        Page {currentMessagePage} sur {totalMessagePages} — {filteredMessages.length} message{filteredMessages.length > 1 ? 's' : ''}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setMessagePage(Math.max(1, currentMessagePage - 1))}
+                          disabled={currentMessagePage <= 1}
+                          className="p-1.5 rounded-lg border border-gray-200 text-on-surface-variant hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          title="Page précédente"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+
+                        {Array.from({ length: totalMessagePages }, (_, i) => i + 1).map((page, idx, pages) => {
+                          const shown =
+                            page === 1 ||
+                            page === totalMessagePages ||
+                            Math.abs(page - currentMessagePage) <= 1;
+                          if (!shown) {
+                            const prev = idx > 0 ? pages[idx - 1] : 0;
+                            const prevShown =
+                              prev === 1 || prev === totalMessagePages || Math.abs(prev - currentMessagePage) <= 1;
+                            if (prevShown) {
+                              return <span key={`e-${page}`} className="text-xs text-on-surface-variant/50 px-1">…</span>;
+                            }
+                            return null;
+                          }
+                          return (
+                            <button
+                              key={page}
+                              onClick={() => setMessagePage(page)}
+                              className={`w-8 h-8 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                                page === currentMessagePage
+                                  ? 'bg-primary text-white shadow-sm'
+                                  : 'text-on-surface-variant hover:bg-gray-100'
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          );
+                        })}
+
+                        <button
+                          onClick={() => setMessagePage(Math.min(totalMessagePages, currentMessagePage + 1))}
+                          disabled={currentMessagePage >= totalMessagePages}
+                          className="p-1.5 rounded-lg border border-gray-200 text-on-surface-variant hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          title="Page suivante"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                </div>
+
+                {/* Detail panel */}
+                <div className={`${messageDetailOpen && activeMessageDetail ? 'xl:col-span-1' : 'hidden'} min-w-0`}>
+                  {messageDetailOpen && activeMessageDetail ? (() => {
+                    const parts = parseMessageParts(activeMessageDetail);
+                    const status = messageStatusInfo(activeMessageDetail.status);
+                    const phoneMatch = (parts.body || '').match(/(?:Téléphone|Tel|Phone|Mobile)[:\s]*([+\d][\d\s().-]{5,})/i);
+                    const deptMatch = (parts.body || '').match(/(?:Département|Departement|Service|Domaine)[:\s]*([^\n]+)/i);
+                    return (
+                      <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="bg-white rounded-2xl border border-secondary/10 overflow-hidden shadow-sm xl:sticky xl:top-4"
+                      >
+                        {/* Header */}
+                        <div className="flex items-start justify-between gap-3 p-4 border-b border-gray-100 bg-gray-50/60">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-base shrink-0">
+                              {activeMessageDetail.initials}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="font-headline text-base font-bold text-primary truncate">{activeMessageDetail.sender}</h4>
+                              <p className="text-xs text-on-surface-variant truncate">{parts.email || activeMessageDetail.email || '—'}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border whitespace-nowrap ${status.cls}`}>{status.label}</span>
+                            <button
+                              onClick={() => setMessageDetailOpen(false)}
+                              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all cursor-pointer"
+                              title="Fermer"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Info rows */}
+                        <div className="p-4 border-b border-gray-100 space-y-2">
+                          <div className="flex justify-between gap-3 text-xs">
+                            <span className="font-bold text-on-surface-variant shrink-0">Nom</span>
+                            <span className="text-on-surface text-right">{activeMessageDetail.sender}</span>
+                          </div>
+                          <div className="flex justify-between gap-3 text-xs">
+                            <span className="font-bold text-on-surface-variant shrink-0">Email</span>
+                            <span className="text-on-surface text-right break-all">{parts.email || activeMessageDetail.email || '—'}</span>
+                          </div>
+                          <div className="flex justify-between gap-3 text-xs">
+                            <span className="font-bold text-on-surface-variant shrink-0">Téléphone</span>
+                            <span className="text-on-surface text-right">{phoneMatch ? phoneMatch[1].trim() : '—'}</span>
+                          </div>
+                          <div className="flex justify-between gap-3 text-xs">
+                            <span className="font-bold text-on-surface-variant shrink-0">Département</span>
+                            <span className="text-on-surface text-right">{deptMatch ? deptMatch[1].trim() : '—'}</span>
+                          </div>
+                          <div className="flex justify-between gap-3 text-xs">
+                            <span className="font-bold text-on-surface-variant shrink-0">Date</span>
+                            <span className="text-on-surface text-right whitespace-nowrap">{formatMessageDate(activeMessageDetail)}</span>
+                          </div>
+                          <div className="flex justify-between gap-3 text-xs">
+                            <span className="font-bold text-on-surface-variant shrink-0">Sujet</span>
+                            <span className="text-on-surface text-right">{parts.subject || '—'}</span>
+                          </div>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-4">
+                          <p className="text-sm text-on-surface leading-relaxed whitespace-pre-wrap">{parts.body || activeMessageDetail.content}</p>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex flex-wrap gap-2 p-4 border-t border-gray-100">
+                          <button
+                            onClick={() => openMessageDetailWithReply(activeMessageDetail)}
+                            className="flex-1 px-3 py-2 text-xs font-bold text-on-surface-variant border border-outline-variant rounded-xl hover:bg-surface-container transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <Send className="w-3.5 h-3.5" /> Répondre
+                          </button>
+                          {activeMessageDetail.status !== 'done' && (
+                            <button
+                              onClick={() => setMessageStatus(activeMessageDetail, 'done')}
+                              className="flex-1 px-3 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Traiter
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              openNewAppointment(activeMessageDetail);
+                              setMessageDetailOpen(false);
+                            }}
+                            className="flex-1 px-3 py-2 text-xs font-bold bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <CalendarIcon className="w-3.5 h-3.5" /> Planifier
+                          </button>
+                          <button
+                            onClick={() => setMessageToDelete(activeMessageDetail)}
+                            className="px-3 py-2 text-xs font-bold text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-colors cursor-pointer flex items-center gap-1.5"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </motion.div>
+                    );
+                  })() : (
+                    <div className="hidden xl:flex flex-col items-center justify-center p-8 text-center text-gray-400 bg-surface-container-low/30 border border-secondary/10 rounded-2xl xl:sticky xl:top-4 min-h-64">
+                      <Mail className="w-12 h-12 mb-3 text-gray-300" />
+                      <p className="text-sm font-medium text-gray-500">
+                        Sélectionnez un message pour voir ses détails complets.
+                      </p>
+                    </div>
+                  )}
+                </div>
                 </div>
               </motion.div>
             )}
+
+            {/* Message delete confirmation */}
+            <AnimatePresence>
+              {messageToDelete && (
+                <>
+                  <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setMessageToDelete(null)} />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                  >
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 text-center">
+                      <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Trash2 className="w-6 h-6 text-red-500" />
+                      </div>
+                      <h3 className="font-headline font-bold text-lg text-on-surface mb-2">
+                        Supprimer ce message ?
+                      </h3>
+                      <p className="text-sm text-on-surface-variant mb-6">
+                        Cette action est irréversible.
+                      </p>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => setMessageToDelete(null)}
+                          className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold text-on-surface hover:bg-gray-50 transition-all cursor-pointer"
+                        >
+                          Annuler
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (messageToDelete) handleArchiveMessage(messageToDelete.id, messageToDelete.sender);
+                            setMessageToDelete(null);
+                          }}
+                          className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold transition-all cursor-pointer"
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+
+            {/* Bulk message delete confirmation */}
+            <AnimatePresence>
+              {bulkDeleteOpen && selectedMessageIds.length > 0 && (
+                <>
+                  <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setBulkDeleteOpen(false)} />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                  >
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 text-center">
+                      <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Trash2 className="w-6 h-6 text-red-500" />
+                      </div>
+                      <h3 className="font-headline font-bold text-lg text-on-surface mb-2">
+                        Supprimer {selectedMessageIds.length} message{selectedMessageIds.length > 1 ? 's' : ''} ?
+                      </h3>
+                      <p className="text-sm text-on-surface-variant mb-6">
+                        Cette action est irréversible.
+                      </p>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => setBulkDeleteOpen(false)}
+                          className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold text-on-surface hover:bg-gray-50 transition-all cursor-pointer"
+                        >
+                          Annuler
+                        </button>
+                        <button
+                          onClick={bulkDeleteMessages}
+                          className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold transition-all cursor-pointer"
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
 
             {/* 7. REFERENCES VIEW */}
             {activeTab === 'references' && (
@@ -4930,9 +5691,9 @@ export default function App() {
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
-                    <h3 className="font-headline text-2xl font-bold text-primary">Nos RÃ©fÃ©rences</h3>
+                    <h3 className="font-headline text-2xl font-bold text-primary">Nos Références</h3>
                     <p className="text-xs text-on-surface-variant">
-                      GÃ©rez les entreprises et partenaires affichÃ©s dans la section Â« Ils Nous Font Confiance Â».
+                      Gérez les entreprises et partenaires affichés dans la section « Ils Nous Font Confiance ».
                     </p>
                   </div>
                   <button
@@ -4940,17 +5701,17 @@ export default function App() {
                     className="bg-secondary hover:bg-secondary/80 text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
-                    Ajouter une RÃ©fÃ©rence
+                    Ajouter une Référence
                   </button>
                 </div>
 
                 {/* Stats Bar */}
                 <div className="flex flex-wrap gap-4 text-xs text-on-surface-variant">
                   <span className="font-semibold">
-                    Total : <span className="text-primary font-bold">{references.length}</span> rÃ©fÃ©rences
+                    Total : <span className="text-primary font-bold">{references.length}</span> références
                   </span>
                   <span className="font-semibold">
-                    CatÃ©gories : <span className="text-primary font-bold">{new Set(references.map(r => r.category)).size}</span>
+                    Catégories : <span className="text-primary font-bold">{new Set(references.map(r => r.category)).size}</span>
                   </span>
                 </div>
 
@@ -4963,7 +5724,7 @@ export default function App() {
                           <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">#</th>
                           <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Logo</th>
                           <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Nom</th>
-                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">CatÃ©gorie</th>
+                          <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Catégorie</th>
                           <th className="text-right py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                       </thead>
@@ -4972,12 +5733,12 @@ export default function App() {
                           <tr>
                             <td colSpan={5} className="py-12 text-center">
                               <ClipboardList className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                              <p className="text-sm text-gray-400 font-medium">Aucune rÃ©fÃ©rence pour le moment</p>
+                              <p className="text-sm text-gray-400 font-medium">Aucune référence pour le moment</p>
                               <button
                                 onClick={handleOpenAddRef}
                                 className="mt-3 text-secondary hover:text-secondary/80 text-xs font-bold cursor-pointer"
                               >
-                                + Ajouter votre premiÃ¨re rÃ©fÃ©rence
+                                + Ajouter votre première référence
                               </button>
                             </td>
                           </tr>
@@ -5077,7 +5838,7 @@ export default function App() {
               <form onSubmit={handleCreateMission} className="p-6 space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-on-surface-variant mb-1">
-                    IntitulÃ© de la Mission <span className="text-error">*</span>
+                    Intitulé de la Mission <span className="text-error">*</span>
                   </label>
                   <input
                     type="text"
@@ -5105,17 +5866,17 @@ export default function App() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-on-surface-variant mb-1">DÃ©partement</label>
+                    <label className="block text-xs font-bold text-on-surface-variant mb-1">Département</label>
                     <select
                       value={newMissionDept}
                       onChange={(e) => setNewMissionDept(e.target.value as any)}
                       className="w-full bg-surface-container-low border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-primary"
                     >
-                      <option value="Audit LÃ©gal">Audit LÃ©gal</option>
+                      <option value="Audit Légal">Audit Légal</option>
                       <option value="Conseil">Conseil</option>
-                      <option value="ComptabilitÃ©">ComptabilitÃ©</option>
+                      <option value="Comptabilité">Comptabilité</option>
                       <option value="Juridique">Juridique</option>
-                      <option value="FiscalitÃ©">FiscalitÃ©</option>
+                      <option value="Fiscalité">Fiscalité</option>
                     </select>
                   </div>
 
@@ -5158,7 +5919,7 @@ export default function App() {
                     type="submit"
                     className="px-4 py-2 text-xs font-bold bg-primary text-white hover:bg-primary-container rounded-lg transition-colors cursor-pointer"
                   >
-                    CrÃ©er la Mission
+                    Créer la Mission
                   </button>
                 </div>
               </form>
@@ -5167,7 +5928,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* MODAL 2: REPLY TO MESSAGE â€” Chat Thread */}
+      {/* MODAL 2: REPLY TO MESSAGE ” Chat Thread */}
       <AnimatePresence>
         {isReplyOpen && activeReplyMessage && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -5269,7 +6030,7 @@ export default function App() {
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
-                    placeholder="Ã‰crire un message..."
+                    placeholder="Écrire un message..."
                     className="flex-1 bg-surface-container-low border border-secondary/15 rounded-2xl px-4 py-2.5 text-xs text-on-surface focus:outline-primary focus:ring-1 focus:ring-primary/30 placeholder:text-on-surface-variant/40 resize-none"
                   />
                   <button
@@ -5320,12 +6081,12 @@ export default function App() {
                 <p className="font-medium text-on-surface">Besoin d'aide sur le portail RM Consulting ?</p>
                 <div className="space-y-2.5">
                   <div className="p-3 bg-surface-container-low rounded-lg">
-                    <p className="font-bold text-on-surface mb-1">Comment crÃ©er une mission ?</p>
-                    <p>Cliquez sur "Nouvelle Mission" en bas Ã  gauche pour configurer un nouvel audit ou une mission de conseil.</p>
+                    <p className="font-bold text-on-surface mb-1">Comment créer une mission ?</p>
+                    <p>Cliquez sur "Nouvelle Mission" en bas à gauche pour configurer un nouvel audit ou une mission de conseil.</p>
                   </div>
                   <div className="p-3 bg-surface-container-low rounded-lg">
-                    <p className="font-bold text-on-surface mb-1">Mise Ã  jour de la progression</p>
-                    <p>Dans l'onglet "Missions", vous pouvez augmenter la progression de 10% ou marquer la mission comme validÃ©e instantanÃ©ment.</p>
+                    <p className="font-bold text-on-surface mb-1">Mise à jour de la progression</p>
+                    <p>Dans l'onglet "Missions", vous pouvez augmenter la progression de 10% ou marquer la mission comme validée instantanément.</p>
                   </div>
                 </div>
               </div>
@@ -5378,7 +6139,7 @@ export default function App() {
 
               <form onSubmit={handleSendDeptContact} className="p-6 space-y-4">
                 <div className="p-3 bg-surface-container-low rounded-lg text-xs text-on-surface-variant">
-                  <p className="font-semibold text-on-surface mb-1">PÃ´le d'Expertise :</p>
+                  <p className="font-semibold text-on-surface mb-1">Pôle d'Expertise :</p>
                   <p className="font-bold text-primary">{selectedDeptForContact.name}</p>
                 </div>
 
@@ -5439,7 +6200,7 @@ export default function App() {
               <div className="flex justify-between items-center bg-primary text-on-primary px-6 py-4">
                 <h4 className="font-headline font-bold text-sm flex items-center gap-2">
                   <Building2 className="w-4 h-4" />
-                  {editingDept ? 'Modifier le DÃ©partement' : 'Nouveau DÃ©partement'}
+                  {editingDept ? 'Modifier le Département' : 'Nouveau Département'}
                 </h4>
                 <button
                   type="button"
@@ -5453,14 +6214,14 @@ export default function App() {
               <form onSubmit={handleSubmitDept} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
                 <div>
                   <label className="block text-xs font-bold text-on-surface-variant mb-1">
-                    Nom du DÃ©partement *
+                    Nom du Département *
                   </label>
                   <input
                     type="text"
                     required
                     value={deptName}
                     onChange={(e) => setDeptName(e.target.value)}
-                    placeholder="Ex: Conseil & StratÃ©gie, FiscalitÃ©..."
+                    placeholder="Ex: Conseil & Stratégie, Fiscalité..."
                     className="w-full bg-surface-container-low border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-primary placeholder:text-on-surface-variant/30"
                   />
                 </div>
@@ -5474,14 +6235,14 @@ export default function App() {
                     required
                     value={deptDescription}
                     onChange={(e) => setDeptDescription(e.target.value)}
-                    placeholder="Description concise des missions et spÃ©cialitÃ©s de ce pÃ´le..."
+                    placeholder="Description concise des missions et spécialités de ce pôle..."
                     className="w-full bg-surface-container-low border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-primary placeholder:text-on-surface-variant/30 resize-none"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-on-surface-variant mb-1">
-                    Responsable du PÃ´le *
+                    Responsable du Pôle *
                   </label>
                   <input
                     type="text"
@@ -5528,20 +6289,20 @@ export default function App() {
                     rows={4}
                     value={deptServicesText}
                     onChange={(e) => setDeptServicesText(e.target.value)}
-                    placeholder={"Ex:\nTenue complÃ¨te ou partagÃ©e de la comptabilitÃ©\nÃ‰tablissement des comptes annuels\nConsolidation financiÃ¨re"}
+                    placeholder={"Ex:\nTenue complète ou partagée de la comptabilité\nÉtablissement des comptes annuels\nConsolidation financière"}
                     className="w-full bg-surface-container-low border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface font-sans focus:outline-primary placeholder:text-on-surface-variant/30"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-on-surface-variant mb-1">
-                    Image du DÃ©partement <span className="font-normal text-on-surface-variant/60">(optionnel)</span>
+                    Image du Département <span className="font-normal text-on-surface-variant/60">(optionnel)</span>
                   </label>
                   {(deptImagePreview || deptExistingImageUrl) && (
                     <div className="relative mb-2 inline-block">
                       <img
                         src={deptImagePreview || deptExistingImageUrl || ''}
-                        alt="AperÃ§u"
+                        alt="Aperçu"
                         className="w-full h-32 object-cover rounded-lg border border-outline-variant"
                       />
                       <button
@@ -5591,7 +6352,7 @@ export default function App() {
                     className="px-4 py-2 text-xs font-bold bg-primary text-white hover:bg-primary-container rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    {editingDept ? 'Enregistrer les Modifications' : 'CrÃ©er le DÃ©partement'}
+                    {editingDept ? 'Enregistrer les Modifications' : 'Créer le Département'}
                   </button>
                 </div>
               </form>
@@ -5620,7 +6381,7 @@ export default function App() {
               <div className="flex justify-between items-center bg-primary text-on-primary px-6 py-4">
                 <h4 className="font-headline font-bold text-sm flex items-center gap-2">
                   <CalendarIcon className="w-4 h-4" />
-                  Horaires - {timeSlotDayNum} {['Janvier','FÃ©vrier','Mars','Avril','Mai','Juin','Juillet','AoÃ»t','Septembre','Octobre','Novembre','DÃ©cembre'][availCalMonth]} {availCalYear}
+                  Horaires - {timeSlotDayNum} {['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][availCalMonth]} {availCalYear}
                 </h4>
                 <button
                   type="button"
@@ -5633,12 +6394,12 @@ export default function App() {
 
               <div className="p-6 space-y-4">
                 <p className="text-xs text-on-surface-variant">
-                  Choisissez l'intervalle horaire, puis sÃ©lectionnez les crÃ©neaux de 30 min que vous souhaitez rendre disponibles.
+                  Choisissez l'intervalle horaire, puis sélectionnez les créneaux de 30 min que vous souhaitez rendre disponibles.
                 </p>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[11px] font-bold text-on-surface block mb-1">Heure de dÃ©but</label>
+                    <label className="text-[11px] font-bold text-on-surface block mb-1">Heure de début</label>
                     <input
                       type="time"
                       value={newSlotStartTime}
@@ -5665,7 +6426,7 @@ export default function App() {
 
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-primary">CrÃ©neaux disponibles</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Créneaux disponibles</p>
                     <button
                       type="button"
                       onClick={() => {
@@ -5678,7 +6439,7 @@ export default function App() {
                       }}
                       className="text-[10px] text-primary font-bold cursor-pointer hover:underline"
                     >
-                      {selectedModalSlots.length === generateClientSlots(newSlotStartTime, newSlotEndTime).length ? 'Tout dÃ©sÃ©lectionner' : 'Tout sÃ©lectionner'}
+                      {selectedModalSlots.length === generateClientSlots(newSlotStartTime, newSlotEndTime).length ? 'Tout désélectionner' : 'Tout sélectionner'}
                     </button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -5704,7 +6465,7 @@ export default function App() {
                       );
                     })}
                     {generateClientSlots(newSlotStartTime, newSlotEndTime).length === 0 && (
-                      <p className="col-span-2 text-[10px] text-on-surface-variant italic text-center py-2">Aucun crÃ©neau possible</p>
+                      <p className="col-span-2 text-[10px] text-on-surface-variant italic text-center py-2">Aucun créneau possible</p>
                     )}
                   </div>
                 </div>
@@ -5717,7 +6478,7 @@ export default function App() {
                         await fetch(`${API_URL}/available-dates/${editingTimeSlotId}`, { method: 'DELETE' });
                         setAvailableDatesList(prev => prev.filter(d => d._id !== editingTimeSlotId));
                         setTimeSlotModalOpen(false);
-                        addToast(`Date ${timeSlotDayNum} supprimÃ©e.`, 'info');
+                        addToast(`Date ${timeSlotDayNum} supprimée.`, 'info');
                       }}
                       className="px-4 py-2 text-xs font-bold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
                     >
@@ -5747,7 +6508,7 @@ export default function App() {
                           setAvailableDatesList(prev =>
                             prev.map(d => d._id === editingTimeSlotId ? { ...updated, bookedSlots: d.bookedSlots } : d)
                           );
-                          addToast(`Horaires mis Ã  jour pour le ${timeSlotDayNum}.`);
+                          addToast(`Horaires mis à jour pour le ${timeSlotDayNum}.`);
                         }
                       } else {
                         const res = await fetch(`${API_URL}/available-dates`, {
@@ -5758,7 +6519,7 @@ export default function App() {
                         if (res.ok) {
                           const created = await res.json();
                           setAvailableDatesList(prev => [...prev, { ...created, bookedSlots: [] }]);
-                          addToast(`Date ${timeSlotDayNum} ajoutÃ©e avec ${selectedModalSlots.length} crÃ©neau(x).`);
+                          addToast(`Date ${timeSlotDayNum} ajoutée avec ${selectedModalSlots.length} créneau(x).`);
                         }
                       }
                       setTimeSlotModalOpen(false);
@@ -5813,7 +6574,7 @@ export default function App() {
                     type="text"
                     value={progTitle}
                     onChange={e => setProgTitle(e.target.value)}
-                    placeholder="Ex: SÃ©minaire FiscalitÃ© 2026"
+                    placeholder="Ex: Séminaire Fiscalité 2026"
                     className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
                 </div>
@@ -5824,7 +6585,7 @@ export default function App() {
                     value={progDescription}
                     onChange={e => setProgDescription(e.target.value)}
                     rows={2}
-                    placeholder="Description du programmeâ€¦"
+                    placeholder="Description du programme…"
                     className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
                 </div>
@@ -5841,7 +6602,7 @@ export default function App() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[11px] font-bold text-on-surface block mb-1">Heure de dÃ©but *</label>
+                    <label className="text-[11px] font-bold text-on-surface block mb-1">Heure de début *</label>
                     <input
                       type="time"
                       value={progStartTime}
@@ -5868,10 +6629,10 @@ export default function App() {
                     className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
                   >
                     <option value="Formation">Formation</option>
-                    <option value="SÃ©minaire">SÃ©minaire</option>
+                    <option value="Séminaire">Séminaire</option>
                     <option value="Atelier">Atelier</option>
-                    <option value="ConfÃ©rence">ConfÃ©rence</option>
-                    <option value="RÃ©union">RÃ©union</option>
+                    <option value="Conférence">Conférence</option>
+                    <option value="Réunion">Réunion</option>
                     <option value="Autre">Autre</option>
                   </select>
                 </div>
@@ -5882,7 +6643,7 @@ export default function App() {
                     value={progNotes}
                     onChange={e => setProgNotes(e.target.value)}
                     rows={2}
-                    placeholder="Notes ou informations complÃ©mentairesâ€¦"
+                    placeholder="Notes ou informations complémentaires…"
                     className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
                 </div>
@@ -6019,7 +6780,7 @@ export default function App() {
             >
               <div className="flex items-center justify-between mb-6">
                 <h4 className="font-headline text-lg font-bold text-primary">
-                  {editingRef ? 'Modifier la rÃ©fÃ©rence' : 'Ajouter une rÃ©fÃ©rence'}
+                  {editingRef ? 'Modifier la référence' : 'Ajouter une référence'}
                 </h4>
                 <button
                   onClick={() => setIsRefModalOpen(false)}
@@ -6043,12 +6804,12 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">CatÃ©gorie</label>
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Catégorie</label>
                   <input
                     type="text"
                     value={refCategory}
                     onChange={e => setRefCategory(e.target.value)}
-                    placeholder="Ex: BTP, Banque, Ã‰ducation..."
+                    placeholder="Ex: BTP, Banque, Éducation..."
                     className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
                     required
                   />
@@ -6062,7 +6823,7 @@ export default function App() {
                     <div className="relative mb-2 inline-block">
                       <img
                         src={refImagePreview || refExistingImageUrl || ''}
-                        alt="AperÃ§u"
+                        alt="Aperçu"
                         className="w-full h-28 object-contain rounded-xl border border-gray-200 bg-white p-2"
                       />
                       <button
@@ -6120,6 +6881,95 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* MODAL: APPOINTMENT ACTION CONFIRMATION */}
+      <AnimatePresence>
+        {apptConfirmAction && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setApptConfirmAction(null)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="relative w-full max-w-md bg-white border border-outline-variant rounded-xl shadow-2xl z-10 overflow-hidden p-6 text-center"
+            >
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                apptConfirmAction.type === 'confirm'
+                  ? 'bg-emerald-100'
+                  : apptConfirmAction.type === 'reject'
+                  ? 'bg-red-100'
+                  : 'bg-amber-100'
+              }`}>
+                {apptConfirmAction.type === 'confirm' ? (
+                  <CheckCircle2 className={`w-6 h-6 ${apptConfirmAction.type === 'confirm' ? 'text-emerald-600' : ''}`} />
+                ) : apptConfirmAction.type === 'reject' ? (
+                  <XCircle className="w-6 h-6 text-red-600" />
+                ) : (
+                  <CalendarIcon className="w-6 h-6 text-amber-600" />
+                )}
+              </div>
+              <h4 className="font-headline font-bold text-lg text-on-surface mb-2">
+                Confirmer ce rendez-vous ?
+              </h4>
+              <p className="text-xs text-on-surface-variant mb-5">
+                <span className="font-bold text-on-surface">{apptConfirmAction.appt.clientName}</span> —{' '}
+                {new Date(apptConfirmAction.appt.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })} à{' '}
+                {apptConfirmAction.appt.timeSlot}
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setApptConfirmAction(null)}
+                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold text-on-surface hover:bg-gray-50 transition-all cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!apptConfirmAction) return;
+                    const { type, appt } = apptConfirmAction;
+                    setApptConfirmAction(null);
+                    if (type === 'confirm') {
+                      await fetch(`${API_URL}/appointments/${appt._id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'confirmed' })
+                      });
+                      setAppointments(prev => prev.map(a => a._id === appt._id ? { ...a, status: 'confirmed' } : a));
+                      addToast(`RDV avec ${appt.clientName} confirmé.`);
+                    } else if (type === 'reject') {
+                      setRejectTargetId(appt._id);
+                      setRejectTargetName(appt.clientName);
+                      setRejectionReason('');
+                      setRejectModalOpen(true);
+                    } else {
+                      setRescheduleTargetId(appt._id);
+                      setRescheduleTargetName(appt.clientName);
+                      setRescheduleNewDate('');
+                      setRescheduleNewTimeSlot('');
+                      setRescheduleModalOpen(true);
+                    }
+                  }}
+                  className={`flex-1 px-4 py-2.5 text-white rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                    apptConfirmAction.type === 'confirm'
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : apptConfirmAction.type === 'reject'
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : 'bg-amber-600 hover:bg-amber-700'
+                  }`}
+                >
+                  Confirmer
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* MODAL: REJECT APPOINTMENT */}
       <AnimatePresence>
         {rejectModalOpen && (
@@ -6151,8 +7001,8 @@ export default function App() {
               </div>
 
               <p className="text-xs text-on-surface-variant">
-                Vous Ãªtes sur le point de refuser le rendez-vous avec <strong>{rejectTargetName}</strong>.
-                Veuillez indiquer la raison du refus, elle sera envoyÃ©e par email au client.
+                Vous êtes sur le point de refuser le rendez-vous avec <strong>{rejectTargetName}</strong>.
+                Veuillez indiquer la raison du refus, elle sera envoyée par email au client.
               </p>
 
               <textarea
@@ -6181,7 +7031,7 @@ export default function App() {
                     });
                     setAppointments(prev => prev.map(a => a._id === rejectTargetId ? { ...a, status: 'cancelled' } : a));
                     setRejectModalOpen(false);
-                    addToast(`RDV avec ${rejectTargetName} refusÃ©. Email envoyÃ©.`, 'info');
+                    addToast(`RDV avec ${rejectTargetName} refusé. Email envoyé.`, 'info');
                   }}
                   className="px-4 py-2 text-xs font-bold bg-red-600 text-white hover:bg-red-700 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                 >
@@ -6224,8 +7074,8 @@ export default function App() {
               </div>
 
               <p className="text-xs text-on-surface-variant">
-                Vous Ãªtes sur le point de reporter le rendez-vous avec <strong>{rescheduleTargetName}</strong>.
-                SÃ©lectionnez une nouvelle date et un crÃ©neau horaire.
+                Vous êtes sur le point de reporter le rendez-vous avec <strong>{rescheduleTargetName}</strong>.
+                Sélectionnez une nouvelle date et un créneau horaire.
               </p>
 
               <div className="space-y-3">
@@ -6239,7 +7089,7 @@ export default function App() {
                     }}
                     className="w-full border border-outline-variant rounded-lg p-2.5 text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-amber-400"
                   >
-                    <option value="">SÃ©lectionner une date</option>
+                    <option value="">Sélectionner une date</option>
                     {availableDatesList.map((ad) => (
                       <option key={ad._id} value={ad.date}>
                         {new Date(ad.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -6250,7 +7100,7 @@ export default function App() {
 
                 {rescheduleNewDate && (
                   <div>
-                    <label className="text-[11px] font-bold text-on-surface block mb-1">CrÃ©neau horaire</label>
+                    <label className="text-[11px] font-bold text-on-surface block mb-1">Créneau horaire</label>
                     <div className="flex flex-wrap gap-2">
                       {availableDatesList
                         .find((ad) => ad.date === rescheduleNewDate)
@@ -6296,7 +7146,7 @@ export default function App() {
                       ? { ...a, status: 'rescheduled' as const, rescheduledDate: rescheduleNewDate, rescheduledTimeSlot: rescheduleNewTimeSlot }
                       : a));
                     setRescheduleModalOpen(false);
-                    addToast(`RDV avec ${rescheduleTargetName} reportÃ©. Email envoyÃ©.`, 'info');
+                    addToast(`RDV avec ${rescheduleTargetName} reporté. Email envoyé.`, 'info');
                   }}
                   className="px-4 py-2 text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                 >
@@ -6327,7 +7177,7 @@ export default function App() {
             >
               <div className="flex items-center justify-between mb-6">
                 <h4 className="font-headline text-lg font-bold text-primary">
-                  {editingParam ? 'Modifier le paramÃ¨tre' : 'Ajouter un paramÃ¨tre'}
+                  {editingParam ? 'Modifier le paramètre' : 'Ajouter un paramètre'}
                 </h4>
                 <button
                   onClick={() => setIsParamModalOpen(false)}
@@ -6339,7 +7189,7 @@ export default function App() {
 
               <form onSubmit={handleSubmitParam} className="space-y-5">
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">ClÃ©</label>
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Clé</label>
                   <input
                     type="text"
                     value={paramKey}
@@ -6355,7 +7205,7 @@ export default function App() {
                     rows={3}
                     value={paramValue}
                     onChange={e => setParamValue(e.target.value)}
-                    placeholder="Valeur du paramÃ¨tre..."
+                    placeholder="Valeur du paramètre..."
                     className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none"
                     required
                   />
@@ -6364,7 +7214,7 @@ export default function App() {
                 {paramKey.toLowerCase() === 'address' && (
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                      SÃ©lectionner sur la carte
+                      Sélectionner sur la carte
                     </label>
                     <MapPicker value={paramValue} onChange={setParamValue} />
                   </div>
@@ -6413,7 +7263,7 @@ export default function App() {
                   <h4 className="font-headline text-lg font-bold text-primary">
                     {editingOffer ? 'Modifier l\'offre d\'emploi' : 'Nouvelle offre d\'emploi'}
                   </h4>
-                  <p className="text-[11px] text-on-surface-variant">Les champs marqu├®s d'un * sont obligatoires.</p>
+                  <p className="text-[11px] text-on-surface-variant">Les champs marqués d'un * sont obligatoires.</p>
                 </div>
                 <button
                   onClick={() => setIsOfferModalOpen(false)}
@@ -6427,7 +7277,7 @@ export default function App() {
                 <div className="p-6 space-y-5">
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                      Intitul├® du poste <span className="text-error">*</span>
+                      Intitulé du poste <span className="text-error">*</span>
                     </label>
                     <input
                       type="text"
@@ -6444,7 +7294,7 @@ export default function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                        D├®partement <span className="text-error">*</span>
+                        Département <span className="text-error">*</span>
                       </label>
                       <select
                         value={offerDepartment}
@@ -6493,25 +7343,25 @@ export default function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                        Niveau d'├®tude requis
+                        Niveau d'étude requis
                       </label>
                       <input
                         type="text"
                         value={offerEducationLevel}
                         onChange={(e) => setOfferEducationLevel(e.target.value)}
-                        placeholder="Ex : Master en comptabilit├®"
+                        placeholder="Ex : Master en comptabilité"
                         className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                        Exp├®rience requise
+                        Expérience requise
                       </label>
                       <input
                         type="text"
                         value={offerRequiredExperience}
                         onChange={(e) => setOfferRequiredExperience(e.target.value)}
-                        placeholder="Ex : 2 ├á 5 ans"
+                        placeholder="Ex : 2 à 5 ans"
                         className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
                       />
                     </div>
@@ -6532,14 +7382,14 @@ export default function App() {
 
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                      Comp├®tences recherch├®es <span className="text-error">*</span>
+                      Compétences recherchées <span className="text-error">*</span>
                       <span className="normal-case font-semibold text-gray-400"> (une par ligne)</span>
                     </label>
                     <textarea
                       rows={4}
                       value={offerSkillsText}
                       onChange={(e) => setOfferSkillsText(e.target.value)}
-                      placeholder={'Excel avanc├®\nMa├«trise des normes comptables\nEsprit d\'analyse'}
+                      placeholder={'Excel avancé\nMaîtrise des normes comptables\nEsprit d\'analyse'}
                       className={`w-full px-4 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none ${
                         offerFormErrors.skills ? 'border-red-400' : 'border-gray-200'
                       }`}
@@ -6549,13 +7399,13 @@ export default function App() {
 
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                      Description d├®taill├®e du poste <span className="text-error">*</span>
+                      Description détaillée du poste <span className="text-error">*</span>
                     </label>
                     <textarea
                       rows={4}
                       value={offerDescription}
                       onChange={(e) => setOfferDescription(e.target.value)}
-                      placeholder="D├®crivez le contexte du poste, le cabinet et les responsabilit├®s..."
+                      placeholder="Décrivez le contexte du poste, le cabinet et les responsabilités..."
                       className={`w-full px-4 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none ${
                         offerFormErrors.description ? 'border-red-400' : 'border-gray-200'
                       }`}
@@ -6571,20 +7421,20 @@ export default function App() {
                       rows={4}
                       value={offerMissionsText}
                       onChange={(e) => setOfferMissionsText(e.target.value)}
-                      placeholder={'Tenue et suivi de la comptabilit├®\nPr├®paration des ├®tats financiers'}
+                      placeholder={'Tenue et suivi de la comptabilité\nPréparation des états financiers'}
                       className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">
-                      Profil recherch├®
+                      Profil recherché
                     </label>
                     <textarea
                       rows={3}
                       value={offerProfile}
                       onChange={(e) => setOfferProfile(e.target.value)}
-                      placeholder="D├®crivez le profil id├®al : formation, qualit├®s, atouts..."
+                      placeholder="Décrivez le profil idéal : formation, qualités, atouts..."
                       className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none"
                     />
                   </div>
@@ -6627,7 +7477,7 @@ export default function App() {
                         onChange={(e) => setOfferDeadline(e.target.value)}
                         className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
                       />
-                      <p className="text-[10px] text-on-surface-variant mt-1">Facultative ÔÇö offre ouverte si vide.</p>
+                      <p className="text-[10px] text-on-surface-variant mt-1">Facultative — offre ouverte si vide.</p>
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Statut</label>
@@ -6637,12 +7487,12 @@ export default function App() {
                         className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all bg-white"
                       >
                         <option value="draft">Brouillon</option>
-                        <option value="published">Publi├®e</option>
-                        <option value="closed">Ferm├®e</option>
+                        <option value="published">Publiée</option>
+                        <option value="closed">Fermée</option>
                       </select>
                       {offerStatus === 'published' && (
                         <p className="text-[10px] text-emerald-600 mt-1 font-semibold">
-                          Visible imm├®diatement sur le site (#/offres)
+                          Visible immédiatement sur le site (#/offres)
                         </p>
                       )}
                     </div>
@@ -6662,7 +7512,7 @@ export default function App() {
                     className="px-6 py-2.5 text-xs font-bold bg-primary text-white rounded-xl hover:bg-primary-container transition-all cursor-pointer flex items-center gap-2"
                   >
                     <CheckCircle2 className="w-4 h-4" />
-                    {editingOffer ? 'Enregistrer les modifications' : 'Cr├®er l\'offre'}
+                    {editingOffer ? 'Enregistrer les modifications' : 'Créer l\'offre'}
                   </button>
                 </div>
               </form>
@@ -6671,7 +7521,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Offer detail modal (Vue 2 : offre + candidatures re├ºues) */}
+      {/* Offer detail modal (Vue 2 : offre + candidatures reçues) */}
       <AnimatePresence>
         {selectedOffer && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -6709,7 +7559,7 @@ export default function App() {
                     <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {selectedOffer.location}</span>
                     <span className="inline-flex items-center gap-1">
                       <CalendarClock className="w-3.5 h-3.5" />
-                      Publi├®e le {selectedOffer.publishedAt ? new Date(selectedOffer.publishedAt).toLocaleDateString('fr-FR') : 'ÔÇö'}
+                      Publiée le {selectedOffer.publishedAt ? new Date(selectedOffer.publishedAt).toLocaleDateString('fr-FR') : '—'}
                     </span>
                   </p>
                 </div>
@@ -6741,14 +7591,14 @@ export default function App() {
 
               <div className="overflow-y-auto custom-scrollbar flex-1">
                 <div className="p-6 space-y-6">
-                  {/* D├®tails de l'offre */}
+                  {/* Détails de l'offre */}
                   <div className="space-y-5">
                     {selectedOffer.requiredExperience || selectedOffer.educationLevel ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {selectedOffer.educationLevel && (
                           <div className="bg-surface-container-low/60 p-3 rounded-xl border border-secondary/10">
                             <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1 flex items-center gap-1">
-                              <GraduationCap className="w-3.5 h-3.5" /> Niveau d'├®tude
+                              <GraduationCap className="w-3.5 h-3.5" /> Niveau d'étude
                             </p>
                             <p className="text-sm font-semibold text-on-surface">{selectedOffer.educationLevel}</p>
                           </div>
@@ -6756,7 +7606,7 @@ export default function App() {
                         {selectedOffer.requiredExperience && (
                           <div className="bg-surface-container-low/60 p-3 rounded-xl border border-secondary/10">
                             <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-1 flex items-center gap-1">
-                              <Target className="w-3.5 h-3.5" /> Exp├®rience requise
+                              <Target className="w-3.5 h-3.5" /> Expérience requise
                             </p>
                             <p className="text-sm font-semibold text-on-surface">{selectedOffer.requiredExperience}</p>
                           </div>
@@ -6777,7 +7627,7 @@ export default function App() {
                         <ul className="space-y-1.5">
                           {selectedOffer.missions.map((m, i) => (
                             <li key={i} className="flex items-start gap-2 text-sm text-on-surface">
-                              <span className="text-emerald-600 font-bold shrink-0 mt-0.5">Ô£ô</span>
+                              <span className="text-emerald-600 font-bold shrink-0 mt-0.5">✓</span>
                               {m}
                             </li>
                           ))}
@@ -6787,7 +7637,7 @@ export default function App() {
 
                     {(selectedOffer.skills || []).length > 0 && (
                       <div>
-                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Comp├®tences recherch├®es</p>
+                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Compétences recherchées</p>
                         <div className="flex flex-wrap gap-2">
                           {selectedOffer.skills.map((s, i) => (
                             <span key={i} className="px-3 py-1 bg-primary/5 text-primary border border-primary/15 rounded-full text-xs font-bold">
@@ -6800,7 +7650,7 @@ export default function App() {
 
                     {selectedOffer.profile && (
                       <div>
-                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Profil recherch├®</p>
+                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Profil recherché</p>
                         <p className="text-sm text-on-surface leading-relaxed">{selectedOffer.profile}</p>
                       </div>
                     )}
@@ -6821,12 +7671,12 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Candidatures re├ºues pour cette offre (Vue 2) */}
+                  {/* Candidatures reçues pour cette offre (Vue 2) */}
                   <div className="border-t border-gray-100 pt-5">
                     <div className="flex items-center justify-between mb-4">
                       <h5 className="font-headline text-sm font-bold text-on-surface flex items-center gap-2">
                         <UsersRound className="w-4 h-4 text-primary" />
-                        Candidatures re├ºues
+                        Candidatures reçues
                       </h5>
                       <span className="px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-bold">
                         {(offerCandidatesCount[selectedOffer._id] || 0)} candidature{(offerCandidatesCount[selectedOffer._id] || 0) > 1 ? 's' : ''}
@@ -6839,7 +7689,7 @@ export default function App() {
                         return (
                           <div className="text-center py-8 text-on-surface-variant bg-surface-container-low/40 rounded-xl border border-dashed border-secondary/20">
                             <UsersRound className="w-8 h-8 mx-auto mb-2 text-on-surface-variant/40" />
-                            <p className="text-sm font-medium">Aucune candidature re├ºue pour cette offre.</p>
+                            <p className="text-sm font-medium">Aucune candidature reçue pour cette offre.</p>
                           </div>
                         );
                       }
@@ -6856,7 +7706,7 @@ export default function App() {
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-bold text-on-surface truncate">{app.firstName} {app.lastName}</p>
                                   <p className="text-xs text-on-surface-variant truncate">
-                                    {app.email} ÔÇö {new Date(app.createdAt).toLocaleDateString('fr-FR')}
+                                    {app.email} — {new Date(app.createdAt).toLocaleDateString('fr-FR')}
                                   </p>
                                 </div>
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${info.cls}`}>
@@ -6918,7 +7768,7 @@ export default function App() {
                 <h3 className="font-headline font-bold text-lg text-on-surface mb-2">Supprimer l'offre</h3>
                 <p className="text-sm text-on-surface-variant mb-6">
                   Voulez-vous vraiment supprimer l'offre <strong className="text-on-surface">"{offerToDelete.title}"</strong> ?
-                  Cette action est irr├®versible.
+                  Cette action est irréversible.
                 </p>
                 <div className="flex gap-3">
                   <button
@@ -6938,105 +7788,6 @@ export default function App() {
             </motion.div>
           </>
         )}
-      </AnimatePresence>
-      {/* MODAL: MESSAGE DETAIL */}
-      <AnimatePresence>
-        {messageDetailOpen && activeMessageDetail && (() => {
-          const parts = parseMessageParts(activeMessageDetail);
-          const status = messageStatusInfo(activeMessageDetail.status);
-          return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-                onClick={() => setMessageDetailOpen(false)}
-              />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="relative bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-2xl z-10"
-              >
-                <div className="flex items-start justify-between gap-4 mb-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-base shrink-0">
-                      {activeMessageDetail.initials}
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="font-headline text-lg font-bold text-primary truncate">{activeMessageDetail.sender}</h4>
-                      <p className="text-xs text-on-surface-variant truncate">{parts.email || activeMessageDetail.email || 'ÔÇö'}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border whitespace-nowrap ${status.cls}`}>{status.label}</span>
-                    <button
-                      onClick={() => setMessageDetailOpen(false)}
-                      className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all cursor-pointer"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="border-t border-gray-100 pt-4">
-                  <div className="flex items-center justify-between gap-3 mb-3">
-                    <p className="text-sm font-bold text-on-surface">{parts.subject}</p>
-                    <span className="text-[10px] text-on-surface-variant whitespace-nowrap">{formatMessageDate(activeMessageDetail)}</span>
-                  </div>
-                  <div className="bg-surface-container-low rounded-xl p-4 text-sm text-on-surface leading-relaxed whitespace-pre-wrap min-h-32">
-                    {parts.body || activeMessageDetail.content}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap justify-end gap-3 pt-5">
-                  <button
-                    onClick={() => {
-                      archiveMessage(activeMessageDetail);
-                      setMessageDetailOpen(false);
-                    }}
-                    className="px-4 py-2.5 text-xs font-bold text-amber-700 border border-amber-200 rounded-xl hover:bg-amber-50 transition-colors cursor-pointer flex items-center gap-1.5"
-                  >
-                    <Archive className="w-3.5 h-3.5" /> Archiver
-                  </button>
-                  <button
-                    onClick={() => {
-                      handleArchiveMessage(activeMessageDetail.id, activeMessageDetail.sender);
-                      setMessageDetailOpen(false);
-                    }}
-                    className="px-4 py-2.5 text-xs font-bold text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-colors cursor-pointer flex items-center gap-1.5"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" /> Supprimer
-                  </button>
-                  <button
-                    onClick={() => openMessageDetailWithReply(activeMessageDetail)}
-                    className="px-4 py-2.5 text-xs font-bold text-on-surface-variant border border-outline-variant rounded-xl hover:bg-surface-container transition-colors cursor-pointer flex items-center gap-1.5"
-                  >
-                    <Send className="w-3.5 h-3.5" /> R├®pondre par email
-                  </button>
-                  {activeMessageDetail.status !== 'done' && (
-                    <button
-                      onClick={() => setMessageStatus(activeMessageDetail, 'done')}
-                      className="px-4 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1.5"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Marquer comme trait├®
-                    </button>
-                  )}
-                  <button
-                    onClick={() => {
-                      openNewAppointment(activeMessageDetail);
-                      setMessageDetailOpen(false);
-                    }}
-                    className="px-4 py-2.5 text-xs font-bold bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors cursor-pointer flex items-center gap-1.5"
-                  >
-                    <CalendarIcon className="w-3.5 h-3.5" /> Planifier un rendez-vous
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          );
-        })()}
       </AnimatePresence>
       {/* MODAL: PLANIFIER UN RENDEZ-VOUS */}
       <AnimatePresence>
@@ -7095,7 +7846,7 @@ export default function App() {
                       type="text"
                       value={newApptService}
                       onChange={e => setNewApptService(e.target.value)}
-                      placeholder="Ex: Conseil en strat├®gie"
+                      placeholder="Ex: Conseil en stratégie"
                       className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all"
                     />
                   </div>
@@ -7120,7 +7871,7 @@ export default function App() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Dur├®e</label>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wider">Durée</label>
                     <select
                       value={newApptDuration}
                       onChange={e => setNewApptDuration(e.target.value)}

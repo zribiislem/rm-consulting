@@ -40,6 +40,45 @@ router.post('/', async (req: Request, res: Response) => {
     }
     const appointment = new Appointment(req.body);
     await appointment.save();
+
+    try {
+      const dateFormatted = new Date(appointment.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+      const info = await getTransporter().sendMail({
+        from: `"RM Consulting" <${process.env.SMTP_USER || 'noreply@rm-consulting.tn'}>`,
+        to: appointment.email,
+        subject: 'Confirmation de rendez-vous - RM Consulting',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: #6c0042; color: white; padding: 20px; border-radius: 10px 10px 0 0;">
+              <h2 style="margin: 0;">RM Consulting</h2>
+              <p style="margin: 5px 0 0; opacity: 0.8; font-size: 12px;">Expertise & Audit</p>
+            </div>
+            <div style="background: #f9f9f9; padding: 20px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">
+              <p style="color: #333; font-size: 14px;">Bonjour ${appointment.clientName},</p>
+              <p style="color: #333; font-size: 14px;">Merci pour votre demande. Nous vous confirmons la réception de votre rendez-vous d'affaires avec RM Consulting :</p>
+              <div style="background: white; border-left: 4px solid #6c0042; padding: 15px; margin: 15px 0; border-radius: 0 8px 8px 0;">
+                <p style="color: #333; font-size: 14px; margin: 0 0 8px 0;"><strong>Détails du rendez-vous :</strong></p>
+                <p style="color: #555; font-size: 13px; margin: 2px 0;">Date : ${dateFormatted}</p>
+                <p style="color: #555; font-size: 13px; margin: 2px 0;">Créneau : ${appointment.timeSlot}</p>
+                <p style="color: #555; font-size: 13px; margin: 2px 0;">Durée : ${appointment.duration ? appointment.duration + ' minutes' : '30 minutes'}</p>
+                <p style="color: #555; font-size: 13px; margin: 2px 0;">Sujet : ${appointment.subject || 'Non spécifié'}</p>
+                ${appointment.details ? `<p style="color: #555; font-size: 13px; margin: 2px 0;">Notes : ${appointment.details.replace(/\n/g, '<br>')}</p>` : ''}
+              </div>
+              <p style="color: #333; font-size: 14px;">Notre équipe vous contactera rapidement pour confirmer ce créneau.</p>
+              <p style="color: #333; font-size: 14px;">Cordialement,<br>L'équipe RM Consulting</p>
+              <p style="color: #999; font-size: 11px; margin-top: 20px;">
+                Avenue de l'Indépendance, Les Berges du Lac 2, Tunis, Tunisie<br>
+                +216 71 000 000 | contact@rm-consulting.tn
+              </p>
+            </div>
+          </div>
+        `,
+      });
+      console.log(`Appointment confirmation email sent to ${appointment.email}: ${info.messageId}`);
+    } catch (emailError: any) {
+      console.error('Failed to send appointment confirmation email:', emailError.message);
+    }
+
     res.status(201).json(appointment);
   } catch (error) {
     res.status(400).json({ message: 'Error creating appointment', error });
